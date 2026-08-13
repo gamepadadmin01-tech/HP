@@ -1,4 +1,4 @@
-﻿# GamepadOS — Session Handoff (2026-07-04)
+# GamepadOS — Session Handoff (2026-07-04)
 
 > **Fresh session: read this file first.** It captures the exact state so we can resume.
 > Also loaded automatically: `~/.claude/projects/F--/memory/MEMORY.md` (project memories).

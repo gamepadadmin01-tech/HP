@@ -1,4 +1,4 @@
-﻿---
+---
 name: regression-checklist-process
 description: "Akhil's process rule: after every big change, run the documented regression checklist; every new bug gets an entry the same session"
 metadata: 

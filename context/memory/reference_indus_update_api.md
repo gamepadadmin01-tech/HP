@@ -1,4 +1,4 @@
-﻿---
+---
 name: indus-update-api
 description: "Indus Appstore Update API is enabled; upload script at D:\AKHIL\HP\projects\gamepados\tools\indus-upload.ps1, key expected in D:\AKHIL\HP\projects\gamepados\secrets\indus-api-key.txt"
 metadata: 

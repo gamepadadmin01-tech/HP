@@ -1,4 +1,4 @@
-﻿---
+---
 name: project-gamepados-account
 description: "GamepadOS Account System rebuild in D:\AKHIL\HP\projects\gamepados-account — repo, architecture decisions, phase plan"
 metadata: 

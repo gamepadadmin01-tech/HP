@@ -1,4 +1,4 @@
-﻿---
+---
 name: antigravity-incident
 description: "2026-07-02 recovery: Antigravity AI broke GamepadOS pairing/versioning; what it damaged + the restore"
 metadata: 

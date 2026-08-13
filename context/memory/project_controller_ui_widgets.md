@@ -1,4 +1,4 @@
-﻿---
+---
 name: controller-ui-widgets
 description: "Controller pad widget behavior/animation — D-pad 4-way rule + press-animation feel (apps/, unversioned)"
 metadata: 

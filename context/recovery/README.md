@@ -1,4 +1,4 @@
-﻿# recovery/ — the App.tsx corruption of 2026-07-14
+# recovery/ — the App.tsx corruption of 2026-07-14
 
 ## What happened
 

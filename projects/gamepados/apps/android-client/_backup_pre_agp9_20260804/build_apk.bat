@@ -1,4 +1,4 @@
-﻿@echo off
+@echo off
 REM Build tools now live in D:\AKHIL\HP\projects\gamepados\tools\ (moved out of apps\).
 REM NOTE: these were F:\ paths until 2026-08-03 — F: was formatted and the whole
 REM working tree moved to D:\AKHIL\HP, so the old paths silently failed.

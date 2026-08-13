@@ -1,4 +1,4 @@
-﻿---
+---
 name: project-blankspace
 description: "Flexsquares — sell-the-white-space website (buy rectangles on a shared canvas) with Razorpay payments, at D:\AKHIL\HP\projects\flexsquares"
 metadata: 

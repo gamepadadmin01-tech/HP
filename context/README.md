@@ -1,4 +1,4 @@
-﻿# `context/` — the durable brain of `D:\AKHIL\HP`
+# `context/` — the durable brain of `D:\AKHIL\HP`
 
 Created 2026-08-13.
 

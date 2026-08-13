@@ -1,4 +1,4 @@
-﻿# REBUILD — regenerating everything that was deleted as cache
+# REBUILD — regenerating everything that was deleted as cache
 
 Nothing in this document is guesswork. Every path and version was read out of the actual build
 scripts in this folder on 2026-08-13.

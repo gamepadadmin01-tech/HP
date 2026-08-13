@@ -1,4 +1,4 @@
-﻿---
+---
 name: project-rust-server-v2
 description: "Rust PC server — source/installer are 2.0.1 but backend still serves 2.0.0 (unactivated security fix); GUI/HTTP/singleton/origin-check/link-stability state"
 metadata: 

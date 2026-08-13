@@ -1,4 +1,4 @@
-﻿---
+---
 name: reference-guide-pdf-toolchain
 description: How to read and regenerate the GamepadOS notes PDFs in D:\AKHIL\HP\projects\gamepados\docs\notes
 metadata: 

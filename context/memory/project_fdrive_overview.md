@@ -1,4 +1,4 @@
-﻿---
+---
 name: fdrive-overview
 description: "Working-drive map — everything lives at D:\\AKHIL\\HP, reorganised 2026-08-13 into projects/ toolchain/ media/"
 metadata: 

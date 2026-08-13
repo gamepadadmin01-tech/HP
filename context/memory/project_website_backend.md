@@ -1,4 +1,4 @@
-﻿---
+---
 name: website-backend-architecture
 description: "GamepadOS website/support-platform backend architecture — stack, subsystems, key gotchas"
 metadata: 

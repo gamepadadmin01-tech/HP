@@ -1,4 +1,4 @@
-﻿# Document Index — 108 files
+# Document Index — 108 files
 
 Every markdown document that existed anywhere under `D:\AKHIL\HP`, copied here on
 **2026-08-13**. The originals are all still in place — these are copies, not moves.
