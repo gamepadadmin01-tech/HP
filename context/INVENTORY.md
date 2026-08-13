@@ -23,9 +23,11 @@ D:\AKHIL\HP\
 ├── media/capcut/
 ├── installers/
 ├── keys/                     PLAINTEXT SECRETS — never commit, never upload
-├── .agents/skills/           live hyperframes video skills
-└── _TO_DELETE_2026-08-13/    staged, awaiting go-ahead
+└── .agents/skills/           live hyperframes video skills
 ```
+
+**HP is now 22.32 GB across 97,774 files**, down from 60.2 GB / ~390,000. Free space on `D:` went
+from 43.5 GB to 81.5 GB.
 
 ### Sizes as measured before the cleanup
 
@@ -73,9 +75,13 @@ only real protection, and it has not happened yet.**
 
 ---
 
-## 3. Where the space went
+## 3. Where the space went — all of this was DELETED on 2026-08-14
 
-### Regenerable build cache — 10.99 GB, staged for deletion
+Everything below was moved to a staging folder, verified individually, then permanently deleted
+with Akhil's explicit go-ahead. **None of it is recoverable.** Rebuild instructions for the caches
+are in `REBUILD.md`.
+
+### Regenerable build cache — 10.94 GB, 202,150 files
 
 | Path | Size | Files |
 |---|---|---|
@@ -89,12 +95,12 @@ only real protection, and it has not happened yet.**
 Two Rust `target/` directories alone were **8.8 GB — 15% of the entire folder.** Rebuild commands
 are in `REBUILD.md`.
 
-### Also staged
+### Also deleted
 
 | Item | Size | Why |
 |---|---|---|
-| `Daddy's retirement` | 21.26 GB | family media, copy on another laptop |
-| recycle bin contents | 5.47 GB | see §5 |
+| `Daddy's retirement` | 21.26 GB | family media — Akhil confirmed a copy on another laptop |
+| the `$RECYCLE.BIN` folder | 5.47 GB | a leftover **copy** of the old F: drive's bin, not the live Windows one; see §5 |
 | `gradle-8.5` + `8.9` + `8.14.4` | 429 MB | **cannot build this app** — AGP 9.3.1 rejects all 8.x |
 | `controller-ui/android` | 53 files | dead Capacitor project; no Capacitor deps, no script references it |
 | `_test-pc-1.1.15`, `backup app.tsx`, `_recovery_backups`, `*.bak-*` | ~44 MB | scratch copies, all verified redundant or archived to `recovery/` |
@@ -146,11 +152,12 @@ repo uses a **whitelist** `.gitignore` so a stray `git add -A` cannot reach `key
   `.agents\skills\`.
 - **`projects/gamepados/website` is its own repo nested inside the HP repo**, and is excluded via
   `.gitignore` so the two do not fight.
-- **The recycle bin held `$RB86WEL\apps\`** — a complete deleted `apps/` tree (5.47 GB, 98,271
-  files). Verified 2026-08-13: **zero files newer than live**, and all 68 files unique to it (the
-  shadcn/ui library and `src/imports/` design assets) survive in `gamepados-account`, which is on
-  GitHub. Live code imports none of them. A safety copy was taken into staging anyway. **It was
-  NOT emptied** — that is Akhil's call.
+- **The `$RECYCLE.BIN` folder held `$RB86WEL\apps\`** — a complete deleted `apps/` tree (5.47 GB,
+  98,271 files). Note this was **not** the live Windows recycle bin (that lives at `D:\$RECYCLE.BIN`
+  and was untouched); it was a leftover copy carried over when the tree was moved off the old `F:`
+  drive root. Verified before deletion: **zero files newer than live**, and all 68 files unique to
+  it (the shadcn/ui library and `src/imports/` design assets) survive in `gamepados-account`, which
+  is on GitHub. Live code imports none of them. **Deleted 2026-08-14.**
 - **Three guide PDFs** in `projects\gamepados\docs\notes\` have no backup and are not markdown, so
   they are not in `context/docs/`. Three other guide files were already lost when `F:` was
   formatted on 2026-07-26.

@@ -1,4 +1,4 @@
----
+﻿---
 name: fdrive-overview
 description: "Working-drive map — everything lives at D:\\AKHIL\\HP, reorganised 2026-08-13 into projects/ toolchain/ media/"
 metadata: 
@@ -30,8 +30,8 @@ D:\AKHIL\HP\
 │   └── android-cli/
 ├── media/capcut/             CapCut drafts, exports, footage
 ├── installers/               DaVinci Resolve
-├── keys/                     PLAINTEXT SECRETS — never commit, never upload
-└── _TO_DELETE_2026-08-13/    32.67 GB staged, awaiting the user's go-ahead
+└── keys/                     PLAINTEXT SECRETS — never commit, never upload
+
 ```
 
 ## Build environment (verified by a real build 2026-08-13)
@@ -95,7 +95,7 @@ were rewritten (75 refs on 2026-08-13, then 69 more after the reorg).
   `SESSION_HANDOFF_*.md`→`docs/handoffs/`, store photos→`store-assets/{amazon,uptodown,indus}/`,
   `ad-footage/`→`marketing/ad-footage/`. Full map and undo instructions:
   `projects/gamepados/MOVE_LOG.md`.
-- **2026-08-13** — the HP root reorg described above, plus: 10.99 GB of build cache staged, the
+- **2026-08-13/14** — the HP root reorg described above, plus **32.67 GB permanently deleted** (build cache, family media, the leftover $RECYCLE.BIN copy): the
   dead Capacitor project and three dead Gradle versions retired, family media removed (the user
   has it on another laptop), and `tw-animate-css` declared after it was found to be an undeclared
   build dependency.

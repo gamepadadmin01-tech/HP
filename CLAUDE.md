@@ -59,9 +59,10 @@ D:\AKHIL\HP\
 │   └── android-cli/          <- was "Android/AndroidCLI"
 ├── media/capcut/
 ├── installers/
-├── keys/                     <- PLAINTEXT SECRETS. Never commit, never upload.
-└── _TO_DELETE_2026-08-13/    <- staged, awaiting Akhil's go-ahead
+└── keys/                     <- PLAINTEXT SECRETS. Never commit, never upload.
 ```
+
+**HP is 22.32 GB / 97,774 files** — down from 60.2 GB / ~390,000 on 2026-08-13.
 
 `projects/gamepados-account/` is a legitimate fork, not a duplicate to delete.
 
