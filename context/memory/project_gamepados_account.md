@@ -1,6 +1,6 @@
 ﻿---
 name: project-gamepados-account
-description: "GamepadOS Account System rebuild in D:\AKHIL\HP\App with login — repo, architecture decisions, phase plan"
+description: "GamepadOS Account System rebuild in D:\AKHIL\HP\projects\gamepados-account — repo, architecture decisions, phase plan"
 metadata: 
   node_type: memory
   type: project
@@ -10,12 +10,12 @@ metadata:
 
 **GamepadOS Account/identity system.** Started 2026-07-24.
 
-🚩 **ALL WORK HAPPENS IN `D:\AKHIL\HP\hlooo`** (Akhil's call, 2026-07-24 — "everything preserved,
-one tree"). `D:\AKHIL\HP\App with login` was a partial fork holding Phases 0–1; that work is now
+🚩 **ALL WORK HAPPENS IN `D:\AKHIL\HP\projects\gamepados`** (Akhil's call, 2026-07-24 — "everything preserved,
+one tree"). `D:\AKHIL\HP\projects\gamepados-account` was a partial fork holding Phases 0–1; that work is now
 ported into hlooo and the fork is **abandoned** — do not edit it.
-- App source (`D:\AKHIL\HP\hlooo\apps\**`): has **no version control**. Backups only, e.g.
+- App source (`D:\AKHIL\HP\projects\gamepados\apps\**`): has **no version control**. Backups only, e.g.
   `App.tsx.bak-20260722-preaccount`. Take one before every App.tsx edit.
-- Backend (`D:\AKHIL\HP\hlooo\website` = repo `gamepadadmin01-tech/gamepad`): **make changes,
+- Backend (`D:\AKHIL\HP\projects\gamepados\website` = repo `gamepadadmin01-tech/gamepad`): **make changes,
   never commit** — Akhil commits and decides what deploys and when.
 - Fork repo `gamepadadmin01-tech/app-with-login` holds commits a025342 (Phase 0),
   12df162 (Phase 1), 51ec2dd (untrack .cxx) — historical reference only, unpushed.
@@ -74,7 +74,7 @@ session, only an explicit reject signs out), `components/AccountAuth.tsx` (sign 
 · 6-digit email verify · forgot · reset, with show-password, per-field validation, verbatim
 server errors, `unverified` routed to the verify step).
 
-**Phase 4 backend WRITTEN 2026-07-24, UNCOMMITTED in `D:\AKHIL\HP\hlooo\website`** (Akhil commits +
+**Phase 4 backend WRITTEN 2026-07-24, UNCOMMITTED in `D:\AKHIL\HP\projects\gamepados\website`** (Akhil commits +
 deploys). Prisma models `User` / `UserSession` / `Layout`; 8 routes under `/api/account/*`
 (register · resend · verify · login · me · logout · password/forgot · password/reset),
 reusing `auth.js` scrypt + `newSessionToken` + `sendMailSafe`/Brevo. Bearer tokens, 90-day

@@ -17,11 +17,11 @@ test them all for that big change so this can be easy to find errors."*
 
 ## Where it lives
 
-* **`D:\AKHIL\HP\hlooo\docs\REGRESSION_CHECKLIST.md`** — the bug register. Each entry is a
+* **`D:\AKHIL\HP\projects\gamepados\docs\REGRESSION_CHECKLIST.md`** — the bug register. Each entry is a
   bug that ACTUALLY happened: symptom, root cause, and the exact check that
   proves it hasn't returned. Organised A (PC server) / B (Android+UI) /
   C (native input) / D (release pipeline) / E (environment gotchas).
-* **`D:\AKHIL\HP\hlooo\tools\regression-check.sh`** — runs the automatable half:
+* **`D:\AKHIL\HP\projects\gamepados\tools\regression-check.sh`** — runs the automatable half:
   * `--fast` Rust tests + golden-vector regen + TS typecheck + vite build +
     stale-asset check + debug-WebView gate (~1 min, no hardware)
   * `--full` + APK build + UDP loopback + WebSocket protocol tests
@@ -30,7 +30,7 @@ test them all for that big change so this can be easy to find errors."*
 
 ## Why this matters here specifically
 
-`D:\AKHIL\HP\hlooo\apps\` is **not a git repo** — timestamped `.bak-` copies are the only
+`D:\AKHIL\HP\projects\gamepados\apps\` is **not a git repo** — timestamped `.bak-` copies are the only
 rollback. And this project's worst bugs are invisible to compilers: the JNI
 `internal` crash compiled cleanly, the deleted Rust server built fine and dropped
 every packet, the double-pad bug needed a specific event *sequence*. "It builds"

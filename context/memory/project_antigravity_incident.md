@@ -7,7 +7,7 @@ metadata:
   originSessionId: 4387d20d-c0d8-4c8b-aea5-e75b71682108
 ---
 
-On 2026-07-01/02, while Claude credits were out, the user ran "Antigravity AI" on GamepadOS (D:\AKHIL\HP\hlooo\apps). It broke pairing/connection reliability and spawned ~12 useless versions. Full forensic audit (3 agents) + restore done 2026-07-02.
+On 2026-07-01/02, while Claude credits were out, the user ran "Antigravity AI" on GamepadOS (D:\AKHIL\HP\projects\gamepados\apps). It broke pairing/connection reliability and spawned ~12 useless versions. Full forensic audit (3 agents) + restore done 2026-07-02.
 
 **Why:** Documents the damage + the correct-state baseline so future regressions are diffable.
 **How to apply:** This is the authoritative "what good looks like" for the pairing/version stack after the incident.
@@ -24,7 +24,7 @@ On 2026-07-01/02, while Claude credits were out, the user ran "Antigravity AI" o
 Wire contract (20B `<Q H B B B B B B I`, GRX 41B, GRX_LTID b"gamepados-grx-v1", GRX_REQUIRED=False, HKDF info "grx psk v1"); run_udp_loop 0xE1/0xE3 handshake + ACK + RMB + pad-per-IP; gyro pipeline (HandlerThread, atan2(R6,R7) roll / asin(R8) pitch, OneEuroFilter 2.8/0.5, STEER_SIGN=1/PITCH_SIGN=-1, no setGyroNeutral); TX-thread DetachCurrentThread guard; transport coordinator gating on engineRunning; packet builder; panic-release; useStick pid ownership; two-mode gyro + calibrate; trigger throttle/normal (analogTrigger).
 
 ## Second Antigravity event 2026-07-10 (BENIGN this time — reconciled 2026-07-11)
-User asked Antigravity to fix the broken-feedback "features corruption". It copied the project to **D:\AKHIL\HP\hlooo-workspace** (never touched D:\AKHIL\HP\hlooo), correctly prototyped the WebViewAssetLoader fix in MainActivity.kt + build.gradle.kts (webkit 1.10.0, CameraX 1.4.0), OOM-crashed gradle (785MB hprof), added -Xmx4g, built only the direct flavor, and stopped. It MISSED: localStorage migration (origin switch wipes custom pads), version bump (kept burned code 24), and the other 4 flavors. All diffs reviewed + re-applied to D:\AKHIL\HP\hlooo with those gaps filled on 2026-07-11 (→ 1.3.1/code 25, see [[project-grx-crypto]]); hlooo-workspace quarantined to F:\_TRASH_REVIEW.
+User asked Antigravity to fix the broken-feedback "features corruption". It copied the project to **D:\AKHIL\HP\projects\gamepados-workspace** (never touched D:\AKHIL\HP\projects\gamepados), correctly prototyped the WebViewAssetLoader fix in MainActivity.kt + build.gradle.kts (webkit 1.10.0, CameraX 1.4.0), OOM-crashed gradle (785MB hprof), added -Xmx4g, built only the direct flavor, and stopped. It MISSED: localStorage migration (origin switch wipes custom pads), version bump (kept burned code 24), and the other 4 flavors. All diffs reviewed + re-applied to D:\AKHIL\HP\projects\gamepados with those gaps filled on 2026-07-11 (→ 1.3.1/code 25, see [[project-grx-crypto]]); hlooo-workspace quarantined to F:\_TRASH_REVIEW.
 
 ## Backend URL question RESOLVED 2026-07-11
 The real live backend hosts (Railway service "gamepad-production", port 8080): **gamepad-production.up.railway.app** (200 OK) + custom domains **supportportal.gamepad.space** + **admin.gamepad.space**. The old `gamepad-production-9351.up.railway.app` is DEAD (404) — it was still referenced in website/.github/workflows/keepalive.yml (fixed, committed) and apps/docs/SKILL.md (fixed).

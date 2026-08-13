@@ -1,77 +1,101 @@
-﻿---
+---
 name: fdrive-overview
-description: "Working-drive inventory — F:\\ was FORMATTED 2026-07-26; everything now lives at D:\\AKHIL\\HP"
+description: "Working-drive map — everything lives at D:\\AKHIL\\HP, reorganised 2026-08-13 into projects/ toolchain/ media/"
 metadata: 
   node_type: memory
   type: project
-  originSessionId: 2eb8022d-fde2-405c-89f1-4aee6551258f
-  modified: 2026-07-26T08:20:48.856Z
+  originSessionId: 04fa20ba-c801-4536-9b63-6783224ac0d6
+  modified: 2026-08-13T13:04:56.792Z
 ---
 
-## 🚨 F:\ WAS FORMATTED 2026-07-26 — THE WORKING DRIVE IS NOW `D:\AKHIL\HP`
-Everything was copied F:\ → `D:\AKHIL\HP` first (65 GB / 290k files), then F: was wiped and unmounted.
-**All memory files were rewritten to `D:\AKHIL\HP\…` on 2026-08-13** — 75 stale path references
-fixed across 15 files. Any remaining `F:\` you see is deliberate narrative about the old drive,
-not a live path. If you find a live one, it is a bug: fix it.
+# The working drive: `D:\AKHIL\HP`
 
-Historically that mapping was `F:\hlooo` →
-`D:\AKHIL\HP\Android\Sdk` → `D:\AKHIL\HP\Android\Sdk`, `D:\AKHIL\HP\keys` → `D:\AKHIL\HP\keys`.
-- **Permanently LOST** (created 2026-07-26 after the copy had already passed that folder, never on D:):
-  `apps/docs/make_guide_part.py`, `docs/notes/GamepadOS_Guide_Part_VI_Accounts_and_Sync.md` + `.pdf`.
-  Other guide PDFs (Complete_Book, The_Complete_Guide, Interdisciplinary_Analysis, Study_Plan) DID survive in `docs/notes/`.
-- Also not copied but harmless: `pc-server-rs/target/` (1,152 files — `cargo build` regenerates) and `D:\AKHIL\HP\.claude` skills (reinstall).
-- `local.properties` repointed to the D: SDK in BOTH `hlooo/apps/android-client` and `App with login/apps/android-client`.
-  A stale F: copy survives only in `D:\AKHIL\HP\$RECYCLE.BIN\…` (junk, ignore).
-- Memory was migrated from the `F--` project slug to `D--AKHIL-HP`; the `F--` copy is now stale.
-- Build env is now: `JAVA_HOME=D:\AKHIL\HP\hlooo\tools\jdk\jdk-17.0.19+10`,
-  `ANDROID_HOME=D:\AKHIL\HP\Android\Sdk`, `D:\AKHIL\HP\hlooo\tools\gradle-8.14.4\bin\gradle.bat` (no wrapper).
+Rewritten 2026-08-13 after the folder was reorganised. Earlier versions of this memory had
+accumulated three rounds of path edits and become self-contradictory; this is the clean version.
 
-F:\ drive WAS the user's primary personal + development storage drive (historical detail follows).
+## Layout
 
-**Why:** Analyzed on 2026-06-21 to give Claude full context of what's available.
-**How to apply:** Reference this when the user asks about any file or project on F drive.
+```
+D:\AKHIL\HP\
+├── CLAUDE.md                 auto-loaded session brief — READ THIS FIRST
+├── context/                  durable brain: INVENTORY.md, REBUILD.md, 108 docs, memory mirror
+├── projects/
+│   ├── gamepados/            THE PRODUCT (was "hlooo")
+│   ├── gamepados-account/    account-system fork (was "App with login")
+│   ├── flexsquares/          sell-the-white-space site
+│   ├── daily-news-app/       echonews-ai, unrelated
+│   └── spotify-corizo/       Corizo academic project
+├── toolchain/
+│   ├── android-sdk/          SDK root (was "Android/Sdk") — build-tools 34.0.0, NDK, cmake
+│   └── android-cli/
+├── media/capcut/             CapCut drafts, exports, footage
+├── installers/               DaVinci Resolve
+├── keys/                     PLAINTEXT SECRETS — never commit, never upload
+└── _TO_DELETE_2026-08-13/    32.67 GB staged, awaiting the user's go-ahead
+```
 
-## DRIVE REORGANIZED 2026-07-11 (supersedes layout details below)
-⚠️ **The paragraph below is HISTORY from the F:-drive era (pre-2026-07-26). F: was formatted; the
-`_TRASH_REVIEW`, `.tmp.driveupload` and `F:\personal\` items it lists no longer exist and are not
-pending actions.** Kept only to explain where things ended up.
+## Build environment (verified by a real build 2026-08-13)
 
-Root files are GONE from F:\ root: resumes → **F:\personal\**; flexsquares logos + Gemini sources → **D:\AKHIL\HP\flexsquares\branding\**; 22 stray DLLs + bing1.html + other junk → **F:\_TRASH_REVIEW\** (4.02 GB quarantine with MOVE_LOG.md — nothing hard-deleted; user reviews then deletes). hlooo root marketing assets → **D:\AKHIL\HP\hlooo\marketing\**; study plans → hlooo\NOTES\; Amazon .pem → D:\AKHIL\HP\keys\; hlooo-workspace (Antigravity copy) + heap dumps + replit_assets duplicates + flexsquares installers all quarantined. Still awaiting USER deletion: F:\.tmp.driveupload (10.4 GB stale Drive staging — do NOT move it, delete via Explorer), $RECYCLE.BIN (688 MB), _TRASH_REVIEW itself. D:\AKHIL\HP\keys holds plaintext secrets on a LOCAL drive with no backup (flagged to user; see [[project_fdrive_overview]] §secrets and D:\AKHIL\HP\context\INVENTORY.md §4). Drive: 1,397 GB total / ~50 GB used. Note: apps/pc-server-rust no longer exists (only GamepadServer-linux, ios-client, GamepadOS-iOS alongside the main apps); **gradle is now 9.6.1** (verified 2026-08-13 from `build_apk.bat`): the app is on AGP 9.3.1, which needs Gradle 9.5.0+ and REJECTS every 8.x — `tools/gradle-8.5`, `8.9` and `8.14.4` are kept for reference and cannot build. Build via JAVA_HOME=D:\AKHIL\HP\hlooo\tools\jdk\jdk-17.0.19+10 + D:\AKHIL\HP\hlooo\tools\gradle-9.6.1\bin\gradle.bat (no gradlew wrapper).
+```
+JAVA_HOME    = D:\AKHIL\HP\projects\gamepados\tools\jdk\jdk-17.0.19+10
+ANDROID_HOME = D:\AKHIL\HP\toolchain\android-sdk
+gradle       = D:\AKHIL\HP\projects\gamepados\tools\gradle-9.6.1\bin\gradle.bat
+```
 
-## Key Folders
+**Gradle 9.6.1 is mandatory** — the app is on AGP 9.3.1, which requires 9.5.0+ and rejects every
+8.x. The dead 8.5 / 8.9 / 8.14.4 copies were retired. There is no `gradlew`.
 
-### hlooo/ — Main Dev Project (GamepadOS)
-- Cross-platform gamepad support platform
-- Git remote: https://github.com/gamepadadmin01-tech/gamepad
-- Git user: Akhil / gamepadadmin01@gmail.com
-- apps/android-client/ — Android app (Gradle)
-- apps/pc-server/ — Python desktop server — THIS is the LIVE/shipped one (dist/GamepadServer.exe)
-- apps/pc-server-rust/ — Rust rewrite of pc-server — INCOMPLETE & wire-incompatible, NOT shipped (drops all packets); see [[realtime-latency-stack]]
-- apps/controller-ui/ — React/TypeScript UI (Capacitor, Vite, Shadcn)
-- website/backend/ — Node.js/Express + Prisma ORM
-- website/frontend/ — Vite + React web frontend
-- daily-news-app/ — Separate Node.js news aggregation app ("echonews-ai"). **MOVED OUT of hlooo → `D:\AKHIL\HP\daily-news-app` on 2026-07-16** (unrelated to GamepadOS).
-- ⚠️ Paths in this file predate the **2026-07-16 hlooo reorg** — `store-releases/`→`releases/store/`, `releases-archive/`→`releases/archive/`, `NOTES/`+`high professional notes/`→`docs/notes/`, `SESSION_HANDOFF_*.md`→`docs/handoffs/`, store photo folders→`store-assets/{amazon,uptodown,indus}/`, `ad-footage/`→`marketing/ad-footage/`. `apps/`, `tools/`, `website/`, `RELEASE.md` unchanged. Full map + undo: `D:\AKHIL\HP\hlooo\MOVE_LOG.md`.
-- tools/ — JDK, Gradle 8.5, Android platform-tools, rustup-init.exe, vs_BuildTools.exe
-- .cargo/ + .rustup/ — Rust toolchain
-- GamepadOS_Ad_Production_Kit.pdf — Marketing materials
+Last verified build: `BUILD SUCCESSFUL in 2m 35s`, `app-direct-release.apk` 2.03 MB,
+versionCode 51, versionName 1.3.27.
 
-### Android/ — Android SDK
-- SDK path: D:\AKHIL\HP\Android\Sdk
-- build-tools 34.0.0, NDK, CMake, platform-tools (adb/fastboot), platforms
+**If you move any folder, these hardcode absolute paths and must be fixed:**
+`apps/android-client/build_apk.bat` (+ its `_backup_pre_agp9_20260804` copy),
+`apps/android-client/local.properties` (`sdk.dir`), `build_exact_composite.py`,
+`create_stacked_promo.py`, `tools/regression-check.sh`, `HP/.claude/launch.json`.
+**A folder move has silently broken this build twice.**
 
-### capcut/ (~4.23 GB) — Video Editing
-- CapCut app installations (versions 3.9.0, 7.5.0, 8.7.0)
-- Drafts: 0611, 0611(1), 0616
-- exports/ and material downloaded/ folders
+## Backup state
 
-### Daddy's retirement/ — Personal Family Media
-- Photos (NAS09198.JPG etc.) and videos from a retirement celebration
-- retirement.mp4 + backup copies
+`D:` is a **local** disk — no cloud sync, no version history, no VSS, no File History. An earlier
+memory claimed the old `F:` drive was Google Drive-synced; that was wrong and the error propagated
+widely before being corrected.
 
-### downloads/ — Empty
+| What | Remote |
+|---|---|
+| `D:\AKHIL\HP` (one repo: CLAUDE.md + context/ + projects/gamepados) | **none yet — NOT pushed** |
+| `projects/gamepados/website` | `gamepadadmin01-tech/gamepad` |
+| `projects/gamepados-account` | `gamepadadmin01-tech/app-with-login` |
+| `projects/flexsquares` | `gamepadadmin01-tech/flexspace` |
+| `keys/`, `media/`, `spotify-corizo`, `daily-news-app` | none |
 
-### Root Files (Sensitive)
-- RECOVERY-CODES-GamepadSupport.txt — GamepadSupport account recovery codes (plain text — insecure)
-- twilio_2FA_recovery_code.txt — Twilio 2FA recovery code (plain text — insecure)
-- ChatGPT Image Jun 15, 2026, 01_20_46 PM.png — AI-generated image
+Until 2026-08-13 the product source had **no version control at all**. See [[feedback_no_worktrees]]
+and `context/INVENTORY.md`.
+
+## Drive history — why paths keep changing
+
+```
+F:\hlooo  →  F:\  →  D:\AKHIL\HP  →  D:\AKHIL\HP\projects\gamepados
+```
+
+`F:` was a local NTFS disk (1.4 TB, "HOME PERSONAL"), **formatted 2026-07-26**. Everything was
+copied to `D:\AKHIL\HP` first (65 GB / 290k files), then F: was wiped.
+
+**Permanently lost** in that format (created after the copy had already passed that folder):
+`apps/docs/make_guide_part.py`, `docs/notes/GamepadOS_Guide_Part_VI_Accounts_and_Sync.md` + `.pdf`.
+The other guide PDFs (Complete_Book, The_Complete_Guide, Interdisciplinary_Analysis, Study_Plan)
+survived in `projects/gamepados/docs/notes/` — and still have no backup.
+
+Any `F:\` reference you now find in a memory is deliberate history, not a live path. All live paths
+were rewritten (75 refs on 2026-08-13, then 69 more after the reorg).
+
+## Earlier reorganisations
+
+- **2026-07-16** — inside the product: `store-releases/`→`releases/store/`,
+  `releases-archive/`→`releases/archive/`, `NOTES/`+`high professional notes/`→`docs/notes/`,
+  `SESSION_HANDOFF_*.md`→`docs/handoffs/`, store photos→`store-assets/{amazon,uptodown,indus}/`,
+  `ad-footage/`→`marketing/ad-footage/`. Full map and undo instructions:
+  `projects/gamepados/MOVE_LOG.md`.
+- **2026-08-13** — the HP root reorg described above, plus: 10.99 GB of build cache staged, the
+  dead Capacitor project and three dead Gradle versions retired, family media removed (the user
+  has it on another laptop), and `tw-animate-css` declared after it was found to be an undeclared
+  build dependency.

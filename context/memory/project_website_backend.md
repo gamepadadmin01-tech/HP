@@ -7,9 +7,9 @@ metadata:
   originSessionId: 2eb8022d-fde2-405c-89f1-4aee6551258f
 ---
 
-The `D:\AKHIL\HP\hlooo\website\` half of GamepadOS is a **support/ticketing platform** (separate from the realtime gamepad product in `apps/`). Mapped in depth 2026-06-21.
+The `D:\AKHIL\HP\projects\gamepados\website\` half of GamepadOS is a **support/ticketing platform** (separate from the realtime gamepad product in `apps/`). Mapped in depth 2026-06-21.
 
-**Why:** User wants beast-level mastery of it; full study plan saved at `D:\AKHIL\HP\hlooo\GamepadOS_Study_Plan.md`. Reference this for any website/backend work. See [[fdrive-overview]].
+**Why:** User wants beast-level mastery of it; full study plan saved at `D:\AKHIL\HP\projects\gamepados\GamepadOS_Study_Plan.md`. Reference this for any website/backend work. See [[fdrive-overview]].
 
 ## Stack
 - **backend/** — Express 5 + Prisma ORM, single `server.js` (~1148 lines, ~38 routes). Postgres in prod (Railway), SQLite local (`schema.local.prisma`).
@@ -24,7 +24,7 @@ The `D:\AKHIL\HP\hlooo\website\` half of GamepadOS is a **support/ticketing plat
 - Custom subdomain **`admin.gamepad.space`** → the Railway backend. **DNS is at Namecheap**
   (CNAME `admin` → the Railway target). Frontend on Vercel at `gamepad.space`. Backend root `/`
   returns a health JSON.
-- `D:\AKHIL\HP\hlooo\website\` **is** the local clone of the live repo
+- `D:\AKHIL\HP\projects\gamepados\website\` **is** the local clone of the live repo
   `github.com/gamepadadmin01-tech/gamepad`. Edit here directly — never clone to a temp dir. The
   old, stale `support-website` copy inside the apps monorepo no longer exists.
 

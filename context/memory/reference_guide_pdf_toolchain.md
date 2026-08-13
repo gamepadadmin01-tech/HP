@@ -1,6 +1,6 @@
 ﻿---
 name: reference-guide-pdf-toolchain
-description: How to read and regenerate the GamepadOS notes PDFs in D:\AKHIL\HP\hlooo\docs\notes
+description: How to read and regenerate the GamepadOS notes PDFs in D:\AKHIL\HP\projects\gamepados\docs\notes
 metadata: 
   node_type: memory
   type: reference
@@ -22,7 +22,7 @@ PDF pages. Use instead:
 (58 pages, WeasyPrint). **No markdown source exists for the Complete Guide** — only
 `GamepadOS_Study_Plan.md` (93 KB), which is the Complete_Book's source.
 
-**Writing new Parts:** `D:\AKHIL\HP\hlooo\apps\docs\make_guide_part.py` (written 2026-07-26)
+**Writing new Parts:** `D:\AKHIL\HP\projects\gamepados\apps\docs\make_guide_part.py` (written 2026-07-26)
 renders Markdown-with-callouts → a PDF matching the guide exactly. Usage:
 `python make_guide_part.py <src.md> <out.pdf> "Running Header"`.
 Source conventions: `> DEFINITION | Term — gloss`, `> NOTE |`, `> WATCH OUT |`,

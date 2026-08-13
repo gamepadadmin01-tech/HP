@@ -38,7 +38,7 @@ Verified: 105 tests pass (7 new). The discriminating test is `pinning_overrides_
 
 Loopback harness gotcha: `tools/loopback_test.py` defaults to `--token ABCD1234`, so the server must be started with `--key ABCD1234` and a LAN-shaped `--lan-ip` (NOT 127.0.0.1 — loopback counts as off-LAN and changes the auth branch). Its `[6] all 200 ACKed` failure is **by design** (drain-to-newest coalesces bursts), not a regression.
 
-Related: `tools/regression-check.sh` had `ROOT="D:/AKHIL/HP/hlooo"` hardcoded and was **fully broken since the drive move** — every check `cd`-failed, yet it still printed a summary and reported one bogus PASS. Now derives ROOT from its own location. See [[project-fdrive-overview]].
+Related: `tools/regression-check.sh` had `ROOT="D:/AKHIL/HP/projects/gamepados"` hardcoded and was **fully broken since the drive move** — every check `cd`-failed, yet it still printed a summary and reported one bogus PASS. Now derives ROOT from its own location. See [[project-fdrive-overview]].
 
 ## Adapter classification by DESCRIPTION — `netdetect.rs` (2026-08-10, built + tested)
 
@@ -68,8 +68,8 @@ Verified in the vite preview by injecting a fake `AndroidBridge` and driving all
 ## regression-check.sh was broken 4 ways by the drive/toolchain moves (all fixed 2026-08-10)
 
 It reported confident PASSes while evaluating nothing. All four found while trying to verify the VPN fixes:
-1. `ROOT="D:/AKHIL/HP/hlooo"` hardcoded → every `cd` failed; one check still printed PASS.
-2. `ANDROID_HOME=D:/AKHIL/HP/Android/Sdk` hardcoded → now read from `android-client/local.properties` `sdk.dir` (= `D:\AKHIL\HP\Android\Sdk`).
+1. `ROOT="D:/AKHIL/HP/projects/gamepados"` hardcoded → every `cd` failed; one check still printed PASS.
+2. `ANDROID_HOME=D:/AKHIL/HP/Android/Sdk` hardcoded → now read from `android-client/local.properties` `sdk.dir` (= `D:\AKHIL\HP\toolchain\android-sdk`).
 3. `GRADLE` pinned to `tools/gradle-8.14.4` → **AGP is now 9.3.1 and needs Gradle >= 9.5**; `build.gradle.kts:19` says 8.14.4 "CANNOT" build it. Now `tools/gradle-9.6.1`. (Supersedes the old "AGP 9 deferred" note in [[feedback-latest-tooling]].)
 4. The `--full` loopback check started the server with no `--key`/`--lan-ip` → every valid frame rejected, looked like a protocol regression.
 
@@ -79,7 +79,7 @@ After fixing: `--fast` 6/6, `--full` 9/10.
 
 ## Build state (2026-07-21 evening)
 
-Rust PC server (`D:\AKHIL\HP\hlooo\apps\pc-server-rs`) is the FULL v2 app, 96 tests passing. Built on top of the Phase-2 protocol core after Akhil's hours-long F1 session proved both Phase 3 native input and the Rust server (clearing the release gate AND invalidating the "ship Python first" decision — Akhil chose Rust-UI-first, egui, then one combined release).
+Rust PC server (`D:\AKHIL\HP\projects\gamepados\apps\pc-server-rs`) is the FULL v2 app, 96 tests passing. Built on top of the Phase-2 protocol core after Akhil's hours-long F1 session proved both Phase 3 native input and the Rust server (clearing the release gate AND invalidating the "ship Python first" decision — Akhil chose Rust-UI-first, egui, then one combined release).
 
 **Proven this session (all live-verified, not just unit-tested):**
 - `singleton.rs` — mutex `RemoteGamepadServerSingleton` shared with Python + Inno `AppMutex` (installer contract, checklist A14). Cross-process verified BOTH directions vs Python. `--dry-run` is exempt (regression runner starts 3 dry-runs). Tests must use `claim_named()` with a throwaway name — claiming the real mutex made the test fail whenever a server was running.

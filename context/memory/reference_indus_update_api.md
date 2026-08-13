@@ -1,6 +1,6 @@
 ﻿---
 name: indus-update-api
-description: "Indus Appstore Update API is enabled; upload script at D:\AKHIL\HP\hlooo\tools\indus-upload.ps1, key expected in D:\AKHIL\HP\hlooo\secrets\indus-api-key.txt"
+description: "Indus Appstore Update API is enabled; upload script at D:\AKHIL\HP\projects\gamepados\tools\indus-upload.ps1, key expected in D:\AKHIL\HP\projects\gamepados\secrets\indus-api-key.txt"
 metadata: 
   node_type: memory
   type: reference
@@ -18,7 +18,7 @@ Indus Appstore Update API (enabled 2026-07-17 on the developer dashboard; key is
   - `GET /devtools/app/stats/{package}` — installs / updateCount / install24hrs / appRating
   - `POST /devtools/review/cancel/{package}` — body `{id}` from versions list
   - Errors: 403 bad key, 404 package not on store, 409 already in review, 433 wrong file format
-- Helper script: `D:\AKHIL\HP\hlooo\tools\indus-upload.ps1` — default action uploads `D:\AKHIL\HP\hlooo\releases\store\<Version>\GamepadOS-<Version>-indusstore.apk` (default 1.3.21) via curl.exe multipart; `-Check` lists review states, `-Stats` shows installs. Reads key from `D:\AKHIL\HP\hlooo\secrets\indus-api-key.txt` or `INDUS_API_KEY` env var.
-- `D:\AKHIL\HP\hlooo\secrets\` is outside all git repos; keep it that way.
+- Helper script: `D:\AKHIL\HP\projects\gamepados\tools\indus-upload.ps1` — default action uploads `D:\AKHIL\HP\projects\gamepados\releases\store\<Version>\GamepadOS-<Version>-indusstore.apk` (default 1.3.21) via curl.exe multipart; `-Check` lists review states, `-Stats` shows installs. Reads key from `D:\AKHIL\HP\projects\gamepados\secrets\indus-api-key.txt` or `INDUS_API_KEY` env var.
+- `D:\AKHIL\HP\projects\gamepados\secrets\` is outside all git repos; keep it that way.
 
 Related: [[downloads-feedback-platform]] (store rollout status), GRX update chain in [[grx-crypto-big-update]].
