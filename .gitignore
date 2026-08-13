@@ -1,0 +1,30 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# This repo tracks ONLY the durable context: CLAUDE.md and context/.
+#
+# It is a WHITELIST. Everything is ignored by default, and only the two safe
+# paths are re-included. That is deliberate: `keys/`, every `.env`, and both
+# `release.keystore` files live under this folder, and a stray `git add -A`
+# must never be able to reach them.
+#
+# The actual projects have their own repos:
+#   hlooo/            -> gamepadadmin01-tech/gamepados
+#   hlooo/website/    -> gamepadadmin01-tech/gamepad
+#   App with login/   -> gamepadadmin01-tech/app-with-login
+#   flexsquares/      -> gamepadadmin01-tech/flexspace
+# ═══════════════════════════════════════════════════════════════════════════
+
+# Ignore everything.
+/*
+
+# Re-include only these.
+!/CLAUDE.md
+!/context/
+!/.gitignore
+
+# Belt and braces: even inside context/, never allow a secret through.
+context/**/*.env
+context/**/*.pem
+context/**/*.keystore
+context/**/*.jks
+context/**/*.p12
+context/**/secrets/

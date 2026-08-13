@@ -1,0 +1,5 @@
+# Runtime validation errors (no scene attribution)
+
+When the bundled hyperframe was loaded in headless Chrome, these runtime errors fired but could NOT be attributed to a single scene. They may originate from cross-scene interactions (timeline collisions, shared selectors, global state) or from the ``inline_index_html`` wrapper. Every scene re-authored on this retry pass should consider whether its code could be contributing.
+
+- lint.audio_src_not_found: <audio> element references file(s) not found in the project: assets/42f7d39b_019ca13321df402a862ee84b70c3ccc9.mp3, assets/f5b944b9_9bd8070d9bdb48ceb8c5a54ab03690d8.wav, assets/a5abf463_b0f796cfc4a34fb3b5adec4b79db413a.mp3, assets/8bb0ae44_c25b1679f4264a23bbd9e504d8a67e2a.mp3, assets/64e205d6_8eab7328814d4392aba8993ac07bd804.mp3, assets/752b9460_6bf56bacbdf54ba8a1e4d687a63515ae.mp3, assets/a6315fad_a705e8fbbfbb42ee9b104ad497da04b1.mp3. The rendered video will be silent. (selector [data-composition-id]; source index.html)
