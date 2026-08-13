@@ -16,6 +16,7 @@
 - [No Claude co-author](feedback_no_claude_coauthor.md) — no `Co-Authored-By` trailers
 - [Brand voice](feedback_brand_voice_email.md) — never put his name in outgoing mail; sign as "GamepadOS"
 - [Challenge your own code](feedback_challenge_own_code.md) — remove what measurement shows adds nothing
+- [Windows file encoding](feedback_windows_file_encoding.md) — PowerShell `Set-Content` adds a BOM and flips CRLF→LF; **that breaks `.bat` files silently**. Prefer the Edit tool
 - [Regression checklist](feedback_regression_checklist.md) — run `docs/REGRESSION_CHECKLIST.md` after big changes
 - [Latest tooling](feedback_latest_tooling.md) — now AGP 9.3.1 + **Gradle 9.6.1** (build-verified 2026-08-13)
 

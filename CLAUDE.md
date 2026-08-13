@@ -34,6 +34,10 @@ Full detail: **`context/INVENTORY.md`** (the folder map) and **`context/README.m
    LIFE."*
 6. **Never put his name in outgoing mail or messages.** Sign as "GamepadOS" only.
 7. **Never use a non-unique anchor for automated text edits.** See "Scars" below.
+8. **Don't edit Windows build files with PowerShell `Set-Content`.** It adds a BOM and flips CRLF
+   to LF, and `cmd.exe` misparses a `.bat` with LF endings — the errors it produces
+   (`'M' is not recognized`, `JAVA_HOME is set to an invalid directory`) point nowhere near the
+   real cause. `.bat` must be CRLF; `.sh` must stay LF. Prefer the Edit tool.
 
 ## Folder map
 
