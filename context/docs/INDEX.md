@@ -1,4 +1,4 @@
-# Document Index — 108 files
+﻿# Document Index — 108 files
 
 Every markdown document that existed anywhere under `D:\AKHIL\HP`, copied here on
 **2026-08-13**. The originals are all still in place — these are copies, not moves.
@@ -16,7 +16,7 @@ If you are a new session (or a new laptop) and need to get oriented, read these 
 | # | File | Why |
 |---|---|---|
 | 1 | `hlooo__RELEASE.md` | Release process and current version state |
-| 2 | `hlooo__MOVE_LOG.md` | How `hlooo/` is organised and why; what deliberately did NOT move |
+| 2 | `hlooo__MOVE_LOG.md` | How `projects/gamepados/` is organised and why; what deliberately did NOT move |
 | 3 | `hlooo__docs__handoffs__SESSION_HANDOFF_2026-07-21.md` | Most recent full handoff — where work stopped |
 | 4 | `hlooo__apps__docs__ARCHITECTURE.md` | How GamepadOS actually works, end to end |
 | 5 | `hlooo__apps__docs__GRX_PROTOCOL.md` | The encrypted input wire protocol |
@@ -52,8 +52,10 @@ If you are a new session (or a new laptop) and need to get oriented, read these 
 
 ## iOS / Mac port
 
-Both `GamepadOS-iOS` and `ios-client` sets are here. **These two trees are near-duplicates and
-`MOVE_LOG.md` flags that a human still has to decide which is real** — that decision is not made.
+Both `GamepadOS-iOS` and `ios-client` sets are here. **Resolved 2026-08-13:** `GamepadOS-iOS` is a
+strict superset — `ios-client` has zero unique files and every differing file is newer and larger
+in `GamepadOS-iOS`. Treat `GamepadOS-iOS` as the real one; `ios-client` is superseded (kept for
+now, not deleted). See `../INVENTORY.md` §5.
 
 | File | Covers |
 |---|---|
@@ -127,7 +129,7 @@ Both `GamepadOS-iOS` and `ios-client` sets are here. **These two trees are near-
 
 > The three guide **PDFs** (`GamepadOS_Complete_Book.pdf`, `The_Complete_Guide.pdf`,
 > `Interdisciplinary_Analysis.pdf`) are not markdown, so they are not copied here. They remain at
-> `hlooo\docs\notes\`. **They have no other backup** — see `../INVENTORY.md`.
+> `projects\gamepados\docs\notes\`. **They have no other backup** — see `../INVENTORY.md`.
 
 ## Other projects
 
@@ -142,7 +144,7 @@ Both `GamepadOS-iOS` and `ios-client` sets are here. **These two trees are near-
 
 ## Note on duplicates
 
-`App with login` is a git fork of `hlooo`, so ~25 documents appear twice. Where the two differ,
-the `hlooo` copy is generally newer — the one clear exception is noted above
+`App with login` is a git fork of `projects/gamepados`, so ~25 documents appear twice. Where the two differ,
+the `projects/gamepados` copy is generally newer — the one clear exception is noted above
 (`website__frontend__STYLEGUIDE.md`). Both copies are kept deliberately; do not dedupe without
 comparing dates in `_manifest.csv`.

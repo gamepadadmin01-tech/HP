@@ -1,30 +1,48 @@
 # ═══════════════════════════════════════════════════════════════════════════
-# This repo tracks ONLY the durable context: CLAUDE.md and context/.
+# ONE repo for D:\AKHIL\HP. It tracks:
+#     CLAUDE.md                the auto-loaded session brief
+#     context/                 the durable brain
+#     projects/gamepados/      the GamepadOS product source
 #
-# It is a WHITELIST. Everything is ignored by default, and only the two safe
-# paths are re-included. That is deliberate: `keys/`, every `.env`, and both
-# `release.keystore` files live under this folder, and a stray `git add -A`
-# must never be able to reach them.
+# It is a WHITELIST — everything is ignored by default and only the paths
+# below are re-included. That is deliberate: keys/, every .env, and
+# release.keystore live under this folder, and a stray `git add -A` must
+# never be able to reach them.
 #
-# The actual projects have their own repos:
-#   hlooo/            -> gamepadadmin01-tech/gamepados
-#   hlooo/website/    -> gamepadadmin01-tech/gamepad
-#   App with login/   -> gamepadadmin01-tech/app-with-login
-#   flexsquares/      -> gamepadadmin01-tech/flexspace
+# Deliberately NOT tracked here (they have their own remotes):
+#     projects/gamepados/website/   -> gamepadadmin01-tech/gamepad
+#     projects/gamepados-account/   -> gamepadadmin01-tech/app-with-login
+#     projects/flexsquares/         -> gamepadadmin01-tech/flexspace
+#
+# Deliberately NOT tracked at all:
+#     keys/  toolchain/  media/  installers/  _TO_DELETE_*/  .agents/
+#     projects/daily-news-app/  projects/spotify-corizo/
 # ═══════════════════════════════════════════════════════════════════════════
 
-# Ignore everything.
+# Ignore everything at the root...
 /*
 
-# Re-include only these.
+# ...then re-include only these.
+!/.gitignore
 !/CLAUDE.md
 !/context/
-!/.gitignore
+!/projects/
 
-# Belt and braces: even inside context/, never allow a secret through.
-context/**/*.env
-context/**/*.pem
-context/**/*.keystore
-context/**/*.jks
-context/**/*.p12
-context/**/secrets/
+# Inside projects/, only gamepados is tracked.
+/projects/*
+!/projects/gamepados/
+
+# projects/gamepados/.gitignore governs everything below it — it excludes
+# website/, tools/, node_modules/, target/, .cargo/, releases/, secrets and
+# large binaries.
+
+# Belt and braces: never let a secret through, wherever it appears.
+**/*.env
+!**/.env.example
+**/*.pem
+**/*.keystore
+**/*.jks
+**/*.p12
+**/*.pfx
+**/local.properties
+**/secrets/

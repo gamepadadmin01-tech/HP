@@ -1,0 +1,237 @@
+/* ============================================================
+   LIQUID GLASS — CSS approximation of Apple's iOS 26 / 27 material
+   ------------------------------------------------------------
+   Recovered 2026-07-26 from the shared chat
+   https://claude.ai/share/e904eb4a-dbe6-40df-93f5-b0608207a0ec
+   (artifact "Liquid glass"). NOT yet wired into any GamepadOS build.
+   ------------------------------------------------------------
+   IMPORTANT ACCURACY NOTE:
+   Apple does NOT publish hex values for Liquid Glass. The real
+   material is a live GPU shader that samples, blurs, refracts and
+   saturates whatever is behind it, then adds specular highlights
+   that track device motion. It has no fixed colour.
+   What follows is the closest honest CSS approximation:
+     backdrop-filter (blur + saturate)  -> the refraction/tint
+     translucent fill                   -> the body of the glass
+     inset top highlight                -> the specular edge
+     hairline border                    -> the rim of the glass
+   The SYSTEM COLOUR values further down are community-measured
+   sRGB samples of Apple's dynamic system colours, not official
+   published values. Treat them as accurate-to-the-eye, not exact.
+   ============================================================ */
+
+:root {
+  /* ---- Glass geometry ---- */
+  --glass-radius-sm: 12px;
+  --glass-radius-md: 22px;   /* cards, sheets, panels           */
+  --glass-radius-lg: 28px;   /* full-width sheets               */
+  --glass-radius-pill: 999px;/* iOS 26 buttons / tab bars       */
+
+  /* ---- Blur strength ---- */
+  --glass-blur-thin: 12px;
+  --glass-blur-regular: 24px;
+  --glass-blur-thick: 40px;
+
+  /* Saturation boost is what makes it read as "Apple" rather
+     than generic frosted glass. Do not skip it. */
+  --glass-saturate: 180%;
+
+  /* ---- LIGHT MODE glass ---- */
+  --glass-fill: rgba(255, 255, 255, 0.55);
+  --glass-fill-clear: rgba(255, 255, 255, 0.22);
+  --glass-border: rgba(255, 255, 255, 0.60);
+  --glass-highlight: rgba(255, 255, 255, 0.85);
+  --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+  --glass-text: #000000;
+  --glass-text-secondary: rgba(60, 60, 67, 0.60);
+  --glass-scrim: rgba(0, 0, 0, 0.00);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --glass-fill: rgba(30, 30, 32, 0.55);
+    --glass-fill-clear: rgba(20, 20, 22, 0.28);
+    --glass-border: rgba(255, 255, 255, 0.14);
+    --glass-highlight: rgba(255, 255, 255, 0.28);
+    --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+    --glass-text: #FFFFFF;
+    --glass-text-secondary: rgba(235, 235, 245, 0.60);
+  }
+}
+
+/* ============================================================
+   THE MATERIAL
+   Apple ships two variants. Use Regular by default.
+   ============================================================ */
+
+/* Regular — adaptive, legible over anything. Default choice. */
+.glass {
+  position: relative;
+  isolation: isolate;
+  background: var(--glass-fill);
+  -webkit-backdrop-filter: blur(var(--glass-blur-regular)) saturate(var(--glass-saturate));
+  backdrop-filter: blur(var(--glass-blur-regular)) saturate(var(--glass-saturate));
+  border: 1px solid var(--glass-border);
+  border-radius: var(--glass-radius-md);
+  box-shadow:
+    var(--glass-shadow),
+    inset 0 1px 0 0 var(--glass-highlight);   /* specular top edge */
+  color: var(--glass-text);
+}
+
+/* Clear — thinner, more see-through. ONLY over media/photos, and
+   only with a dimming scrim underneath, or text becomes unreadable.
+   This is Apple's own rule, not a style preference. */
+.glass--clear {
+  background: var(--glass-fill-clear);
+  -webkit-backdrop-filter: blur(var(--glass-blur-thin)) saturate(var(--glass-saturate));
+  backdrop-filter: blur(var(--glass-blur-thin)) saturate(var(--glass-saturate));
+}
+.glass--clear::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: linear-gradient(to bottom, rgba(0,0,0,0.28), rgba(0,0,0,0.10));
+}
+
+/* Pill controls — the iOS 26 button / tab bar shape */
+.glass--pill { border-radius: var(--glass-radius-pill); }
+
+/* Optional: true squircle corners (Apple's continuous curvature).
+   Chromium-only at time of writing. Safe as progressive enhancement —
+   browsers without it just keep the normal rounded corner. */
+@supports (corner-shape: squircle) {
+  .glass { corner-shape: squircle; }
+}
+
+/* Press feedback — Liquid Glass compresses and brightens on touch */
+.glass--interactive {
+  transition:
+    transform 0.22s cubic-bezier(0.32, 0.72, 0, 1),
+    background 0.22s ease;
+  will-change: transform;
+}
+.glass--interactive:active {
+  transform: scale(0.96);
+  background: color-mix(in srgb, var(--glass-fill) 80%, white 20%);
+}
+
+/* ============================================================
+   ACCESSIBILITY — REQUIRED, not optional
+   Users who turn on Reduce Transparency must get a solid surface.
+   Shipping without this is an accessibility bug.
+   ============================================================ */
+@media (prefers-reduced-transparency: reduce) {
+  .glass, .glass--clear {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    background: #F2F2F7;
+    border-color: rgba(0, 0, 0, 0.12);
+  }
+}
+@media (prefers-reduced-transparency: reduce) and (prefers-color-scheme: dark) {
+  .glass, .glass--clear {
+    background: #1C1C1E;
+    border-color: rgba(255, 255, 255, 0.12);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .glass--interactive { transition: none; }
+  .glass--interactive:active { transform: none; }
+}
+
+/* ============================================================
+   iOS SYSTEM COLOUR PALETTE
+   Community-measured sRGB samples of Apple's dynamic colours.
+   Accurate to the eye; Apple does not publish official hex codes.
+   ============================================================ */
+:root {
+  --ios-blue:   #007AFF;
+  --ios-green:  #34C759;
+  --ios-indigo: #5856D6;
+  --ios-orange: #FF9500;
+  --ios-pink:   #FF2D55;
+  --ios-purple: #AF52DE;
+  --ios-red:    #FF3B30;
+  --ios-teal:   #30B0C7;
+  --ios-mint:   #00C7BE;
+  --ios-cyan:   #32ADE6;
+  --ios-yellow: #FFCC00;
+  --ios-brown:  #A2845E;
+
+  --ios-gray:   #8E8E93;
+  --ios-gray2:  #AEAEB2;
+  --ios-gray3:  #C7C7CC;
+  --ios-gray4:  #D1D1D6;
+  --ios-gray5:  #E5E5EA;
+  --ios-gray6:  #F2F2F7;   /* grouped background, light */
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ios-blue:   #0A84FF;
+    --ios-green:  #30D158;
+    --ios-indigo: #5E5CE6;
+    --ios-orange: #FF9F0A;
+    --ios-pink:   #FF375F;
+    --ios-purple: #BF5AF2;
+    --ios-red:    #FF453A;
+    --ios-teal:   #40C8E0;
+    --ios-mint:   #63E6E2;
+    --ios-cyan:   #64D2FF;
+    --ios-yellow: #FFD60A;
+    --ios-brown:  #AC8E68;
+
+    --ios-gray:   #8E8E93;
+    --ios-gray2:  #636366;
+    --ios-gray3:  #48484A;
+    --ios-gray4:  #3A3A3C;
+    --ios-gray5:  #2C2C2E;
+    --ios-gray6:  #1C1C1E;   /* grouped background, dark */
+  }
+}
+
+/* ============================================================
+   TYPE
+   SF Pro is NOT licensed for web/Android use. On a non-Apple
+   device the stack below falls through to Inter, which is the
+   closest legally usable substitute.
+   ============================================================ */
+:root {
+  --font-ui: -apple-system, BlinkMacSystemFont, "SF Pro Text",
+             "Inter", system-ui, sans-serif;
+
+  /* Apple iOS type scale, points == px at 1x */
+  --type-large-title: 34px;
+  --type-title1: 28px;
+  --type-title2: 22px;
+  --type-title3: 20px;
+  --type-headline: 17px;   /* semibold */
+  --type-body: 17px;
+  --type-callout: 16px;
+  --type-subhead: 15px;
+  --type-footnote: 13px;
+  --type-caption1: 12px;
+  --type-caption2: 11px;
+
+  --tap-target-min: 44px;  /* HIG hard rule */
+  --grid: 8px;             /* 8pt grid, 4pt subdivisions */
+}
+
+/* ============================================================
+   PERFORMANCE WARNING
+   backdrop-filter forces a full offscreen composite of everything
+   behind the element, every frame. On a mid-range Android WebView
+   this is the single most expensive property you can ship.
+   Rules:
+     1. Never put backdrop-filter on an element that animates
+        position or size every frame.
+     2. Never nest one glass surface inside another.
+     3. Keep total glass surfaces on screen under ~6.
+     4. Never apply it to a high-frequency touch surface
+        (a gamepad control being dragged at 60fps will drop frames).
+   If a surface must be glassy AND move, pre-render a static blurred
+   backdrop image instead of using backdrop-filter live.
+   ============================================================ */

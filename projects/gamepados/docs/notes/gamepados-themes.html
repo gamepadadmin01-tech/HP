@@ -1,0 +1,518 @@
+<title>GamepadOS &mdash; Four Dark Identities</title>
+<style>
+  /* == This page commits to a dark ground on purpose =======================
+     GamepadOS is a dark-only app. Every contrast number below is measured
+     against a dark surface; rendering these tokens on a white page would
+     misrepresent all of them. So: one visual world, deliberately. ====== */
+
+  :root {
+    --font-ui: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", "Consolas", monospace;
+
+    /* page chrome &mdash; an instrument panel, neutral tinted toward the active accent */
+    --page: #08090C;
+    --panel: #101319;
+    --rule: #1E232D;
+    --ink: #E8ECF3;
+    --ink-60: #929AA8;
+    --ink-38: #626A78;
+    --pass: #3FB27F;
+
+    /* overwritten per theme */
+    --s0: #0A0A0B; --s1: #212124; --s2: #323136;
+    --accent: #513EE0; --accent-text: #988EE5; --on-accent: #FFFFFF;
+    --danger: #D0393E; --danger-text: #DE7D80; --on-danger: #FFFFFF;
+    --t100: #ECEBEF; --t60: #9F9EA2; --t38: #767679;
+    --edge: #49494B;
+
+    --r-sheet: 28px;
+    --r-card: 18px;
+    --r-inner: 10px;   /* concentric: 18 &minus; 8 padding */
+    --r-chip: 8px;
+  }
+
+  [data-theme-name="bronze"] {
+    --s0:#0C0B0B; --s1:#242220; --s2:#35322F;
+    --accent:#C67A2F; --accent-text:#CB8D4E; --on-accent:#0A0B0D;
+    --danger:#D03943; --danger-text:#DF7E84; --on-danger:#FFFFFF;
+    --t100:#EFEDEB; --t60:#A2A09E; --t38:#797775; --edge:#4B4A48;
+  }
+  [data-theme-name="racing"] {
+    --s0:#090C0B; --s1:#1B2421; --s2:#283530;
+    --accent:#CCA63E; --accent-text:#B7963A; --on-accent:#0A0B0D;
+    --danger:#D03943; --danger-text:#DF7D84; --on-danger:#FFFFFF;
+    --t100:#EAF1EE; --t60:#9BA3A0; --t38:#727A77; --edge:#444B49;
+  }
+  [data-theme-name="signal"] {
+    --s0:#0C0C0C; --s1:#222223; --s2:#313233;
+    --accent:#E75D23; --accent-text:#E17F55; --on-accent:#0A0B0D;
+    --danger:#D0394D; --danger-text:#DE7D8A; --on-danger:#FFFFFF;
+    --t100:#ECEDEF; --t60:#9FA0A1; --t38:#777779; --edge:#4A4A4B;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--page);
+    color: var(--ink);
+    font-family: var(--font-ui);
+    font-size: 15px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 40px 24px 96px; }
+
+  /* -- masthead ------------------------------------------------------- */
+  header { border-bottom: 1px solid var(--rule); padding-bottom: 28px; margin-bottom: 32px; }
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--ink-38); margin: 0 0 12px;
+  }
+  h1 {
+    font-size: clamp(30px, 4.4vw, 46px);
+    line-height: 1.03; letter-spacing: -0.035em; font-weight: 700;
+    margin: 0 0 14px; text-wrap: balance;
+  }
+  .standfirst { max-width: 62ch; color: var(--ink-60); margin: 0; font-size: 16px; }
+  .standfirst strong { color: var(--ink); font-weight: 600; }
+
+  /* -- theme switcher: capsule segmented control (iOS 26 control shape) -- */
+  .switcher {
+    display: flex; gap: 4px; padding: 5px; margin: 32px 0 28px;
+    background: var(--panel); border: 1px solid var(--rule);
+    border-radius: 999px; width: fit-content; max-width: 100%;
+    overflow-x: auto; scrollbar-width: none;
+  }
+  .switcher::-webkit-scrollbar { display: none; }
+  .switcher button {
+    font: inherit; font-size: 13px; font-weight: 600;
+    border: 0; background: transparent; color: var(--ink-60);
+    padding: 9px 18px; border-radius: 999px; cursor: pointer;
+    min-height: 40px; white-space: nowrap;
+    display: inline-flex; align-items: center; gap: 9px;
+    transition: background 160ms ease, color 160ms ease;
+  }
+  .switcher button:hover { color: var(--ink); }
+  .switcher button[aria-selected="true"] { background: var(--s2); color: var(--ink); }
+  .switcher button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .dot { width: 11px; height: 11px; border-radius: 50%; background: var(--swatch); flex: none; }
+
+  /* -- main split ----------------------------------------------------- */
+  .split { display: grid; grid-template-columns: minmax(0, 340px) minmax(0, 1fr); gap: 40px; align-items: start; }
+  @media (max-width: 860px) { .split { grid-template-columns: 1fr; gap: 32px; } }
+
+  /* -- the phone preview &mdash; real GamepadOS surfaces -------------------- */
+  .device {
+    background: var(--s0);
+    border: 1px solid var(--edge);
+    border-radius: var(--r-sheet);
+    padding: 16px;                     /* concentric: card = 28 &minus; 16 → 12..18 */
+    display: flex; flex-direction: column; gap: 12px;
+    box-shadow: 0 24px 60px rgba(0,0,0,0.55);
+    transition: background 240ms ease, border-color 240ms ease;
+  }
+  .device-label {
+    font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em;
+    text-transform: uppercase; color: var(--t38); margin: 0 0 2px;
+  }
+  .card {
+    background: var(--s1);
+    border: 1px solid var(--edge);
+    border-radius: var(--r-card);
+    padding: 14px;
+    color: var(--t100);
+    transition: background 240ms ease, border-color 240ms ease;
+  }
+  .card h3 { margin: 0 0 2px; font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
+  .card p  { margin: 0; font-size: 12.5px; color: var(--t60); }
+
+  .statrow { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+  .stat { font-family: var(--font-mono); font-size: 26px; font-weight: 600; letter-spacing: -0.03em; color: var(--accent-text); font-variant-numeric: tabular-nums; }
+  .stat small { font-size: 12px; color: var(--t60); font-weight: 400; margin-left: 3px; }
+
+  /* connection list &mdash; colour on the ACTION, not the surface */
+  .list { background: var(--s1); border: 1px solid var(--edge); border-radius: var(--r-card); padding: 2px 14px; }
+  .item { display: flex; align-items: center; gap: 11px; padding: 11px 0; border-bottom: 1px solid var(--edge); min-height: 44px; }
+  .item:last-child { border-bottom: 0; }
+  .item .name { flex: 1; font-size: 13.5px; color: var(--t100); }
+  .item .val  { font-size: 13px; color: var(--t60); font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+  .pip { width: 8px; height: 8px; border-radius: 50%; background: var(--accent-text); flex: none; }
+  .pip.off { background: var(--t38); }
+
+  /* update banner &mdash; the tinted-chip pattern, at a passing alpha */
+  .banner {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    border-radius: var(--r-card); padding: 12px 14px;
+    background: color-mix(in srgb, var(--accent) 12%, var(--s0));
+    border: 1px solid color-mix(in srgb, var(--accent) 34%, var(--s0));
+  }
+  .banner p { margin: 0; font-size: 12.5px; color: var(--t100); font-weight: 600; }
+  .banner span { display: block; font-weight: 400; color: var(--t60); font-size: 11.5px; }
+
+  /* buttons &mdash; dark ink on accent, the pairing that passes */
+  .btn {
+    font: inherit; font-size: 13px; font-weight: 650; cursor: pointer;
+    border: 0; border-radius: 999px; padding: 10px 16px; min-height: 44px;
+    background: var(--accent); color: var(--on-accent);
+    transition: filter 160ms ease, transform 160ms cubic-bezier(.32,.72,0,1);
+  }
+  .btn:hover { filter: brightness(1.08); }
+  .btn:active { transform: scale(0.965); }
+  .btn:focus-visible { outline: 2px solid var(--t100); outline-offset: 2px; }
+  .btn.ghost { background: transparent; color: var(--t60); border: 1px solid var(--edge); }
+  .btn.danger { background: var(--danger); color: var(--on-danger); }
+
+  /* trigger pills &mdash; the app's own LT/RT widgets */
+  .triggers { display: flex; gap: 10px; }
+  .pill {
+    flex: 1; height: 54px; border-radius: 999px;
+    background: color-mix(in srgb, var(--accent) 14%, var(--s0));
+    border: 1px solid var(--edge);
+    display: flex; align-items: flex-end; justify-content: center; padding-bottom: 7px;
+    font-family: var(--font-mono); font-size: 11px; color: var(--t60);
+    position: relative; overflow: hidden;
+  }
+  .pill::before {
+    content: ""; position: absolute; left: 0; right: 0; bottom: 0;
+    height: var(--fill, 0%); background: var(--accent); opacity: 0.42;
+  }
+  .pill span { position: relative; }
+
+  /* tab bar &mdash; capsule, the iOS 26 control shape */
+  .tabs { display: flex; gap: 3px; padding: 5px; background: var(--s1); border: 1px solid var(--edge); border-radius: 999px; }
+  .tabs button {
+    flex: 1; font: inherit; font-size: 12px; font-weight: 600; border: 0;
+    background: transparent; color: var(--t60); padding: 9px 0; border-radius: 999px;
+    min-height: 44px; cursor: pointer;
+  }
+  .tabs button[aria-selected="true"] { background: var(--s2); color: var(--t100); }
+  .tabs button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+  /* -- proof column --------------------------------------------------- */
+  .proof h2 {
+    font-size: 13px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--ink-38); margin: 0 0 14px; font-family: var(--font-mono);
+  }
+  .proof + .proof { margin-top: 36px; }
+
+  .tablewrap { overflow-x: auto; border: 1px solid var(--rule); border-radius: 12px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--rule); white-space: nowrap; }
+  thead th {
+    font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.1em;
+    text-transform: uppercase; color: var(--ink-38); font-weight: 500;
+    background: var(--panel);
+  }
+  tbody tr:last-child td { border-bottom: 0; }
+  td.num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; color: var(--ink); }
+  td.req { color: var(--ink-38); font-family: var(--font-mono); }
+  .ok { color: var(--pass); font-family: var(--font-mono); font-size: 12px; }
+
+  /* swatch strip */
+  .swatches { display: grid; grid-template-columns: repeat(auto-fit, minmax(86px, 1fr)); gap: 8px; }
+  .sw { border-radius: var(--r-chip); border: 1px solid var(--rule); overflow: hidden; }
+  .sw i { display: block; height: 46px; }
+  .sw b {
+    display: block; font-family: var(--font-mono); font-size: 10px; font-weight: 400;
+    padding: 6px 8px; color: var(--ink-60); background: var(--panel);
+    letter-spacing: 0.02em;
+  }
+
+  /* elevation comparison */
+  .ladder { display: flex; gap: 2px; border-radius: 10px; overflow: hidden; border: 1px solid var(--rule); }
+  .ladder div { flex: 1; height: 56px; display: flex; align-items: flex-end; padding: 6px; font-family: var(--font-mono); font-size: 9.5px; color: rgba(255,255,255,0.55); }
+  .cmp { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 620px) { .cmp { grid-template-columns: 1fr; } }
+  .cmp figcaption { font-size: 12px; color: var(--ink-60); margin-top: 8px; }
+  .cmp figure { margin: 0; }
+  .verdict { font-family: var(--font-mono); font-size: 11px; }
+  .verdict.bad { color: #E8746B; }
+  .verdict.good { color: var(--pass); }
+
+  /* token block */
+  pre {
+    margin: 0; padding: 16px; background: var(--panel); border: 1px solid var(--rule);
+    border-radius: 12px; overflow-x: auto; font-family: var(--font-mono);
+    font-size: 12px; line-height: 1.7; color: var(--ink-60);
+  }
+  pre .k { color: var(--ink); }
+  pre .c { color: var(--ink-38); font-style: italic; }
+  .copybar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+  .copybtn {
+    font: inherit; font-size: 12px; font-weight: 600; font-family: var(--font-mono);
+    background: transparent; color: var(--ink-60); border: 1px solid var(--rule);
+    border-radius: 999px; padding: 7px 15px; cursor: pointer; min-height: 36px;
+  }
+  .copybtn:hover { color: var(--ink); border-color: var(--ink-38); }
+  .copybtn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .footnote { margin-top: 44px; padding-top: 22px; border-top: 1px solid var(--rule); color: var(--ink-38); font-size: 12.5px; max-width: 70ch; }
+  .footnote code { font-family: var(--font-mono); color: var(--ink-60); }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; animation: none !important; }
+  }
+</style>
+
+<div class="wrap" id="root" data-theme-name="graphite">
+
+  <header>
+    <p class="eyebrow">GamepadOS &middot; Design tokens &middot; Measured 26 Jul 2026</p>
+    <h1>Four identities. Not four blues.</h1>
+    <p class="standfirst">
+      Each one is a different <strong>neutral temperature</strong> and a different accent
+      family &mdash; not a reskin of the same palette. The accent is two tones of one hue:
+      a saturated <strong>fill</strong> for buttons, and a lighter <strong>text</strong> tone
+      for numbers and labels. That split is what lets an accent be an actual colour instead
+      of a safe mid-grey. Every value below was generated against the rules, then
+      <strong>rejected unless all nine checks passed</strong>.
+    </p>
+  </header>
+
+  <div class="switcher" role="tablist" aria-label="Theme">
+    <button role="tab" aria-selected="true"  data-t="nocturne" style="--swatch:#513EE0"><span class="dot"></span>Nocturne</button>
+    <button role="tab" aria-selected="false" data-t="bronze"   style="--swatch:#C67A2F"><span class="dot"></span>Bronze</button>
+    <button role="tab" aria-selected="false" data-t="racing"   style="--swatch:#CCA63E"><span class="dot"></span>Racing Green</button>
+    <button role="tab" aria-selected="false" data-t="signal"   style="--swatch:#E75D23"><span class="dot"></span>Signal</button>
+  </div>
+
+  <p id="blurb" style="margin:-8px 0 26px; color:var(--ink-60); font-size:14px;"></p>
+  <div class="split">
+
+    <!-- -- live preview ----------------------------------------------- -->
+    <div>
+      <p class="device-label">Live preview &middot; your components</p>
+      <div class="device">
+        <div class="card">
+          <div class="statrow">
+            <div>
+              <h3>Connected</h3>
+              <p>Redmi Note 13 &middot; Wi-Fi</p>
+            </div>
+            <div class="stat">12<small>ms</small></div>
+          </div>
+        </div>
+
+        <div class="banner">
+          <p>Update available &middot; v1.3.24<span>Layout sharing and account sync</span></p>
+          <button class="btn">Update</button>
+        </div>
+
+        <div class="list">
+          <div class="item"><span class="pip"></span><span class="name">Transport</span><span class="val">UDP</span></div>
+          <div class="item"><span class="pip"></span><span class="name">Polling rate</span><span class="val">1000 Hz</span></div>
+          <div class="item"><span class="pip off"></span><span class="name">Gyro steering</span><span class="val">Off</span></div>
+        </div>
+
+        <div class="triggers">
+          <div class="pill" style="--fill:62%"><span>LT</span></div>
+          <div class="pill" style="--fill:24%"><span>RT</span></div>
+        </div>
+
+        <div class="tabs" role="tablist" aria-label="Preview tabs">
+          <button role="tab" aria-selected="true">Pad</button>
+          <button role="tab" aria-selected="false">Builder</button>
+          <button role="tab" aria-selected="false">System</button>
+        </div>
+
+        <div style="display:flex; gap:8px;">
+          <button class="btn ghost" style="flex:1">Disconnect</button>
+          <button class="btn danger" style="flex:1">Delete pad</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- -- proof ------------------------------------------------------ -->
+    <div>
+      <section class="proof">
+        <h2>Palette</h2>
+        <div class="swatches" id="swatches"></div>
+      </section>
+
+      <section class="proof">
+        <h2>Measurements</h2>
+        <div class="tablewrap">
+          <table>
+            <thead>
+              <tr><th>Check</th><th>Required</th><th>This theme</th><th></th></tr>
+            </thead>
+            <tbody id="checks"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="proof">
+        <h2>What changed</h2>
+        <div class="cmp">
+          <figure>
+            <div class="ladder">
+              <div style="background:#0B0E14">#0B0E14</div>
+              <div style="background:#151A23">#151A23</div>
+              <div style="background:#1B2230">#1B2230</div>
+            </div>
+            <figcaption>
+              Shipping today &mdash; steps of <b>1.11</b> and <b>1.09</b>.<br>
+              <span class="verdict bad">below 1.2 &middot; reads as one flat sheet</span>
+            </figcaption>
+          </figure>
+          <figure>
+            <div class="ladder" id="newladder"></div>
+            <figcaption>
+              This theme &mdash; steps of <b id="s1v">1.24</b> and <b id="s2v">1.23</b>.<br>
+              <span class="verdict good">above 1.2 &middot; reads as layers</span>
+            </figcaption>
+          </figure>
+        </div>
+      </section>
+
+      <section class="proof">
+        <div class="copybar">
+          <h2 style="margin:0">Drop-in tokens</h2>
+          <button class="copybtn" id="copy">Copy CSS</button>
+        </div>
+        <pre id="tokens"></pre>
+      </section>
+    </div>
+  </div>
+
+  <p class="footnote">
+    Contrast is the WCAG 2.x ratio. <code>4.5</code> is the AA floor for body text;
+    <code>1.2</code> is roughly where a surface change stops being visible, which is why
+    Apple's iOS dark ladder steps at 1.23 and Material pairs its smaller 1.11 step with a
+    shadow. Every accent is dark-ink-on-fill for buttons &mdash; white on these fills measures
+    around 3.7 and fails. The neutrals are hue-tinted rather than pure grey, and text
+    hierarchy is one colour at three opacities, not three separate greys.
+  </p>
+</div>
+
+<script>
+  const THEMES = {
+    nocturne: {
+      label: "Nocturne", blurb: "Achromatic ink, electric indigo. The instrument look.",
+      s: ["#0A0A0B", "#212124", "#323136"],
+      accent: "#513EE0", accentText: "#988EE5", onAccent: "#FFFFFF",
+      danger: "#D0393E", dangerText: "#DE7D80", onDanger: "#FFFFFF",
+      t: ["#ECEBEF", "#9F9EA2", "#767679"], edge: "#49494B",
+      checks: [["Surface step 1","&ge; 1.22","1.23"],["Surface step 2","&ge; 1.22","1.25"],
+               ["Border edge","1.5 &ndash; 2.1","1.79"],["Primary text","&ge; 7.0","10.87"],
+               ["Secondary text","&ge; 4.5","4.84"],["Label on accent fill","&ge; 4.5","6.74"],
+               ["Accent as text","&ge; 4.5","4.51"],["Label on destructive","&ge; 4.5","4.84"],
+               ["Destructive as text","&ge; 4.5","4.51"]]
+    },
+    bronze: {
+      label: "Bronze", blurb: "Warm charcoal, burnished bronze. Hardware, not software.",
+      s: ["#0C0B0B", "#242220", "#35322F"],
+      accent: "#C67A2F", accentText: "#CB8D4E", onAccent: "#0A0B0D",
+      danger: "#D03943", dangerText: "#DF7E84", onDanger: "#FFFFFF",
+      t: ["#EFEDEB", "#A2A09E", "#797775"], edge: "#4B4A48",
+      checks: [["Surface step 1","&ge; 1.22","1.24"],["Surface step 2","&ge; 1.22","1.24"],
+               ["Border edge","1.5 &ndash; 2.1","1.79"],["Primary text","&ge; 7.0","10.91"],
+               ["Secondary text","&ge; 4.5","4.89"],["Label on accent fill","&ge; 4.5","5.84"],
+               ["Accent as text","&ge; 4.5","4.52"],["Label on destructive","&ge; 4.5","4.83"],
+               ["Destructive as text","&ge; 4.5","4.52"]]
+    },
+    racing: {
+      label: "Racing Green", blurb: "Green-black and pale gold. Automotive, not gaming.",
+      s: ["#090C0B", "#1B2421", "#283530"],
+      accent: "#CCA63E", accentText: "#B7963A", onAccent: "#0A0B0D",
+      danger: "#D03943", dangerText: "#DF7D84", onDanger: "#FFFFFF",
+      t: ["#EAF1EE", "#9BA3A0", "#727A77"], edge: "#444B49",
+      checks: [["Surface step 1","&ge; 1.22","1.24"],["Surface step 2","&ge; 1.22","1.24"],
+               ["Border edge","1.5 &ndash; 2.1","1.78"],["Primary text","&ge; 7.0","11.15"],
+               ["Secondary text","&ge; 4.5","4.96"],["Label on accent fill","&ge; 4.5","8.52"],
+               ["Accent as text","&ge; 4.5","4.53"],["Label on destructive","&ge; 4.5","4.83"],
+               ["Destructive as text","&ge; 4.5","4.51"]]
+    },
+    signal: {
+      label: "Signal", blurb: "True neutral graphite, safety orange on actions only.",
+      s: ["#0C0C0C", "#222223", "#313233"],
+      accent: "#E75D23", accentText: "#E17F55", onAccent: "#0A0B0D",
+      danger: "#D0394D", dangerText: "#DE7D8A", onDanger: "#FFFFFF",
+      t: ["#ECEDEF", "#9FA0A1", "#777779"], edge: "#4A4A4B",
+      checks: [["Surface step 1","&ge; 1.22","1.23"],["Surface step 2","&ge; 1.22","1.24"],
+               ["Border edge","1.5 &ndash; 2.1","1.80"],["Primary text","&ge; 7.0","10.97"],
+               ["Secondary text","&ge; 4.5","4.90"],["Label on accent fill","&ge; 4.5","5.61"],
+               ["Accent as text","&ge; 4.5","4.51"],["Label on destructive","&ge; 4.5","4.80"],
+               ["Destructive as text","&ge; 4.5","4.53"]]
+    }
+  };
+
+  const root = document.getElementById("root");
+  const swatchBox = document.getElementById("swatches");
+  const checkBox = document.getElementById("checks");
+  const ladder = document.getElementById("newladder");
+  const tokens = document.getElementById("tokens");
+
+  function render(key) {
+    const t = THEMES[key];
+    root.setAttribute("data-theme-name", key);
+
+    swatchBox.innerHTML = [
+      ["Background", t.s[0]], ["Card", t.s[1]], ["Elevated", t.s[2]],
+      ["Accent fill", t.accent], ["Accent text", t.accentText],
+      ["Destructive", t.danger], ["Border", t.edge], ["Text", t.t[0]]
+    ].map(([n, c]) => `<div class="sw"><i style="background:${c}"></i><b>${n}<br>${c}</b></div>`).join("");
+
+    checkBox.innerHTML = t.checks.map(([n, req, val]) =>
+      `<tr><td>${n}</td><td class="req">${req}</td><td class="num">${val}</td><td class="ok">PASS</td></tr>`
+    ).join("");
+
+    document.getElementById("blurb").textContent = t.blurb;
+    ladder.innerHTML = t.s.map(c => `<div style="background:${c}">${c}</div>`).join("");
+    document.getElementById("s1v").textContent = t.checks[0][2];
+    document.getElementById("s2v").textContent = t.checks[1][2];
+
+    tokens.innerHTML =
+`<span class="c">/* ${t.label} &mdash; GamepadOS. Every value measured. */</span>
+:root {
+  <span class="k">--background</span>: ${t.s[0]};
+  <span class="k">--card</span>:       ${t.s[1]};
+  <span class="k">--elevated</span>:   ${t.s[2]};
+
+  <span class="k">--foreground</span>:       ${t.t[0]};   <span class="c">/* 100% */</span>
+  <span class="k">--muted-foreground</span>: ${t.t[1]};   <span class="c">/* 60%  */</span>
+  <span class="k">--disabled</span>:         ${t.t[2]};   <span class="c">/* 38%  */</span>
+
+  <span class="c">/* two tones of ONE hue: a fill, and a lighter tone for text */</span>
+  <span class="k">--primary</span>:            ${t.accent};      <span class="c">/* button / chip fill */</span>
+  <span class="k">--primary-foreground</span>: ${t.onAccent};      <span class="c">/* its label   */</span>
+  <span class="k">--primary-text</span>:       ${t.accentText};      <span class="c">/* accent AS text */</span>
+
+  <span class="k">--destructive</span>:            ${t.danger};
+  <span class="k">--destructive-foreground</span>: ${t.onDanger};
+  <span class="k">--destructive-text</span>:       ${t.dangerText};
+
+  <span class="k">--border</span>: ${t.edge};
+  <span class="k">--input</span>:  color-mix(in srgb, #fff 10%, ${t.s[1]});
+
+  <span class="c">/* concentric radii: inner = outer &minus; padding */</span>
+  <span class="k">--radius-sheet</span>: 28px;
+  <span class="k">--radius-card</span>:  18px;
+  <span class="k">--radius-inner</span>: 10px;
+  <span class="k">--radius-pill</span>:  999px;
+}`;
+  }
+
+  document.querySelectorAll(".switcher button").forEach(b => {
+    b.addEventListener("click", () => {
+      document.querySelectorAll(".switcher button").forEach(x => x.setAttribute("aria-selected", "false"));
+      b.setAttribute("aria-selected", "true");
+      render(b.dataset.t);
+    });
+  });
+
+  document.getElementById("copy").addEventListener("click", async (e) => {
+    try {
+      await navigator.clipboard.writeText(tokens.textContent);
+      e.target.textContent = "Copied";
+      setTimeout(() => { e.target.textContent = "Copy CSS"; }, 1600);
+    } catch {
+      e.target.textContent = "Select and copy";
+    }
+  });
+
+  render("nocturne");
+</script>

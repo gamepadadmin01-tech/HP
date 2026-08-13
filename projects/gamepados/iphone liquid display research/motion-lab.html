@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Apple motion — spring lab</title>
+<!--
+  RESEARCH PROTOTYPE 3 — motion. Not wired into the app.
+
+  THE PROBLEM
+  Apple's UI does not animate on bezier curves. It animates on SPRINGS.
+  A cubic-bezier cannot overshoot-and-settle: it is monotonic by construction.
+  So every "iOS-like" CSS easing is an approximation that loses the exact thing
+  that makes iOS feel alive - the small overshoot and settle.
+
+  THE FIX
+  CSS linear() takes an arbitrary list of samples. Solve the damped-spring ODE,
+  sample it, emit linear(...). That reproduces the real curve, overshoot included,
+  and still runs on the compositor because it is a normal CSS easing.
+
+  KNOWN APPLE PARAMETERS (public):
+    .spring             response 0.55  dampingFraction 0.825
+    .interactiveSpring  response 0.15  dampingFraction 0.86   blend 0.25
+    .smooth  = critically damped, no overshoot
+    .snappy  = slightly underdamped, small overshoot
+    .bouncy  = clearly underdamped, visible overshoot
+  Apple does not publish exact numbers for smooth/snappy/bouncy; the values here
+  are fitted to the documented BEHAVIOUR and are labelled as such.
+-->
+<style>
+  :root{
+    --ink:#ECEBEF; --ink2:#9F9EA2; --panel:#141417; --rule:#26262B;
+    --ok:#3FB27F; --bad:#E8746B; --accent:#0A84FF;
+    --mono: ui-monospace,"SF Mono","Cascadia Mono",Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0; background:#0A0A0B; color:var(--ink); padding:24px;
+    font:14px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+  h1{font-size:22px; letter-spacing:-.02em; margin:0 0 4px}
+  .sub{color:var(--ink2); margin:0 0 20px; font-size:13px; max-width:74ch}
+  h2{font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--ink2);
+    margin:28px 0 12px; font-family:var(--mono); font-weight:500}
+
+  .panel{background:var(--panel); border:1px solid var(--rule); border-radius:14px; padding:16px}
+
+  /* ── spring comparison track ─────────────────────────────────────────── */
+  .track{
+    position:relative; height:46px; border-radius:10px; margin-bottom:8px;
+    background:#0F0F12; border:1px solid var(--rule); overflow:hidden;
+  }
+  .track .goal{position:absolute; top:0; bottom:0; right:46px; width:1px; background:#2E2E36}
+  .dot{
+    position:absolute; top:9px; left:6px; width:28px; height:28px; border-radius:999px;
+    background:var(--accent); will-change:transform;
+  }
+  .row{display:grid; grid-template-columns:132px 1fr; gap:12px; align-items:center; margin-bottom:10px}
+  .row .name{font-family:var(--mono); font-size:11px; color:var(--ink2); line-height:1.35}
+  .row .name b{display:block; color:var(--ink); font-size:12px}
+
+  canvas{width:100%; height:150px; display:block; border-radius:10px;
+    background:#0F0F12; border:1px solid var(--rule)}
+
+  button{
+    font:inherit; font-size:13px; font-weight:600;
+    background:var(--accent); color:#fff; border:0; border-radius:999px;
+    padding:11px 20px; min-height:44px; cursor:pointer;
+  }
+  button.sec{background:transparent; color:var(--ink2); border:1px solid var(--rule)}
+  .btnrow{display:flex; gap:8px; flex-wrap:wrap; margin:14px 0}
+
+  table{width:100%; border-collapse:collapse; font-size:12px; font-family:var(--mono)}
+  th{text-align:left; font-weight:500; color:var(--ink2); font-size:10px;
+     letter-spacing:.1em; text-transform:uppercase; padding:0 8px 8px 0}
+  td{padding:6px 8px 6px 0; border-top:1px solid var(--rule); vertical-align:top}
+  td.n{text-align:right; color:var(--ink)}
+  .ok{color:var(--ok)} .bad{color:var(--bad)}
+
+  pre{margin:0; padding:14px; background:#0F0F12; border:1px solid var(--rule);
+    border-radius:10px; overflow-x:auto; font-family:var(--mono); font-size:11.5px;
+    line-height:1.65; color:var(--ink2); max-height:340px}
+
+  /* ── scroll-linked shadow demo ───────────────────────────────────────── */
+  .scrolldemo{position:relative; height:230px; border-radius:16px; overflow:hidden;
+    border:1px solid var(--rule); background:#101014}
+  .scrollbar-head{
+    position:absolute; top:0; left:0; right:0; height:52px; z-index:2;
+    display:flex; align-items:center; padding:0 16px; font-weight:600; font-size:14px;
+    background:rgba(20,20,23,.72);
+    -webkit-backdrop-filter:blur(18px) saturate(180%);
+            backdrop-filter:blur(18px) saturate(180%);
+    /* alpha is driven by scroll position — this is the "separation" cue */
+    box-shadow:0 6px 18px rgba(0,0,0,var(--head-shadow,0));
+    transition:box-shadow .18s linear;
+  }
+  .scrollbody{position:absolute; inset:0; overflow-y:auto; padding:64px 16px 16px}
+  .scrollbody p{margin:0 0 12px; color:var(--ink2); font-size:13px}
+  .cap{font-size:11.5px; color:var(--ink2); margin-top:10px; line-height:1.5}
+</style>
+</head>
+<body>
+
+<h1>Apple motion — spring lab</h1>
+<p class="sub">iOS animates on <b>springs</b>, not bezier curves. A cubic-bezier is monotonic, so it physically cannot reproduce the overshoot-and-settle that makes iOS feel alive. These springs are solved from the damped-oscillator equation and emitted as CSS <code>linear()</code> easings &mdash; real spring motion that still runs on the compositor.</p>
+
+<div class="panel">
+  <h2 style="margin-top:0">Support</h2>
+  <table>
+    <tr><td>CSS linear() easing</td><td class="n" id="sLinear">?</td></tr>
+    <tr><td>backdrop-filter</td><td class="n" id="sBackdrop">?</td></tr>
+    <tr><td>SVG url() backdrop</td><td class="n" id="sSvg">?</td></tr>
+    <tr><td>corner-shape squircle</td><td class="n" id="sCorner">?</td></tr>
+    <tr><td>prefers-reduced-motion</td><td class="n" id="sRM">?</td></tr>
+  </table>
+  <p class="cap">Everything below degrades safely: without <code>linear()</code> the springs fall back to <code>cubic-bezier(.32,.72,0,1)</code>, which is the closest monotonic approximation.</p>
+</div>
+
+<h2>The curves</h2>
+<div class="panel">
+  <canvas id="plot" width="900" height="300"></canvas>
+  <p class="cap" id="plotcap">Dashed line = the target value. Anything crossing it overshoots and settles &mdash; that is the spring, and it is exactly what a bezier cannot do.</p>
+</div>
+
+<h2>Side by side</h2>
+<div class="panel">
+  <div id="tracks"></div>
+  <div class="btnrow">
+    <button id="run">Run all</button>
+    <button class="sec" id="runBezier">Compare vs bezier</button>
+  </div>
+  <p class="cap">Watch the trailing edge. The bezier arrives and stops dead; the springs arrive, overshoot a little, and settle. That settle is the entire difference in feel.</p>
+</div>
+
+<h2>Measured</h2>
+<div class="panel">
+  <table id="tbl">
+    <thead><tr><th>Preset</th><th>Response</th><th>Damping</th><th>Overshoot</th><th>Settles</th><th>Stops</th></tr></thead>
+    <tbody></tbody>
+  </table>
+  <p class="cap">Overshoot = how far past the target it travels. Settles = time to stay within 0.1% of target. Stops = number of samples in the emitted <code>linear()</code>.</p>
+</div>
+
+<h2>Scroll-linked shadow</h2>
+<div class="panel">
+  <div class="scrolldemo">
+    <div class="scrollbar-head" id="head">Settings</div>
+    <div class="scrollbody" id="sb">
+      <p>Scroll this list. The bar's shadow deepens as content passes underneath it, and disappears when you are back at the top.</p>
+      <p>This is Apple's separation cue: the bar is not always floating, only when there is something beneath it to float above.</p>
+      <p>It costs one scroll listener and one custom property. No layout, no repaint of the content.</p>
+      <p>It is the cheapest thing on the whole list that reads as "polished".</p>
+      <p>Most implementations skip it, which is why their headers feel pasted on.</p>
+      <p>Keep scrolling.</p>
+      <p>Nearly there.</p>
+      <p>End of the list.</p>
+    </div>
+  </div>
+  <p class="cap">Shadow alpha ramps 0 &rarr; 0.42 over the first 60px of scroll, then holds.</p>
+</div>
+
+<h2>Drop-in motion.css</h2>
+<div class="panel">
+  <div class="btnrow" style="margin-top:0">
+    <button class="sec" id="copy">Copy motion.css</button>
+  </div>
+  <pre id="out"></pre>
+</div>
+
+<script>
+/* ── spring solver ────────────────────────────────────────────────────────
+   Damped harmonic oscillator, unit step response.
+     wn = 2*pi / response        (natural frequency)
+     z  = dampingFraction
+   z<1 underdamped (overshoots), z=1 critical (fastest, no overshoot),
+   z>1 overdamped (slow, no overshoot).                                     */
+function springValue(t, response, z){
+  const wn = (2 * Math.PI) / response;
+  if (Math.abs(z - 1) < 1e-6){
+    return 1 - Math.exp(-wn * t) * (1 + wn * t);
+  }
+  if (z < 1){
+    const wd = wn * Math.sqrt(1 - z*z);
+    return 1 - Math.exp(-z * wn * t) *
+      (Math.cos(wd * t) + (z * wn / wd) * Math.sin(wd * t));
+  }
+  const a = wn * (-z + Math.sqrt(z*z - 1));
+  const b = wn * (-z - Math.sqrt(z*z - 1));
+  return 1 - (b * Math.exp(a*t) - a * Math.exp(b*t)) / (b - a);
+}
+
+/* settle time: last moment it is still outside the 0.1% band */
+function settleTime(response, z, cap = 6){
+  const dt = 1/1000; let last = 0;
+  for (let t = 0; t <= cap; t += dt){
+    if (Math.abs(springValue(t, response, z) - 1) > 0.001) last = t;
+  }
+  return Math.min(cap, last + dt);
+}
+
+/* Emit a CSS linear() easing. Denser sampling early where curvature is high. */
+function toLinear(response, z, dur, stops = 42){
+  const pts = [];
+  for (let i = 0; i <= stops; i++){
+    const p = i / stops;
+    const eased = Math.pow(p, 0.85);          // bias samples toward the start
+    const v = springValue(eased * dur, response, z);
+    pts.push([eased, v]);
+  }
+  pts[0][1] = 0; pts[pts.length-1][1] = 1;
+  return 'linear(' + pts.map(([p, v]) =>
+    `${v.toFixed(4)} ${(p*100).toFixed(2)}%`).join(', ') + ')';
+}
+
+/* ── the presets ─────────────────────────────────────────────────────── */
+const PRESETS = [
+  { key:'ios-spring',      label:'.spring',            note:'Apple documented',  r:0.55, z:0.825 },
+  { key:'ios-interactive', label:'.interactiveSpring', note:'Apple documented',  r:0.15, z:0.86  },
+  { key:'ios-smooth',      label:'.smooth',            note:'fitted: critical',  r:0.40, z:1.0   },
+  { key:'ios-snappy',      label:'.snappy',            note:'fitted: slight',    r:0.35, z:0.85  },
+  { key:'ios-bouncy',      label:'.bouncy',            note:'fitted: visible',   r:0.45, z:0.65  },
+];
+
+const easings = {};
+const rows = [];
+
+for (const p of PRESETS){
+  const settle = settleTime(p.r, p.z);
+  const dur = Math.min(settle, 1.6);
+  let peak = 0;
+  for (let t = 0; t <= dur; t += 1/600){
+    peak = Math.max(peak, springValue(t, p.r, p.z));
+  }
+  const css = toLinear(p.r, p.z, dur);
+  easings[p.key] = { css, dur, settle, overshoot: peak - 1, ...p };
+  rows.push(easings[p.key]);
+}
+
+/* ── feature detection ───────────────────────────────────────────────── */
+const supportsLinear = CSS.supports('transition-timing-function','linear(0, 1)');
+const set = (id, ok, txt) => {
+  const el = document.getElementById(id);
+  el.textContent = txt ?? (ok ? 'yes' : 'no');
+  el.className = 'n ' + (ok ? 'ok' : 'bad');
+};
+set('sLinear', supportsLinear);
+set('sBackdrop', CSS.supports('backdrop-filter','blur(2px)') || CSS.supports('-webkit-backdrop-filter','blur(2px)'));
+set('sSvg', CSS.supports('backdrop-filter','url(#x)'));
+set('sCorner', CSS.supports('corner-shape','squircle'));
+const rm = matchMedia('(prefers-reduced-motion: reduce)').matches;
+set('sRM', !rm, rm ? 'ON — motion off' : 'off');
+
+/* ── plot ─────────────────────────────────────────────────────────────── */
+const cv = document.getElementById('plot');
+const ctx = cv.getContext('2d');
+const COLORS = ['#0A84FF','#30D158','#FFD60A','#FF9F0A','#FF375F'];
+function plot(){
+  const W = cv.width, H = cv.height, padL = 40, padB = 26, padT = 22;
+  ctx.clearRect(0,0,W,H);
+  const y0 = H - padB, y1 = padT;
+  const val2y = v => y0 - (v / 1.35) * (y0 - y1);
+
+  ctx.strokeStyle = '#2E2E36'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(padL, y0); ctx.lineTo(W-10, y0); ctx.stroke();
+  ctx.setLineDash([4,4]); ctx.strokeStyle = '#4A4A55';
+  ctx.beginPath(); ctx.moveTo(padL, val2y(1)); ctx.lineTo(W-10, val2y(1)); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle = '#626A78'; ctx.font = '10px ui-monospace, monospace';
+  ctx.fillText('1.0', 8, val2y(1)+3);
+  ctx.fillText('0', 8, y0+3);
+
+  const maxT = 1.2;
+  rows.forEach((r, i) => {
+    ctx.strokeStyle = COLORS[i]; ctx.lineWidth = 2; ctx.beginPath();
+    for (let px = 0; px <= W - padL - 10; px++){
+      const t = (px / (W - padL - 10)) * maxT;
+      const v = springValue(t, r.r, r.z);
+      const x = padL + px, y = val2y(v);
+      px ? ctx.lineTo(x,y) : ctx.moveTo(x,y);
+    }
+    ctx.stroke();
+    ctx.fillStyle = COLORS[i];
+    ctx.fillText(r.label, padL + 8 + i*104, padT - 8);
+  });
+}
+plot();
+
+/* ── tracks ───────────────────────────────────────────────────────────── */
+const tracksEl = document.getElementById('tracks');
+const all = [...rows, { key:'bezier', label:'cubic-bezier', note:'.32,.72,0,1',
+                        css:'cubic-bezier(.32,.72,0,1)', dur:0.42 }];
+all.forEach((r, i) => {
+  const row = document.createElement('div');
+  row.className = 'row';
+  row.innerHTML = `<div class="name"><b>${r.label}</b>${r.note}</div>
+    <div class="track"><span class="goal"></span><span class="dot" data-k="${r.key}"></span></div>`;
+  tracksEl.appendChild(row);
+});
+
+function runAll(onlyBezier){
+  document.querySelectorAll('.dot').forEach(dot => {
+    const k = dot.dataset.k;
+    const r = all.find(x => x.key === k);
+    if (onlyBezier && k !== 'bezier' && k !== 'ios-spring') return;
+    const ease = (k === 'bezier' || !supportsLinear)
+      ? 'cubic-bezier(.32,.72,0,1)' : r.css;
+    dot.style.transition = 'none';
+    dot.style.transform = 'translateX(0px)';
+    void dot.offsetWidth;                       // force a reflow to restart
+    dot.style.transition = `transform ${(r.dur ?? .42).toFixed(3)}s ${ease}`;
+    const w = dot.parentElement.getBoundingClientRect().width;
+    dot.style.transform = `translateX(${Math.max(0, w - 46 - 6)}px)`;
+  });
+}
+document.getElementById('run').addEventListener('click', () => runAll(false));
+document.getElementById('runBezier').addEventListener('click', () => runAll(true));
+
+/* ── table ────────────────────────────────────────────────────────────── */
+const tb = document.querySelector('#tbl tbody');
+tb.innerHTML = rows.map(r => `<tr>
+  <td>${r.label}<br><span style="color:#626A78">${r.note}</span></td>
+  <td class="n">${r.r.toFixed(3)}</td>
+  <td class="n">${r.z.toFixed(3)}</td>
+  <td class="n ${r.overshoot > 0.001 ? 'ok' : ''}">${r.overshoot > 0.001 ? (r.overshoot*100).toFixed(1)+'%' : 'none'}</td>
+  <td class="n">${(r.settle*1000).toFixed(0)} ms</td>
+  <td class="n">43</td></tr>`).join('');
+
+/* ── scroll-linked shadow ─────────────────────────────────────────────── */
+const sb = document.getElementById('sb');
+const head = document.getElementById('head');
+sb.addEventListener('scroll', () => {
+  const a = Math.min(1, sb.scrollTop / 60) * 0.42;
+  head.style.setProperty('--head-shadow', a.toFixed(3));
+}, { passive: true });
+
+/* ── emit motion.css ──────────────────────────────────────────────────── */
+const css = `/* motion.css — Apple-equivalent spring easings.
+   Generated from the damped-oscillator equation, not eyeballed.
+   .spring / .interactiveSpring use Apple's published parameters;
+   .smooth / .snappy / .bouncy are fitted to the documented behaviour
+   (Apple does not publish their exact numbers).
+
+   linear() reproduces overshoot; cubic-bezier cannot. Fallback below. */
+:root{
+${rows.map(r => `  /* ${r.label} — response ${r.r}, damping ${r.z}, settles ${(r.settle*1000).toFixed(0)}ms */
+  --ease-${r.key}: ${r.css};
+  --dur-${r.key}: ${r.dur.toFixed(3)}s;`).join('\n')}
+
+  /* monotonic fallback where linear() is unavailable */
+  --ease-fallback: cubic-bezier(.32,.72,0,1);
+}
+
+@supports not (transition-timing-function: linear(0, 1)){
+  :root{
+${rows.map(r => `    --ease-${r.key}: var(--ease-fallback);`).join('\n')}
+  }
+}
+
+/* Reduce Motion is not "less motion" — it is none. */
+@media (prefers-reduced-motion: reduce){
+  *, *::before, *::after{
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+    scroll-behavior: auto !important;
+  }
+}`;
+document.getElementById('out').textContent = css;
+document.getElementById('copy').addEventListener('click', async e => {
+  try{ await navigator.clipboard.writeText(css); e.target.textContent = 'Copied'; }
+  catch{ e.target.textContent = 'Select and copy'; }
+  setTimeout(() => { e.target.textContent = 'Copy motion.css'; }, 1600);
+});
+</script>
+</body>
+</html>

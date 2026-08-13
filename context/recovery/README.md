@@ -1,4 +1,4 @@
-# recovery/ — the App.tsx corruption of 2026-07-14
+﻿# recovery/ — the App.tsx corruption of 2026-07-14
 
 ## What happened
 
@@ -21,7 +21,7 @@ Session changes were then re-applied by hand and the result was build- and rende
 | `App.corrupted.tsx` | 98 KB | The damaged file, kept as evidence of what the bad edit produced |
 | `App.reconstructed.tsx` | 223 KB | The spliced result, immediately after recovery |
 
-For reference, the live file today is `hlooo/apps/controller-ui/src/app/App.tsx` — 260 KB,
+For reference, the live file today is `projects/gamepados/apps/controller-ui/src/app/App.tsx` — 260 KB,
 4,691 lines, last modified 2026-08-10. It has moved on considerably from all three of these; they
 are history, not fallbacks.
 
@@ -43,5 +43,5 @@ endings and many repeated strings.
 - Prefer the `Edit` tool with a large, genuinely unique context block.
 - Take a backup before any PowerShell text surgery — and put it here, not loose in the tree.
 
-As of 2026-08-13, `hlooo/` is under git, so a mistake like this is now recoverable with
+As of 2026-08-13, `projects/gamepados/` is under git, so a mistake like this is now recoverable with
 `git checkout`. That was not true when this happened.

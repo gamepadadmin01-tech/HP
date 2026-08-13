@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Glassy SVG pad buttons — options</title>
+<!--
+  RESEARCH PROTOTYPE 4 — making the CONTROLLER BUTTONS look like glass.
+
+  THE CONSTRAINT
+  The pad is a single <svg> with ~61 shapes. backdrop-filter cannot apply to an
+  SVG shape (no backdrop root), so the trick used everywhere else in the app is
+  unavailable here. That is why the buttons still look flat.
+
+  THE OPTIONS, cheapest first
+    A  FLAT            what ships today: one translucent fill + 1px stroke
+    B  GRADIENT GLASS  gradient body + specular cap + rim light. Pure geometry,
+                       ZERO filter cost, works on every browser back to SVG 1.1
+    C  feSpecular      real Phong lighting via feSpecularLighting. Physically
+                       correct, genuinely shiny — but it is a filter, so it
+                       costs, and cost on the gameplay layer is input latency
+    D  B + soft glow   B plus a cheap feGaussianBlur halo only when pressed
+
+  Universal support matters here: the user has phones other than the Redmi.
+  B is SVG 1.1 and renders identically on every engine. C is well supported but
+  expensive. This page measures both so the choice is made on numbers.
+-->
+<style>
+  :root{
+    --ink:#E5EDF0; --ink2:#97A1A5; --panel:#141A1C; --rule:#26302F;
+    --ok:#3FB27F; --bad:#E8746B; --accent:#2CAABA;
+    --mono: ui-monospace,"SF Mono","Cascadia Mono",Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:#0A1012;color:var(--ink);padding:22px;
+       font:14px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+  h1{font-size:21px;letter-spacing:-.02em;margin:0 0 4px}
+  .sub{color:var(--ink2);margin:0 0 18px;font-size:13px;max-width:72ch}
+  h2{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink2);
+     margin:26px 0 10px;font-family:var(--mono);font-weight:500}
+
+  .row{display:grid;grid-template-columns:repeat(auto-fit,minmax(168px,1fr));gap:14px}
+  .cell{background:var(--panel);border:1px solid var(--rule);border-radius:16px;padding:14px;text-align:center}
+  .cell h3{margin:0 0 2px;font-size:13px;font-weight:600}
+  .cell p{margin:0 0 10px;font-size:11px;color:var(--ink2);min-height:30px;line-height:1.4}
+  .cell svg{display:block;margin:0 auto;touch-action:none}
+  .tag{font-family:var(--mono);font-size:10px;padding:2px 7px;border-radius:99px;
+       border:1px solid var(--rule);color:var(--ink2);display:inline-block;margin-top:8px}
+  .tag.good{color:var(--ok);border-color:rgba(63,178,127,.4)}
+  .tag.warn{color:var(--bad);border-color:rgba(232,116,107,.4)}
+
+  button{font:inherit;font-size:13px;font-weight:600;background:var(--accent);color:#08171a;
+         border:0;border-radius:999px;padding:11px 20px;min-height:44px;cursor:pointer;margin:14px 8px 0 0}
+  button.sec{background:transparent;color:var(--ink2);border:1px solid var(--rule)}
+  table{width:100%;border-collapse:collapse;font-size:12px;font-family:var(--mono);margin-top:8px}
+  td{padding:6px 0;border-bottom:1px solid var(--rule)}
+  td:last-child{text-align:right;color:var(--ink)}
+  td:first-child{color:var(--ink2)}
+  .note{font-size:11.5px;color:var(--ink2);line-height:1.55;margin-top:10px}
+</style>
+</head>
+<body>
+
+<h1>Glassy pad buttons</h1>
+<p class="sub">Tap each button — they respond like the real ones. The pad is a single SVG, so <code>backdrop-filter</code> is unavailable; these use SVG's own lighting instead. <b>B</b> is pure geometry and free; <b>C</b> is real Phong lighting but costs filter time on the gameplay layer.</p>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <!-- ── B: gradient glass. No filter — just gradients. ────────────────── -->
+    <linearGradient id="gBody" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%"   stop-color="#2CAABA" stop-opacity=".40"/>
+      <stop offset="55%"  stop-color="#2CAABA" stop-opacity=".16"/>
+      <stop offset="100%" stop-color="#2CAABA" stop-opacity=".26"/>
+    </linearGradient>
+    <linearGradient id="gBodyHeld" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%"   stop-color="#7FE3EF" stop-opacity=".95"/>
+      <stop offset="60%"  stop-color="#2CAABA" stop-opacity=".80"/>
+      <stop offset="100%" stop-color="#2CAABA" stop-opacity=".95"/>
+    </linearGradient>
+    <!-- the specular cap: bright at the very top, gone by 45% -->
+    <linearGradient id="gSpec" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%"   stop-color="#ffffff" stop-opacity=".55"/>
+      <stop offset="45%"  stop-color="#ffffff" stop-opacity=".06"/>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+    <!-- rim: bright top-left, dark bottom-right = a lit edge -->
+    <linearGradient id="gRim" x1="0" y1="0" x2=".4" y2="1">
+      <stop offset="0%"   stop-color="#ffffff" stop-opacity=".55"/>
+      <stop offset="45%"  stop-color="#ffffff" stop-opacity=".14"/>
+      <stop offset="100%" stop-color="#000000" stop-opacity=".30"/>
+    </linearGradient>
+    <!-- contact shadow under the glass, sells it as sitting ON something -->
+    <radialGradient id="gUnder" cx=".5" cy=".5" r=".5">
+      <stop offset="60%"  stop-color="#000" stop-opacity=".38"/>
+      <stop offset="100%" stop-color="#000" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- ── C: real specular lighting ──────────────────────────────────────── -->
+    <filter id="fSpec" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="3" result="blur"/>
+      <feSpecularLighting in="blur" surfaceScale="4" specularConstant="1.1"
+                          specularExponent="26" lighting-color="#ffffff" result="spec">
+        <fePointLight x="-40" y="-70" z="120"/>
+      </feSpecularLighting>
+      <feComposite in="spec" in2="SourceAlpha" operator="in" result="specClip"/>
+      <feComposite in="SourceGraphic" in2="specClip" operator="arithmetic"
+                   k1="0" k2="1" k3="1" k4="0"/>
+    </filter>
+
+    <!-- ── D: pressed halo ─────────────────────────────────────────────────── -->
+    <filter id="fGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="5" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+</svg>
+
+<h2>Compare</h2>
+<div class="row" id="grid"></div>
+
+<h2>Cost — 61 shapes, the real pad count</h2>
+<div class="cell" style="text-align:left">
+  <button id="bench">Benchmark all four</button>
+  <button class="sec" id="stress">Stress: 61 shapes each</button>
+  <table id="res"><tr><td>not run yet</td><td>—</td></tr></table>
+  <p class="note" id="verdict"></p>
+</div>
+
+<script>
+const ACCENT = '#2CAABA';
+
+/* Each variant draws the SAME button so the comparison is fair. */
+function btn(kind, held){
+  const s = 108, c = s/2, r = 40;
+  const pressed = held ? 'Held' : '';
+  if (kind === 'A'){        // flat — what ships today
+    return `<circle cx="${c}" cy="${c}" r="${r}" fill="rgba(44,170,186,${held?0.85:0.12})"
+              stroke="rgba(255,255,255,${held?0.3:0.07})" stroke-width="1.5"/>`;
+  }
+  if (kind === 'B' || kind === 'D'){
+    const f = kind === 'D' && held ? ' filter="url(#fGlow)"' : '';
+    return `
+      <ellipse cx="${c}" cy="${c+r*0.72}" rx="${r*0.92}" ry="${r*0.30}" fill="url(#gUnder)"/>
+      <g${f}>
+        <circle cx="${c}" cy="${c}" r="${r}" fill="url(#gBody${pressed})"/>
+        <circle cx="${c}" cy="${c}" r="${r}" fill="none" stroke="url(#gRim)" stroke-width="1.8"/>
+        <ellipse cx="${c}" cy="${c - r*0.42}" rx="${r*0.74}" ry="${r*0.46}" fill="url(#gSpec)"/>
+      </g>`;
+  }
+  if (kind === 'C'){
+    return `
+      <ellipse cx="${c}" cy="${c+r*0.72}" rx="${r*0.92}" ry="${r*0.30}" fill="url(#gUnder)"/>
+      <circle cx="${c}" cy="${c}" r="${r}" fill="url(#gBody${pressed})" filter="url(#fSpec)"/>
+      <circle cx="${c}" cy="${c}" r="${r}" fill="none" stroke="url(#gRim)" stroke-width="1.8"/>`;
+  }
+}
+
+const VARIANTS = [
+  ['A','Flat (today)','One translucent fill and a hairline. Reads as a sticker.','',''],
+  ['B','Gradient glass','Body gradient + specular cap + lit rim + contact shadow. No filter at all.','good','free'],
+  ['C','feSpecularLighting','Real Phong lighting from a point light. Physically correct shine.','warn','filter cost'],
+  ['D','Gradient + press glow','B, plus a blur halo only while held.','good','cost only on press'],
+];
+
+const grid = document.getElementById('grid');
+grid.innerHTML = VARIANTS.map(([k,name,desc,cls,tag]) => `
+  <div class="cell">
+    <h3>${k} · ${name}</h3>
+    <p>${desc}</p>
+    <svg width="108" height="108" viewBox="0 0 108 108" data-k="${k}">${btn(k,false)}</svg>
+    ${tag ? `<span class="tag ${cls}">${tag}</span>` : '<span class="tag">baseline</span>'}
+  </div>`).join('');
+
+/* press behaviour */
+grid.querySelectorAll('svg').forEach(svg => {
+  const k = svg.dataset.k;
+  const set = h => svg.innerHTML = btn(k, h);
+  svg.addEventListener('pointerdown', e => { set(true); svg.setPointerCapture(e.pointerId); });
+  svg.addEventListener('pointerup',   () => set(false));
+  svg.addEventListener('pointercancel',() => set(false));
+});
+
+/* ── benchmark ─────────────────────────────────────────────────────────── */
+function makePad(kind, n){
+  const cols = 9, size = 76, pad = 6;
+  const rows = Math.ceil(n/cols);
+  const w = cols*(size+pad), h = rows*(size+pad);
+  let inner = '';
+  for (let i=0;i<n;i++){
+    const x = (i%cols)*(size+pad), y = Math.floor(i/cols)*(size+pad);
+    inner += `<g transform="translate(${x},${y}) scale(${size/108})">${btn(kind,false)}</g>`;
+  }
+  const svg = document.createElementNS('http://www.w3.org/2000/svg','svg');
+  svg.setAttribute('width',w); svg.setAttribute('height',h);
+  svg.setAttribute('viewBox',`0 0 ${w} ${h}`);
+  // MUST be on-screen. An earlier version parked this at left:-99999px, which
+  // the compositor culls entirely — the benchmark then measured nothing and
+  // reported feSpecularLighting as FASTER than flat, which is impossible.
+  svg.style.cssText='position:fixed;left:0;top:0;z-index:9999;opacity:.9';
+  svg.innerHTML = inner;
+  return svg;
+}
+
+function runFor(svg, ms){
+  return new Promise(res => {
+    document.body.appendChild(svg);
+    let f = 0; const t0 = performance.now();
+    (function step(t){
+      f++;
+      // A transform alone is compositor-only and would NOT re-run the filters.
+      // Mutating a paint-affecting attribute forces the SVG to actually redraw,
+      // which is the cost we are trying to measure.
+      const o = 0.86 + ((t - t0) % 200) / 2000;
+      svg.setAttribute('opacity', o.toFixed(3));
+      if (t-t0 < ms) requestAnimationFrame(step);
+      else { svg.remove(); res(Math.round(f/(ms/1000))); }
+    })(t0);
+  });
+}
+
+document.getElementById('bench').addEventListener('click', () => run(1));
+document.getElementById('stress').addEventListener('click', () => run(61));
+
+async function run(count){
+  const res = document.getElementById('res');
+  res.innerHTML = '<tr><td>measuring…</td><td>—</td></tr>';
+  const out = [];
+  for (const [k,name] of VARIANTS){
+    const fps = await runFor(makePad(k, count), 2200);
+    out.push([k+' · '+name, fps]);
+  }
+  res.innerHTML = out.map(([n,f]) =>
+    `<tr><td>${n}</td><td>${f} fps</td></tr>`).join('');
+  const flat = out[0][1], grad = out[1][1], spec = out[2][1];
+  document.getElementById('verdict').textContent =
+    `${count} shape(s) each. Gradient glass costs ${flat-grad} fps vs flat; ` +
+    `feSpecularLighting costs ${flat-spec} fps. On the gameplay layer any fps ` +
+    `lost is input latency, so the cheapest option that still looks like glass wins.`;
+}
+</script>
+</body>
+</html>

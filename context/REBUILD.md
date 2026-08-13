@@ -1,4 +1,4 @@
-# REBUILD — regenerating everything that was deleted as cache
+﻿# REBUILD — regenerating everything that was deleted as cache
 
 Nothing in this document is guesswork. Every path and version was read out of the actual build
 scripts in this folder on 2026-08-13.
@@ -9,11 +9,11 @@ scripts in this folder on 2026-08-13.
 
 | Tool | Version | Path |
 |---|---|---|
-| JDK | 17.0.19+10 | `D:\AKHIL\HP\hlooo\tools\jdk\jdk-17.0.19+10` |
-| Gradle | **9.6.1** | `D:\AKHIL\HP\hlooo\tools\gradle-9.6.1` |
-| Android SDK | — | `D:\AKHIL\HP\Android\Sdk` |
-| adb | — | `D:\AKHIL\HP\hlooo\tools\platform-tools` |
-| bundletool | — | `D:\AKHIL\HP\hlooo\tools\bundletool` |
+| JDK | 17.0.19+10 | `D:\AKHIL\HP\projects\gamepados\tools\jdk\jdk-17.0.19+10` |
+| Gradle | **9.6.1** | `D:\AKHIL\HP\projects\gamepados\tools\gradle-9.6.1` |
+| Android SDK | — | `D:\AKHIL\HP\toolchain\android-sdk` |
+| adb | — | `D:\AKHIL\HP\projects\gamepados\tools\platform-tools` |
+| bundletool | — | `D:\AKHIL\HP\projects\gamepados\tools\bundletool` |
 
 ⚠️ **Gradle 9.6.1 is mandatory.** The app is on AGP 9.3.1, which requires Gradle 9.5.0+ and
 rejects every 8.x. The `gradle-8.5`, `gradle-8.9` and `gradle-8.14.4` folders are kept for
@@ -68,11 +68,11 @@ That builds the **direct** flavour (the one shipped from the website). Five flav
 `apps\android-client`:
 
 ```bash
-D:\AKHIL\HP\hlooo\tools\gradle-9.6.1\bin\gradle.bat bundlePlaystoreRelease
+D:\AKHIL\HP\projects\gamepados\tools\gradle-9.6.1\bin\gradle.bat bundlePlaystoreRelease
 ```
 
 ```bash
-D:\AKHIL\HP\hlooo\tools\gradle-9.6.1\bin\gradle.bat assembleUptodownRelease assembleAmazonstoreRelease
+D:\AKHIL\HP\projects\gamepados\tools\gradle-9.6.1\bin\gradle.bat assembleUptodownRelease assembleAmazonstoreRelease
 ```
 
 Gradle re-creates `.gradle/` and `build/` on the first run. Expect the first build to be slow —
@@ -113,7 +113,7 @@ spec's exclude list, or the built exe crashes at startup. This was a real bug, f
 
 ---
 
-## 5. Website — `hlooo/website`
+## 5. Website — `projects/gamepados/website`
 
 Deleted: `backend/node_modules` (0.21 GB), `frontend/node_modules` (0.04 GB)
 
@@ -152,5 +152,5 @@ It is a git repo (`gamepadadmin01-tech/app-with-login`), so a clean checkout als
    `keys/`. **These are never in git.**
 6. Run sections 1, 3 and 5 above.
 
-Then confirm with the regression checklist: `hlooo/docs/REGRESSION_CHECKLIST.md`, driven by
-`hlooo/tools/regression-check.sh` (`--fast` / `--full` / `--device`).
+Then confirm with the regression checklist: `projects/gamepados/docs/REGRESSION_CHECKLIST.md`, driven by
+`projects/gamepados/tools/regression-check.sh` (`--fast` / `--full` / `--device`).

@@ -1,0 +1,24 @@
+<!doctype html>
+<!-- One-shot storage migration page. Loaded exactly once from the legacy
+     file:// origin so its localStorage (custom pads, gyro settings) can be
+     dumped to the native side and replayed into the app's new secure origin
+     (https://appassets.androidplatform.net). See MainActivity's URL Loader.
+     A native watchdog skips this page if it fails, so it must never alert
+     or block — worst case it stays silent and the app boots with defaults. -->
+<html>
+<head><meta charset="utf-8"><title>GamepadOS</title></head>
+<body style="background:#000">
+<script>
+  (function () {
+    var dump = {};
+    try {
+      for (var i = 0; i < localStorage.length; i++) {
+        var k = localStorage.key(i);
+        dump[k] = localStorage.getItem(k);
+      }
+    } catch (e) { dump = {}; }
+    try { AndroidBridge.onLegacyStorageDump(JSON.stringify(dump)); } catch (e) {}
+  })();
+</script>
+</body>
+</html>

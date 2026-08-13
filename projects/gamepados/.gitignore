@@ -1,0 +1,83 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# SECRETS — never commit. Losing these is bad; leaking them is worse.
+# ─────────────────────────────────────────────────────────────────────────────
+secrets/
+.env
+.env.*
+!.env.example
+*.env
+**/release.keystore
+*.keystore
+*.jks
+*.pem
+*.p12
+*.pfx
+keystore.properties
+local.properties
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Its own git repo — tracked separately as gamepadadmin01-tech/gamepad
+# ─────────────────────────────────────────────────────────────────────────────
+website/
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Regenerable build output — see context/REBUILD.md
+# ─────────────────────────────────────────────────────────────────────────────
+node_modules/
+.cargo/
+.rustup/
+target/
+build/
+.gradle/
+.kotlin/
+.cxx/
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+
+# Vite / bundler output. NOTE: apps/android-client/.../assets/dist/index.html is
+# NOT ignored — the APK ships it and it must be tracked.
+apps/controller-ui/dist/
+!apps/android-client/app/src/main/assets/dist/
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Pinned toolchain — 900 MB of JDK + Gradle. Kept on disk, not in git.
+# Reinstall per context/REBUILD.md. DO NOT DELETE FROM DISK.
+# ─────────────────────────────────────────────────────────────────────────────
+tools/
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Large binaries — these belong in cloud storage, not git
+# ─────────────────────────────────────────────────────────────────────────────
+*.apk
+*.aab
+*.exe
+*.msi
+*.zip
+*.7z
+*.mp4
+*.mov
+*.avi
+*.psd
+releases/
+marketing/ad-footage/
+photos/
+Screenshots/
+store-assets/
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Logs, temp, scratch
+# ─────────────────────────────────────────────────────────────────────────────
+*.log
+*.hprof
+*.bak
+*.bak-*
+*.tmp
+*.orig
+_recovery_backups/
+_preserve_pre-slim/
+.vscode/
+.DS_Store
+Thumbs.db

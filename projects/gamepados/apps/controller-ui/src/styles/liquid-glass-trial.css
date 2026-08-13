@@ -1,0 +1,124 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   liquid-glass-trial.css — GLASS LAYER. Additive; remove the import to revert.
+
+   ── REWRITTEN after real-device feedback ─────────────────────────────────
+   v1 glassed every rounded card. That was wrong on two counts:
+
+   1. SCROLL JANK. A backdrop-filter inside an `overflow-y-auto` list re-
+      composites the whole blurred region on every scroll frame. Home, System,
+      Account and Connect-to-PC all scroll, so all four juddered.
+      CLAUDE.md §2 already said it: NEVER apply glass to a list or scrolling
+      collection. v1 broke that rule.
+
+   2. THE GYRO BAR. It is an `absolute` child of the pad container (App.tsx
+      ~1486, 407x8px), so the pad-glass rule matched it and gave it its own
+      backdrop blur — the faint translucent band sitting behind the gyro line.
+
+   So glass now goes ONLY on surfaces that are fixed and float above content —
+   which is exactly Apple's functional layer. Everything that scrolls gets a
+   flat translucent fill instead: same look, zero compositing cost.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+:root{
+  --lg-blur: 22px;
+  --lg-saturate: 180%;
+  --lg-fill: rgba(255, 255, 255, 0.055);
+  --lg-fill-raised: rgba(255, 255, 255, 0.085);
+  --lg-rim: rgba(255, 255, 255, 0.14);
+  --lg-specular: rgba(255, 255, 255, 0.22);
+  --lg-shadow: 0 10px 34px rgba(0, 0, 0, 0.42);
+}
+
+/* ── 1. Content surfaces: the LOOK, no filter ────────────────────────────
+   Cards, rows and panels. These live inside scrollers, so they get a flat
+   fill + rim + specular edge and NO backdrop-filter. Visually this is nearly
+   indistinguishable from real glass over a dark background, and it costs
+   nothing to scroll.
+
+   :not([class*="bg-"]) matters more than it looks. Tailwind v4 emits utilities
+   inside `@layer utilities`, and ANY unlayered rule beats a layered one no
+   matter the specificity — so without this guard these three lines silently
+   replaced every explicit background in the app (bg-zinc-900, bg-card, …) with
+   a 5.5% fill. That is what made the pad card's ⋮ menu almost see-through.
+   An element that names its own background keeps it. */
+:where([class*="rounded-2xl"], [class*="rounded-xl"], [class*="rounded-lg"]):not(button):not(svg):not(svg *):not([class*="bg-"]){
+  background-color: var(--lg-fill);
+  border: 1px solid var(--lg-rim);
+  box-shadow: var(--lg-shadow), inset 0 1px 0 0 var(--lg-specular);
+}
+
+/* Floating menus and popovers must stay OPAQUE — they sit over busy content and
+   have to be readable instantly. Glass on a small menu is unreadable, and Apple
+   does not do it either. */
+:where([class*="absolute"], [class*="fixed"]):where([class*="z-50"], [class*="z-40"]):where([class*="rounded"]):not(button){
+  -webkit-backdrop-filter: none;
+          backdrop-filter: none;
+}
+
+/* ── 2. Real glass: fixed chrome only ────────────────────────────────────
+   These never scroll and never move, so the blur is composited once and
+   reused. This is the functional layer Apple actually puts glass on. */
+:where(header):not(svg):not(svg *),
+:where([class*="fixed"][class*="bottom-0"]):not(svg):not(svg *),
+:where([class*="fixed"][class*="top-0"]):not(svg):not(svg *){
+  -webkit-backdrop-filter: blur(var(--lg-blur)) saturate(var(--lg-saturate));
+          backdrop-filter: blur(var(--lg-blur)) saturate(var(--lg-saturate));
+}
+
+/* Modals and sheets — highest layer, thickest material (size => thickness). */
+:where([class*="fixed"][class*="inset-0"]) > :where([class*="rounded"]){
+  -webkit-backdrop-filter: blur(30px) saturate(var(--lg-saturate));
+          backdrop-filter: blur(30px) saturate(var(--lg-saturate));
+  background-color: var(--lg-fill-raised);
+  box-shadow: 0 20px 60px rgba(0,0,0,.55), inset 0 1px 0 0 var(--lg-specular);
+}
+
+/* Apple's continuous curvature. Chromium-only; degrades to border-radius. */
+@supports (corner-shape: squircle){
+  :where([class*="rounded-2xl"], [class*="rounded-xl"]):not(svg):not(svg *){
+    corner-shape: squircle;
+  }
+}
+
+/* ── 3. Never stack glass on glass ───────────────────────────────────────
+   An element sitting on glass gets a plain fill so it reads as part of the
+   material, not a second pane. */
+:where([class*="rounded"]) :where([class*="rounded"]):not(button){
+  -webkit-backdrop-filter: none;
+          backdrop-filter: none;
+  box-shadow: none;
+}
+
+/* ── 4. Primary actions stay solid ───────────────────────────────────────
+   A primary action that goes translucent stops reading as the primary action. */
+button:where([class*="bg-primary"], [class*="bg-destructive"], [class*="bg-red"]){
+  -webkit-backdrop-filter: none;
+          backdrop-filter: none;
+}
+
+/* ── 5. HANDS OFF the gameplay overlay ───────────────────────────────────
+   The gyro bar, the tilt arc and the pad canvas are all `absolute` children
+   of the fixed pad container. None of them may take a backdrop-filter or a
+   background: the gyro bar in particular must stay fully transparent behind
+   its two scaleX fills, or a grey band appears behind the live line. */
+:where([class*="fixed"][class*="inset-0"]) :where([class*="absolute"]),
+:where([class*="pointer-events-none"]){
+  -webkit-backdrop-filter: none !important;
+          backdrop-filter: none !important;
+}
+:where([class*="fixed"][class*="inset-0"]) :where([class*="pointer-events-none"][class*="overflow-hidden"]){
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+
+/* ── Accessibility. Required, not optional. ─────────────────────────────── */
+@media (prefers-reduced-transparency: reduce){
+  *{
+    -webkit-backdrop-filter: none !important;
+            backdrop-filter: none !important;
+  }
+  :where([class*="rounded-2xl"], [class*="rounded-xl"], [class*="rounded-lg"]){
+    background-color: var(--card) !important;
+  }
+}

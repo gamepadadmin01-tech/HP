@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Liquid Glass — refraction lab</title>
+<!--
+  RESEARCH PROTOTYPE. Not wired into the app.
+
+  Implements physically-based edge refraction the way Apple's material works,
+  rather than the feTurbulence-noise trick most web libraries use:
+
+    1. height function over the bezel  (convex squircle, Apple's preferred form)
+    2. surface normal via numerical derivative
+    3. Snell's law refraction  n1*sin(t1) = n2*sin(t2)
+    4. lateral offset -> RGBA displacement map (R=x, G=y, 128 = neutral)
+    5. feImage + feDisplacementMap, applied through backdrop-filter
+
+  The whole point of measuring here: SVG-filter-as-backdrop-filter is
+  Chromium-only. Android WebView IS Chromium, so this may be viable in the
+  app even though it is not viable on the open web.
+-->
+<style>
+  :root{
+    --ink:#ECEBEF; --ink2:#9F9EA2; --panel:#141417; --rule:#26262B; --ok:#3FB27F; --bad:#E8746B;
+    --mono: ui-monospace,"SF Mono","Cascadia Mono",Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:#0A0A0B; color:var(--ink);
+    font:14px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    padding:24px;
+  }
+  h1{font-size:22px; letter-spacing:-.02em; margin:0 0 4px}
+  .sub{color:var(--ink2); margin:0 0 20px; font-size:13px}
+
+  .grid{display:grid; grid-template-columns:minmax(0,1fr) 300px; gap:24px; align-items:start}
+  @media(max-width:900px){ .grid{grid-template-columns:1fr} }
+
+  /* the scene the glass refracts — high-frequency detail makes lensing visible */
+  .scene{
+    position:relative; height:420px; border-radius:24px; overflow:hidden;
+    background:
+      repeating-linear-gradient(45deg,#0A84FF 0 22px,#30D158 22px 44px,#FFD60A 44px 66px,#FF375F 66px 88px);
+    display:grid; place-items:center;
+  }
+  .scene::after{
+    content:""; position:absolute; inset:0;
+    background:repeating-linear-gradient(90deg,rgba(0,0,0,.35) 0 2px,transparent 2px 14px);
+  }
+
+  .glass{
+    position:relative; z-index:2;
+    width:280px; height:170px; border-radius:34px;
+    background:rgba(255,255,255,.10);
+    border:1px solid rgba(255,255,255,.30);
+    box-shadow:0 10px 40px rgba(0,0,0,.35), inset 0 1px 0 0 rgba(255,255,255,.55);
+    -webkit-backdrop-filter:blur(2px) saturate(180%);
+            backdrop-filter:blur(2px) saturate(180%);
+    display:grid; place-items:center;
+    font-weight:600; letter-spacing:.02em; color:#fff;
+    text-shadow:0 1px 3px rgba(0,0,0,.4);
+    touch-action:none; user-select:none;
+  }
+  .glass.refract{
+    -webkit-backdrop-filter:blur(2px) saturate(180%) url(#lg);
+            backdrop-filter:blur(2px) saturate(180%) url(#lg);
+  }
+
+  .panel{background:var(--panel); border:1px solid var(--rule); border-radius:14px; padding:16px}
+  .panel h2{font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--ink2);
+    margin:0 0 12px; font-family:var(--mono); font-weight:500}
+  label{display:block; font-size:12px; color:var(--ink2); margin:12px 0 4px}
+  label b{color:var(--ink); font-family:var(--mono); font-weight:500; float:right}
+  input[type=range]{width:100%; accent-color:#0A84FF}
+  button{
+    font:inherit; font-size:13px; font-weight:600; width:100%; margin-top:14px;
+    background:#0A84FF; color:#fff; border:0; border-radius:999px; padding:11px; min-height:44px;
+    cursor:pointer;
+  }
+  button.sec{background:transparent; color:var(--ink2); border:1px solid var(--rule)}
+
+  table{width:100%; border-collapse:collapse; font-size:12px; font-family:var(--mono)}
+  td{padding:5px 0; border-bottom:1px solid var(--rule); vertical-align:top}
+  td:last-child{text-align:right; color:var(--ink)}
+  td:first-child{color:var(--ink2)}
+  tr:last-child td{border-bottom:0}
+  .ok{color:var(--ok)} .bad{color:var(--bad)}
+
+  #mapview{
+    image-rendering:pixelated; width:100%; border-radius:8px; border:1px solid var(--rule);
+    background:#000; margin-top:8px;
+  }
+  .cap{font-size:11px; color:var(--ink2); margin-top:6px; line-height:1.45}
+</style>
+</head>
+<body>
+
+<h1>Liquid Glass — refraction lab</h1>
+<p class="sub">Physically-based edge lensing via Snell's law, not turbulence noise. Drag the panel over the stripes to see the lensing follow it.</p>
+
+<div class="grid">
+  <div>
+    <div class="scene" id="scene">
+      <div class="glass refract" id="glass">Liquid Glass</div>
+    </div>
+    <p class="cap" id="hint">Drag the glass panel. Watch the stripes bend at its edges &mdash; that bending is the refraction map, not a blur.</p>
+  </div>
+
+  <div>
+    <div class="panel">
+      <h2>Material</h2>
+      <label>Bezel width <b id="vBezel">28px</b></label>
+      <input type="range" id="bezel" min="6" max="60" value="28">
+
+      <label>Index of refraction <b id="vIor">1.50</b></label>
+      <input type="range" id="ior" min="105" max="200" value="150">
+
+      <label>Thickness <b id="vThick">14</b></label>
+      <input type="range" id="thick" min="2" max="40" value="14">
+
+      <label>Chromatic aberration <b id="vAb">0.0</b></label>
+      <input type="range" id="ab" min="0" max="30" value="0">
+
+      <button id="toggle">Turn refraction OFF</button>
+      <button class="sec" id="bench">Run 5s benchmark</button>
+    </div>
+
+    <div class="panel" style="margin-top:16px">
+      <h2>Support &amp; cost</h2>
+      <table>
+        <tr><td>backdrop-filter</td><td id="s1">?</td></tr>
+        <tr><td>SVG url() backdrop</td><td id="s2">?</td></tr>
+        <tr><td>corner-shape</td><td id="s3">?</td></tr>
+        <tr><td>map build</td><td id="s4">&mdash;</td></tr>
+        <tr><td>max displacement</td><td id="s5">&mdash;</td></tr>
+        <tr><td>fps (idle)</td><td id="s6">&mdash;</td></tr>
+        <tr><td>fps (dragging)</td><td id="s7">&mdash;</td></tr>
+      </table>
+    </div>
+
+    <div class="panel" style="margin-top:16px">
+      <h2>Displacement map</h2>
+      <img id="mapview" alt="Generated displacement map">
+      <p class="cap">R = x offset, G = y offset, 128 = no displacement. Flat grey centre means the middle of the panel is undistorted; only the bezel bends light &mdash; which is exactly what real glass does.</p>
+    </div>
+  </div>
+</div>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <filter id="lg" x="0" y="0" width="100%" height="100%" color-interpolation-filters="sRGB">
+    <feImage id="feimg" result="map"/>
+    <feDisplacementMap id="fedisp" in="SourceGraphic" in2="map"
+                       xChannelSelector="R" yChannelSelector="G"/>
+  </filter>
+  <filter id="lgAb" x="0" y="0" width="100%" height="100%" color-interpolation-filters="sRGB">
+    <feImage id="feimgA" result="mapA"/>
+    <!-- chromatic aberration: displace R and B by different amounts, recombine -->
+    <feDisplacementMap id="dR" in="SourceGraphic" in2="mapA" xChannelSelector="R" yChannelSelector="G" result="rC"/>
+    <feDisplacementMap id="dB" in="SourceGraphic" in2="mapA" xChannelSelector="R" yChannelSelector="G" result="bC"/>
+    <feColorMatrix in="rC" type="matrix" result="rOnly"
+      values="1 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0"/>
+    <feColorMatrix in="SourceGraphic" type="matrix" result="gOnly"
+      values="0 0 0 0 0  0 1 0 0 0  0 0 0 0 0  0 0 0 1 0"/>
+    <feColorMatrix in="bC" type="matrix" result="bOnly"
+      values="0 0 0 0 0  0 0 0 0 0  0 0 1 0 0  0 0 0 1 0"/>
+    <feBlend in="rOnly" in2="gOnly" mode="screen" result="rg"/>
+    <feBlend in="rg" in2="bOnly" mode="screen"/>
+  </filter>
+</svg>
+
+<script>
+const glass  = document.getElementById('glass');
+const scene  = document.getElementById('scene');
+const feimg  = document.getElementById('feimg');
+const fedisp = document.getElementById('fedisp');
+const feimgA = document.getElementById('feimgA');
+const dR = document.getElementById('dR'), dB = document.getElementById('dB');
+
+/* ── the material model ──────────────────────────────────────────────────
+   Apple's preferred bezel profile is a convex SQUIRCLE, not a circle:
+     circle    y = sqrt(1-(1-x)^2)     -> abrupt flat->curve join
+     squircle  y = (1-(1-x)^4)^(1/4)   -> smooth, no visible kink
+   x runs 0 at the outer edge to 1 at the inner bezel boundary.            */
+const height = x => Math.pow(1 - Math.pow(1 - x, 4), 0.25);
+
+/* Surface normal from the numerical derivative of the height function. */
+function normalAngle(x){
+  const d = 0.001;
+  const a = height(Math.max(0, x - d));
+  const b = height(Math.min(1, x + d));
+  const slope = (b - a) / (2 * d);
+  // normal is the slope rotated -90deg
+  return Math.atan2(1, -slope);
+}
+
+/* Snell: n1 sin(t1) = n2 sin(t2). Incident ray is orthogonal to the screen,
+   so the angle of incidence equals the surface tilt. Lateral offset after
+   travelling `thickness` through the material is thickness*tan(t2). */
+function lateralOffset(x, ior, thickness){
+  const nA = normalAngle(x);
+  const incidence = Math.PI/2 - nA;              // tilt away from vertical
+  const s = Math.sin(incidence) / ior;
+  if (Math.abs(s) > 1) return 0;                 // total internal reflection
+  const refracted = Math.asin(s);
+  return thickness * Math.tan(incidence - refracted);
+}
+
+/* Signed distance to the edge of a rounded rect — tells us, per pixel, how
+   far into the bezel we are and which way "inward" points. */
+function sdRoundRect(px, py, w, h, r){
+  const qx = Math.abs(px) - (w/2 - r);
+  const qy = Math.abs(py) - (h/2 - r);
+  const ax = Math.max(qx, 0), ay = Math.max(qy, 0);
+  return Math.hypot(ax, ay) + Math.min(Math.max(qx, qy), 0) - r;
+}
+
+let maxDisp = 0;
+
+function buildMap(){
+  const t0 = performance.now();
+  const rect = glass.getBoundingClientRect();
+  const W = Math.round(rect.width), H = Math.round(rect.height);
+  const bezel = +document.getElementById('bezel').value;
+  const ior   = +document.getElementById('ior').value / 100;
+  const thick = +document.getElementById('thick').value;
+  const radius = 34;
+
+  const cv = document.createElement('canvas');
+  cv.width = W; cv.height = H;
+  const ctx = cv.getContext('2d');
+  const img = ctx.createImageData(W, H);
+
+  // pass 1 — raw offsets, so we can normalise to the 8-bit channel range
+  const ox = new Float32Array(W*H), oy = new Float32Array(W*H);
+  maxDisp = 0;
+
+  for (let y = 0; y < H; y++){
+    for (let x = 0; x < W; x++){
+      const px = x - W/2 + 0.5, py = y - H/2 + 0.5;
+      const d = -sdRoundRect(px, py, W, H, radius);   // + inside
+      const i = y*W + x;
+      if (d < 0 || d > bezel){ ox[i] = 0; oy[i] = 0; continue; }
+
+      const t = d / bezel;                            // 0 at edge -> 1 inward
+      const mag = lateralOffset(t, ior, thick);
+
+      // gradient of the SDF = the inward direction at this pixel
+      const e = 1;
+      const gx = (-sdRoundRect(px+e, py, W, H, radius)) - (-sdRoundRect(px-e, py, W, H, radius));
+      const gy = (-sdRoundRect(px, py+e, W, H, radius)) - (-sdRoundRect(px, py-e, W, H, radius));
+      const gl = Math.hypot(gx, gy) || 1;
+
+      ox[i] = -(gx/gl) * mag;
+      oy[i] = -(gy/gl) * mag;
+      const m = Math.hypot(ox[i], oy[i]);
+      if (m > maxDisp) maxDisp = m;
+    }
+  }
+
+  // pass 2 — encode. 128 is neutral; ±127 spans ±maxDisp after `scale`.
+  const s = maxDisp || 1;
+  for (let i = 0; i < W*H; i++){
+    img.data[i*4    ] = 128 + (ox[i]/s) * 127;
+    img.data[i*4 + 1] = 128 + (oy[i]/s) * 127;
+    img.data[i*4 + 2] = 128;
+    img.data[i*4 + 3] = 255;
+  }
+  ctx.putImageData(img, 0, 0);
+  const url = cv.toDataURL();
+
+  for (const el of [feimg, feimgA]){
+    el.setAttribute('href', url);
+    el.setAttribute('width', W); el.setAttribute('height', H);
+  }
+  const ab = +document.getElementById('ab').value / 10;
+  fedisp.setAttribute('scale', s.toFixed(2));
+  dR.setAttribute('scale', (s * (1 + ab/10)).toFixed(2));
+  dB.setAttribute('scale', (s * (1 - ab/10)).toFixed(2));
+  glass.style.filter = '';
+  glass.classList.toggle('refract', on);
+  const useAb = ab > 0;
+  if (on) {
+    const f = `blur(2px) saturate(180%) url(#${useAb ? 'lgAb' : 'lg'})`;
+    glass.style.backdropFilter = f;
+    glass.style.webkitBackdropFilter = f;
+  }
+
+  document.getElementById('mapview').src = url;
+  document.getElementById('s4').textContent = (performance.now()-t0).toFixed(1)+' ms';
+  document.getElementById('s5').textContent = maxDisp.toFixed(2)+' px';
+}
+
+/* ── feature detection ─────────────────────────────────────────────────── */
+function detect(){
+  const bf = CSS.supports('backdrop-filter','blur(2px)') || CSS.supports('-webkit-backdrop-filter','blur(2px)');
+  const svgbf = CSS.supports('backdrop-filter','url(#x)');
+  const cs = CSS.supports('corner-shape','squircle');
+  const set = (id, ok, txt) => {
+    const el = document.getElementById(id);
+    el.textContent = txt ?? (ok ? 'yes' : 'no');
+    el.className = ok ? 'ok' : 'bad';
+  };
+  set('s1', bf); set('s2', svgbf); set('s3', cs);
+}
+
+/* ── drag ─────────────────────────────────────────────────────────────── */
+let dragging = false, dx = 0, dy = 0, frames = 0, dragFrames = 0;
+glass.addEventListener('pointerdown', e => {
+  dragging = true; dragFrames = 0;
+  const r = glass.getBoundingClientRect();
+  dx = e.clientX - r.left - r.width/2;
+  dy = e.clientY - r.top - r.height/2;
+  glass.setPointerCapture(e.pointerId);
+});
+glass.addEventListener('pointermove', e => {
+  if (!dragging) return;
+  const s = scene.getBoundingClientRect();
+  const x = e.clientX - s.left - dx, y = e.clientY - s.top - dy;
+  glass.style.position='absolute';
+  glass.style.left = (x - glass.offsetWidth/2)+'px';
+  glass.style.top  = (y - glass.offsetHeight/2)+'px';
+});
+glass.addEventListener('pointerup', () => { dragging = false; });
+
+/* ── fps ──────────────────────────────────────────────────────────────── */
+let last = performance.now(), acc = 0, n = 0;
+function loop(t){
+  const dt = t - last; last = t; acc += dt; n++;
+  if (dragging) dragFrames++;
+  if (acc >= 500){
+    const fps = Math.round(1000 / (acc/n));
+    document.getElementById(dragging ? 's7' : 's6').textContent = fps + ' fps';
+    acc = 0; n = 0;
+  }
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+
+/* ── wiring ───────────────────────────────────────────────────────────── */
+let on = true;
+const bind = (id, fmt, out) => {
+  const el = document.getElementById(id);
+  el.addEventListener('input', () => {
+    document.getElementById(out).textContent = fmt(el.value);
+    buildMap();
+  });
+};
+bind('bezel', v => v+'px', 'vBezel');
+bind('ior',   v => (v/100).toFixed(2), 'vIor');
+bind('thick', v => v, 'vThick');
+bind('ab',    v => (v/10).toFixed(1), 'vAb');
+
+document.getElementById('toggle').addEventListener('click', e => {
+  on = !on;
+  e.target.textContent = on ? 'Turn refraction OFF' : 'Turn refraction ON';
+  if (!on){ glass.style.backdropFilter = 'blur(2px) saturate(180%)';
+            glass.style.webkitBackdropFilter = 'blur(2px) saturate(180%)'; }
+  else buildMap();
+});
+
+document.getElementById('bench').addEventListener('click', async e => {
+  e.target.textContent = 'Benchmarking…';
+  const start = performance.now(); let f = 0;
+  const s = scene.getBoundingClientRect();
+  await new Promise(res => {
+    function step(t){
+      f++;
+      const p = (t - start) / 5000;
+      glass.style.position='absolute';
+      glass.style.left = (60 + Math.sin(p*Math.PI*4)*90) + 'px';
+      glass.style.top  = (60 + Math.cos(p*Math.PI*3)*70) + 'px';
+      if (t - start < 5000) requestAnimationFrame(step); else res();
+    }
+    requestAnimationFrame(step);
+  });
+  const fps = Math.round(f / 5);
+  document.getElementById('s7').textContent = fps + ' fps';
+  document.getElementById('s7').className = fps >= 55 ? 'ok' : 'bad';
+  e.target.textContent = 'Run 5s benchmark';
+});
+
+detect();
+buildMap();
+</script>
+</body>
+</html>

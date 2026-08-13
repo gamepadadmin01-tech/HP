@@ -1,0 +1,5 @@
+qrcode
+websockets
+pillow
+cryptography
+evdev

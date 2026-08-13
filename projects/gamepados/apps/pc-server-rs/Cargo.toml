@@ -1,0 +1,53 @@
+[package]
+name = "pc-server-rs"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+# ── GRX encrypted input — the ONLY cross-platform dependencies, deliberately ──
+# Every other protocol layer in this server is hand-rolled to keep the binary
+# lean (see the WebSocket note in README.md). Crypto is the exception, and it is
+# not a close call: invalid curve points, nonce reuse and non-constant-time tag
+# comparison fail SILENTLY and catastrophically. Hand-rolling X25519 or AES-GCM
+# would be the single worst decision available here. RustCrypto is pure Rust,
+# widely reviewed, and pulls in no async runtime.
+# `static_secrets` is needed to build a key from FIXED bytes, without which the
+# golden vectors cannot be reproduced deterministically. The crate warns that
+# StaticSecret allows reuse — we generate a fresh one per session and use it
+# exactly once, so it is ephemeral in practice (see grx::new_ephemeral).
+x25519-dalek = { version = "2", features = ["static_secrets"] }
+aes-gcm = "0.10"
+hkdf = "0.12"
+hmac = "0.12"
+sha2 = "0.10"
+subtle = "2"          # constant-time equality for confirmation tags
+
+# QR encoding for Wi-Fi pairing. NOT cosmetic: manual connect sends token 0,
+# which is only accepted off-LAN/tether, so a phone on Wi-Fi can ONLY pair by
+# scanning. Default features off — we render to the terminal ourselves and want
+# neither the `image` nor `svg` dependency trees.
+qrcode = { version = "0.14", default-features = false }
+ureq = { version = "3.3.0", default-features = false, features = ["rustls", "platform-verifier", "json", "gzip", "win-system-proxy"] }
+serde_json = "1"
+eframe = { version = "0.35.0", default-features = false, features = ["glow", "default_fonts"] }
+image = { version = "0.25.10", default-features = false, features = ["png"] }
+
+# Virtual Xbox 360 pad via the ViGEmBus driver (already installed on this PC).
+[target.'cfg(windows)'.dependencies]
+# `unstable_xtarget_notification` is what exposes force-feedback (rumble) from
+# the game back to us. Without it the pad works but the phone never vibrates.
+vigem-client = { version = "0.1", features = ["unstable_xtarget_notification"] }
+
+[dev-dependencies]
+# Test-only: parses tests/golden_vectors.json (generated from the real Python
+# server by tools/gen_golden.py). Not linked into the shipped binary.
+serde_json = "1"  # also a runtime dep now (http.rs manifest parsing) — see [dependencies]
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+
+[build-dependencies]
+winresource = "0.1.31"

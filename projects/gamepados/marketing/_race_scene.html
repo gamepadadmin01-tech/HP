@@ -1,0 +1,225 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+html,body { width:1100px; height:620px; overflow:hidden; }
+body { position:relative; background:#0a0a0c; font-family:'Segoe UI',Arial,sans-serif; }
+.scene { position:absolute; inset:0; filter: contrast(1.06) saturate(1.04); }
+svg { display:block; }
+.hud-tower {
+  position:absolute; left:14px; top:14px; width:150px;
+  background:rgba(10,10,14,.72); border-radius:8px; padding:8px 0; z-index:40;
+}
+.hud-row { display:flex; align-items:center; gap:8px; padding:4px 12px;
+  color:#e8e8ea; font-size:17px; font-weight:700; }
+.hud-row .pos { width:22px; color:#9aa0a8; }
+.hud-row.me { background:rgba(255,255,255,.14); }
+.hud-row .team { width:5px; height:18px; border-radius:2px; }
+.hud-speed {
+  position:absolute; right:26px; bottom:22px; z-index:40;
+  background:rgba(10,10,14,.72); border-radius:10px; padding:10px 18px;
+  color:#fff; text-align:right;
+}
+.hud-speed .kph { font-size:38px; font-weight:800; line-height:1; }
+.hud-speed .sub { font-size:15px; font-weight:600; color:#aab; margin-top:2px; }
+.lapchip {
+  position:absolute; right:26px; top:16px; z-index:40;
+  background:rgba(10,10,14,.72); border-radius:8px; padding:8px 16px;
+  color:#fff; font-size:19px; font-weight:700;
+}
+.lapchip span { color:#9aa0a8; font-weight:600; }
+.vig { position:absolute; inset:0; z-index:50;
+  box-shadow: inset 0 0 120px 20px rgba(0,0,20,.35); }
+</style></head>
+<body>
+<div class="scene">
+<svg width="1100" height="620" viewBox="0 0 1100 620">
+<defs>
+  <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#aebccd"/>
+    <stop offset=".7" stop-color="#dfe6ee"/>
+    <stop offset="1" stop-color="#f2f4f7"/>
+  </linearGradient>
+  <linearGradient id="asphalt" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#585c63"/>
+    <stop offset="1" stop-color="#3d4046"/>
+  </linearGradient>
+  <linearGradient id="carbon" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#2e3138"/>
+    <stop offset=".5" stop-color="#16181c"/>
+    <stop offset="1" stop-color="#232529"/>
+  </linearGradient>
+  <linearGradient id="bodyshine" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#f4f5f7"/>
+    <stop offset=".45" stop-color="#c8ccd3"/>
+    <stop offset="1" stop-color="#8f959e"/>
+  </linearGradient>
+  <linearGradient id="flap" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#e8eaee"/>
+    <stop offset="1" stop-color="#aab0b8"/>
+  </linearGradient>
+  <radialGradient id="sun" cx=".78" cy=".12" r=".5">
+    <stop offset="0" stop-color="rgba(255,252,240,.9)"/>
+    <stop offset="1" stop-color="rgba(255,252,240,0)"/>
+  </radialGradient>
+  <filter id="b1"><feGaussianBlur stdDeviation="1.2"/></filter>
+  <filter id="b2"><feGaussianBlur stdDeviation="2.5"/></filter>
+  <filter id="b4"><feGaussianBlur stdDeviation="4"/></filter>
+  <filter id="glowr"><feGaussianBlur stdDeviation="3"/></filter>
+</defs>
+
+<!-- sky -->
+<rect width="1100" height="330" fill="url(#sky)"/>
+<rect width="1100" height="330" fill="url(#sun)"/>
+<ellipse cx="240" cy="70" rx="150" ry="26" fill="#ffffff" opacity=".55" filter="url(#b4)"/>
+<ellipse cx="620" cy="46" rx="120" ry="18" fill="#ffffff" opacity=".4" filter="url(#b4)"/>
+<ellipse cx="930" cy="95" rx="130" ry="20" fill="#ffffff" opacity=".45" filter="url(#b4)"/>
+
+<!-- distant treeline + grandstand -->
+<rect x="0" y="212" width="1100" height="46" fill="#5e6a5e" filter="url(#b2)"/>
+<rect x="0" y="196" width="330" height="52" fill="#4a4f58" filter="url(#b1)"/>
+<rect x="0" y="196" width="330" height="14" fill="#c8ccd2" filter="url(#b1)"/>
+<rect x="850" y="204" width="250" height="44" fill="#50555e" filter="url(#b1)"/>
+<rect x="850" y="204" width="250" height="12" fill="#c4c8ce" filter="url(#b1)"/>
+
+<!-- sponsor boards along horizon -->
+<g filter="url(#b1)">
+  <rect x="330" y="232" width="560" height="28" fill="#f2f2f4"/>
+  <text x="380" y="254" font-size="22" font-weight="800" fill="#8a8f98" font-family="Arial">APEX</text>
+  <text x="500" y="254" font-size="22" font-weight="800" fill="#98a0a8" font-family="Arial">GRX</text>
+  <text x="600" y="254" font-size="22" font-weight="800" fill="#8a8f98" font-family="Arial">TURBO</text>
+  <text x="740" y="254" font-size="22" font-weight="800" fill="#98a0a8" font-family="Arial">VELOCE</text>
+</g>
+
+<!-- grass run-off -->
+<rect x="0" y="258" width="1100" height="362" fill="#6d7a64"/>
+<rect x="0" y="258" width="1100" height="362" fill="url(#sun)" opacity=".3"/>
+
+<!-- track -->
+<polygon points="-60,620 1160,620 700,258 460,258" fill="url(#asphalt)"/>
+<!-- racing line (darker rubber) -->
+<polygon points="240,620 760,620 640,270 540,270" fill="#33363b" opacity=".55" filter="url(#b2)"/>
+
+<!-- kerbs left -->
+<g>
+  <polygon points="-60,620 -15,620 472,261 460,258" fill="#d84040"/>
+  <polygon points="-15,620 30,620 484,264 472,261" fill="#eceff2"/>
+</g>
+<!-- kerbs right -->
+<g>
+  <polygon points="1160,620 1115,620 688,261 700,258" fill="#d84040"/>
+  <polygon points="1115,620 1070,620 676,264 688,261" fill="#eceff2"/>
+</g>
+
+<!-- start-finish gantry shadow band across track for depth -->
+<polygon points="150,540 985,540 940,505 205,505" fill="#2c2e33" opacity=".15" filter="url(#b2)"/>
+
+<!-- rival cars ahead -->
+<g filter="url(#b1)">
+  <g transform="translate(575,300) scale(.42)">
+    <ellipse cx="0" cy="52" rx="95" ry="12" fill="#000" opacity=".4"/>
+    <rect x="-78" y="-44" width="156" height="16" rx="4" fill="#1a1c20"/>
+    <path d="M-56,-28 L56,-28 L70,36 L-70,36 Z" fill="#c8323a"/>
+    <rect x="-88" y="-6" width="34" height="52" rx="10" fill="#101114"/>
+    <rect x="54" y="-6" width="34" height="52" rx="10" fill="#101114"/>
+    <path d="M-24,-34 Q0,-58 24,-34" stroke="#3a3d44" stroke-width="8" fill="none"/>
+  </g>
+  <g transform="translate(500,282) scale(.30)">
+    <ellipse cx="0" cy="52" rx="95" ry="12" fill="#000" opacity=".4"/>
+    <rect x="-78" y="-44" width="156" height="16" rx="4" fill="#15171b"/>
+    <path d="M-56,-28 L56,-28 L70,36 L-70,36 Z" fill="#2a6fc0"/>
+    <rect x="-88" y="-6" width="34" height="52" rx="10" fill="#101114"/>
+    <rect x="54" y="-6" width="34" height="52" rx="10" fill="#101114"/>
+  </g>
+</g>
+
+<!-- ======== HERO CAR ======== -->
+<g transform="translate(660,430)">
+  <!-- ground shadow -->
+  <ellipse cx="0" cy="128" rx="215" ry="26" fill="#000" opacity=".5" filter="url(#b4)"/>
+
+  <!-- rear tires with motion blur -->
+  <g>
+    <rect x="-206" y="18" width="86" height="118" rx="22" fill="#0e0f12" filter="url(#b1)"/>
+    <rect x="120" y="18" width="86" height="118" rx="22" fill="#0e0f12" filter="url(#b1)"/>
+    <ellipse cx="-163" cy="77" rx="26" ry="34" fill="#26282e" filter="url(#b2)"/>
+    <ellipse cx="163" cy="77" rx="26" ry="34" fill="#26282e" filter="url(#b2)"/>
+    <ellipse cx="-163" cy="77" rx="12" ry="17" fill="#3d4048" filter="url(#b1)"/>
+    <ellipse cx="163" cy="77" rx="12" ry="17" fill="#3d4048" filter="url(#b1)"/>
+  </g>
+
+  <!-- diffuser -->
+  <path d="M-118,136 L118,136 L100,96 L-100,96 Z" fill="#101114"/>
+  <line x1="-58" y1="98" x2="-64" y2="134" stroke="#26282e" stroke-width="5"/>
+  <line x1="0" y1="98" x2="0" y2="134" stroke="#26282e" stroke-width="5"/>
+  <line x1="58" y1="98" x2="64" y2="134" stroke="#26282e" stroke-width="5"/>
+
+  <!-- main body (coke bottle) -->
+  <path d="M-96,-6 C-60,-24 60,-24 96,-6 L118,96 L-118,96 Z" fill="url(#bodyshine)"/>
+  <!-- engine cover ridge -->
+  <path d="M-14,-18 L14,-18 L20,96 L-20,96 Z" fill="#b9bec6"/>
+  <path d="M-3,-18 L3,-18 L5,96 L-5,96 Z" fill="#e8eaee"/>
+  <!-- cooling gills -->
+  <g stroke="#7d838c" stroke-width="3" opacity=".8">
+    <line x1="-72" y1="30" x2="-46" y2="26"/><line x1="-74" y1="44" x2="-46" y2="40"/>
+    <line x1="72" y1="30" x2="46" y2="26"/><line x1="74" y1="44" x2="46" y2="40"/>
+  </g>
+
+  <!-- rain light: LED bar -->
+  <rect x="-9" y="58" width="18" height="34" rx="4" fill="#ff2020" filter="url(#glowr)" opacity=".95"/>
+  <rect x="-6" y="62" width="12" height="26" rx="3" fill="#ff8a8a"/>
+
+  <!-- engine cover peak between body and wing -->
+  <path d="M-16,-8 Q0,-40 16,-8 Z" fill="#a8adb5"/>
+
+  <!-- rear wing -->
+  <g>
+    <rect x="-148" y="-74" width="296" height="24" rx="6" fill="url(#carbon)"/>
+    <rect x="-148" y="-89" width="296" height="11" rx="5" fill="url(#flap)"/>
+    <!-- endplates -->
+    <path d="M-148,-97 L-132,-97 L-126,-18 L-148,-18 Z" fill="#191b20"/>
+    <path d="M148,-97 L132,-97 L126,-18 L148,-18 Z" fill="#191b20"/>
+    <rect x="-148" y="-46" width="18" height="6" fill="#d84040"/>
+    <rect x="130" y="-46" width="18" height="6" fill="#d84040"/>
+    <!-- pylons -->
+    <rect x="-54" y="-52" width="9" height="40" fill="#2a2d34"/>
+    <rect x="45" y="-52" width="9" height="40" fill="#2a2d34"/>
+  </g>
+
+  <!-- sparks under floor -->
+  <g fill="#ffe9b0" filter="url(#b1)">
+    <circle cx="-96" cy="130" r="3"/>
+    <circle cx="-118" cy="138" r="2.2"/>
+    <circle cx="-84" cy="140" r="1.8"/>
+    <circle cx="102" cy="134" r="2.4"/>
+  </g>
+</g>
+
+<!-- exhaust heat wobble hint -->
+<ellipse cx="660" cy="560" rx="150" ry="16" fill="#dfe3e8" opacity=".14" filter="url(#b4)"/>
+
+<!-- speed streaks -->
+<g fill="#ffffff" filter="url(#b2)">
+  <polygon points="0,380 260,330 262,336 0,398" opacity=".30"/>
+  <polygon points="0,470 220,420 222,428 0,492" opacity=".26"/>
+  <polygon points="1100,360 840,326 838,332 1100,380" opacity=".30"/>
+  <polygon points="1100,470 880,420 878,428 1100,494" opacity=".26"/>
+  <polygon points="40,620 300,520 306,528 60,620" opacity=".22"/>
+  <polygon points="1060,620 812,522 806,530 1040,620" opacity=".22"/>
+</g>
+</svg>
+</div>
+
+<div class="hud-tower">
+  <div class="hud-row me"><span class="pos">P1</span><span class="team" style="background:#e8e8ec"></span>YOU</div>
+  <div class="hud-row"><span class="pos">P2</span><span class="team" style="background:#c8323a"></span>VET</div>
+  <div class="hud-row"><span class="pos">P3</span><span class="team" style="background:#2a6fc0"></span>ALO</div>
+  <div class="hud-row"><span class="pos">P4</span><span class="team" style="background:#3aa060"></span>RIC</div>
+</div>
+<div class="lapchip">LAP 3<span>/10</span></div>
+<div class="hud-speed">
+  <div class="kph">318</div>
+  <div class="sub">KM/H &nbsp;·&nbsp; GEAR 8</div>
+</div>
+<div class="vig"></div>
+</body></html>

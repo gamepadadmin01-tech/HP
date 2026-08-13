@@ -1,0 +1,188 @@
+              if (btn.type === "dpad") {
+                return (
+                  <Dpad
+                    key={btn.uid}
+                    cx={btn.x} cy={btn.y} r={btn.r}
+                    held={heldCustom}
+                    dn={(id) => {
+                      dnCustom(id);
+                      if (btn.haptic > 0) triggerHaptic(Math.round(btn.haptic / 2));
+                    }}
+                    up={upCustom}
+                    dirIds={{
+                      up:    `${btn.uid}_up`    as BtnId,
+                      down:  `${btn.uid}_down`  as BtnId,
+                      left:  `${btn.uid}_left`  as BtnId,
+                      right: `${btn.uid}_right` as BtnId,
+                    }}
+                  />
+                );
+              }
+
+              // ── ABXY ───────────────────────────────────────────────────────
+              if (btn.type === "abxy") {
+                const spread = btn.r * 0.6;
+                const btnR   = btn.r * 0.38;
+                const positions = [
+                  { label: "Y", dx: 0,       dy: -spread, key: "y" },
+                  { label: "X", dx: -spread, dy: 0,       key: "x" },
+                  { label: "B", dx:  spread, dy: 0,       key: "b" },
+                  { label: "A", dx: 0,       dy:  spread, key: "a" },
+                ];
+                return (
+                  <g key={btn.uid}>
+                    {positions.map(({ label, dx, dy, key }) => (
+                      <Btn
+                        key={key}
+                        cx={btn.x + dx} cy={btn.y + dy} r={btnR}
+                        label={label}
+                        id={`${btn.uid}_${key}`}
+                        held={heldCustom}
+                        dn={(id) => {
+                          dnCustom(id);
+                          if (btn.haptic > 0) triggerHaptic(Math.round(btn.haptic / 2));
+                        }}
+                        up={upCustom}
+                        normColor={btn.normColor}
+                        heldColor={btn.heldColor}
+                      />
+                    ))}
+                  </g>
+                );
+              }
+
+              // ── LTRT ───────────────────────────────────────────────────────
+              if (btn.type === "ltrt") {
+                const pillW  = btn.r * 2;
+                const pillH  = btn.r * 5.8;
+                const pillRx = btn.r * 0.45;
+                const gap    = btn.r * 0.4;
+                const ltX    = btn.x - pillW - gap;
+                const rtX    = btn.x + gap;
+                const pillY  = btn.y - pillH / 2;
+                return (
+                  <g key={btn.uid}>
+                    <TriggerPill
+                      x={ltX} y={pillY} w={pillW} h={pillH} rx={pillRx}
+                      label="LT" id={`${btn.uid}_lt` as BtnId}
+                      held={heldCustom}
+                      dn={(id) => {
+                        dnCustom(id);
+                        if (btn.haptic > 0) triggerHaptic(Math.round(btn.haptic / 2));
+                      }}
+                      up={upCustom}
+                      fill={ltFill} onFillChange={setLtFill} svgRef={svgRef}
+                    />
+                    <TriggerPill
+                      x={rtX} y={pillY} w={pillW} h={pillH} rx={pillRx}
+                      label="RT" id={`${btn.uid}_rt` as BtnId}
+                      held={heldCustom}
+                      dn={(id) => {
+                        dnCustom(id);
+                        if (btn.haptic > 0) triggerHaptic(Math.round(btn.haptic / 2));
+                      }}
+                      up={upCustom}
+                      fill={rtFill} onFillChange={setRtFill} svgRef={svgRef}
+                    />
+                  </g>
+                );
+              }
+
+              // ── THUMBSTICK ─────────────────────────────────────────────────
+              if (btn.type === "thumbstick") {
+                const isLeft = btn.label.toUpperCase().startsWith("L");
+                const activeStick = isLeft ? lstick : rstick;
+                const activeId    = isLeft ? "lstick" : "rstick";
+                return (
+                  <RightStick
+                    key={btn.uid}
+                    cx={btn.x} cy={btn.y} outerR={btn.r} innerR={btn.r * 0.48}
+                    stick={activeStick}
+                    id={activeId as BtnId}
+                    held={held}
+                    dn={(id) => {
+                      dn(id);
+                      if (btn.haptic > 0) triggerHaptic(Math.round(btn.haptic / 2));
+                    }}
+                    up={up}
+                  />
+                );
+              }
+
+              // ── SINGLE TRIGGER ─────────────────────────────────────────────
+              if (btn.shape === "rect" || btn.type === "trigger") {
+                const isLeft = btn.label.toUpperCase().startsWith("L");
+                const pillW  = btn.r * 2;
+                const pillH  = btn.r * 5.8;
+                const pillRx = btn.r * 0.45;
+                return (
+                  <TriggerPill
+                    key={btn.uid}
+                    x={btn.x - btn.r} y={btn.y - pillH / 2}
+                    w={pillW} h={pillH} rx={pillRx}
+                    label={btn.label}
+                    id={(isLeft ? "LT" : "RT") as BtnId}
+                    held={held}
+                    dn={(id) => {
+                      dn(id);
+                      if (btn.haptic > 0) triggerHaptic(Math.round(btn.haptic / 2));
+                    }}
+                    up={up}
+                    fill={isLeft ? ltFill : rtFill}
+                    onFillChange={isLeft ? setLtFill : setRtFill}
+                    svgRef={svgRef}
+                  />
+                );
+              }
+
+              // ── BUTTON (default) ───────────────────────────────────────────
+              const displayLabel =
+                (activeMapping && activeMapping[btn.label as BtnId]) || btn.label;
+              return (
+                <Btn
+                  key={btn.uid}
+                  cx={btn.x} cy={btn.y} r={btn.r}
+                  label={displayLabel} id={btn.uid}
+                  held={heldCustom}
+                  dn={(id) => {
+                    dnCustom(id);
+                    if (btn.haptic > 0) triggerHaptic(Math.round(btn.haptic / 2));
+                  }}
+                  up={upCustom}
+                  normColor={btn.normColor} heldColor={btn.heldColor}
+                />
+              );
+            })}
+          </>
+        )}
+      </svg>
+      </div>
+
+      {/* Rumble intensity indicators — bottom corners of controller screen */}
+      {(rumble.left > 0 || rumble.right > 0 || rumble.lt > 0 || rumble.rt > 0) && (
+        <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-10 flex items-center gap-3 pointer-events-none">
+          <div className="flex flex-col items-center gap-0.5">
+            <div className="text-[8px] font-mono text-white/30">LT</div>
+            <div className="w-1 h-6 bg-white/10 rounded-full overflow-hidden">
+              <div className="w-full bg-red-500 rounded-full transition-all duration-75"
+                   style={{ height: `${(rumble.lt / 255) * 100}%`, marginTop: `${100 - (rumble.lt / 255) * 100}%` }} />
+            </div>
+          </div>
+          <div className="flex flex-col items-center gap-0.5">
+            <div className="text-[8px] font-mono text-white/30">L</div>
+            <div className="w-1 h-6 bg-white/10 rounded-full overflow-hidden">
+              <div className="w-full bg-orange-500 rounded-full transition-all duration-75"
+                   style={{ height: `${(rumble.left / 255) * 100}%`, marginTop: `${100 - (rumble.left / 255) * 100}%` }} />
+            </div>
+          </div>
+          <div className="flex flex-col items-center gap-0.5">
+            <div className="text-[8px] font-mono text-white/30">R</div>
+            <div className="w-1 h-6 bg-white/10 rounded-full overflow-hidden">
+              <div className="w-full bg-orange-500 rounded-full transition-all duration-75"
+                   style={{ height: `${(rumble.right / 255) * 100}%`, marginTop: `${100 - (rumble.right / 255) * 100}%` }} />
+            </div>
+          </div>
+          <div className="flex flex-col items-center gap-0.5">
+            <div className="text-[8px] font-mono text-white/30">RT</div>
+            <div className="w-1 h-6 bg-white/10 rounded-full overflow-hidden">
+              <div className="w-full bg-red-500 rounded-full transition-all duration-75"

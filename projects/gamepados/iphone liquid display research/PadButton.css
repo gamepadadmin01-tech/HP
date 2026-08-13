@@ -1,0 +1,20 @@
+.pad-button{
+  display: grid;
+  place-items: center;
+  min-width: var(--tap-min);
+  min-height: var(--tap-min);
+  border-radius: var(--r-pill);
+  background: var(--widget-fill);
+  border: 1px solid var(--widget-border);
+  color: var(--label);
+  font-family: var(--font);
+  font-size: var(--t-headline);
+  font-weight: 600;
+  touch-action: none;
+  user-select: none;
+  transition: background .1s linear;
+}
+
+.pad-button[data-pressed="true"]{
+  background: var(--widget-fill-pressed);
+}

@@ -1,0 +1,35 @@
+
+  <!DOCTYPE html>
+  <!-- data-glass-pad: TRIAL ONLY. Remove this attribute to take glass off the
+       gameplay layer; remove the two liquid-* imports in styles/index.css to
+       revert the whole trial. -->
+  <html lang="en" data-glass-pad="on">
+    <head>
+      <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <title>App Interface Design</title>
+    <style>
+      html, body {
+        height: 100%;
+        margin: 0;
+        overflow: hidden;
+        width: 100%;
+        -webkit-user-select: none;
+        user-select: none;
+        background: #000;
+        touch-action: none;
+      }
+      #root {
+        height: 100%;
+        width: 100%;
+        overflow: hidden;
+      }
+    </style>
+    </head>
+
+    <body>
+      <div id="root"></div>
+      <script type="module" src="/src/main.tsx"></script>
+    </body>
+  </html>
+  

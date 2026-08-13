@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- MUST match the identity strings the PC server sends during the AOA
+         handshake (apps/pc-server/aoa_transport.py → ACCESSORY dict):
+         manufacturer + model + version. If any of these three differ, Android
+         will NOT route the accessory to this app. -->
+    <usb-accessory
+        manufacturer="GamepadOS"
+        model="GamepadController"
+        version="1.0" />
+</resources>

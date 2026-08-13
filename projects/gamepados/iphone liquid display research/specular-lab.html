@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Liquid Glass — gyro specular lab</title>
+<!--
+  RESEARCH PROTOTYPE 2 — the specular highlight. Not wired into the app.
+
+  THE ENGINEERING PROBLEM
+  Lab 1 measured the refraction map at 13-33ms to build. Far too slow to
+  rebuild as the phone tilts. So the highlight CANNOT be baked into the
+  displacement map.
+
+  THE SOLUTION
+  Split the material in two:
+    - refraction  = static, built once, cached          (expensive, never changes)
+    - specular    = a masked blob moved by transform    (free, changes every frame)
+  A radial-gradient blob sits inside a ring mask. Tilting TRANSLATES the blob.
+  Translation is compositor-only: no repaint, no layout, no filter rebuild.
+  It also lands exactly on Apple's stated limit - specular amplitude <= 6px.
+
+  BEHAVIOUR SOURCED FROM WWDC25 / HIG
+    - highlight is a RIM light; intensity follows the surface normal vs a
+      fixed light direction, and the light direction is what device motion moves
+    - "highlights follow and define the geometry of the shapes"
+    - larger elements = thicker material = deeper shadow + richer lensing
+    - press: material illuminates FROM UNDERNEATH, gel-like flex
+    - Reduce Motion must disable the parallax entirely
+-->
+<style>
+  :root{
+    --ink:#ECEBEF; --ink2:#9F9EA2; --panel:#141417; --rule:#26262B;
+    --ok:#3FB27F; --bad:#E8746B;
+    --mono: ui-monospace,"SF Mono","Cascadia Mono",Consolas,monospace;
+
+    /* driven by gyro */
+    --tilt-x: 0px;
+    --tilt-y: 0px;
+    --spec-opacity: .85;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:#0A0A0B; color:var(--ink); padding:24px;
+    font:14px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  }
+  h1{font-size:22px; letter-spacing:-.02em; margin:0 0 4px}
+  .sub{color:var(--ink2); margin:0 0 20px; font-size:13px; max-width:70ch}
+
+  .grid{display:grid; grid-template-columns:minmax(0,1fr) 310px; gap:24px; align-items:start}
+  @media(max-width:920px){ .grid{grid-template-columns:1fr} }
+
+  .stage{
+    position:relative; min-height:440px; border-radius:24px; overflow:hidden;
+    background:
+      radial-gradient(circle at 20% 25%, #FF375F 0%, transparent 45%),
+      radial-gradient(circle at 80% 20%, #FFD60A 0%, transparent 42%),
+      radial-gradient(circle at 25% 85%, #30D158 0%, transparent 46%),
+      radial-gradient(circle at 85% 80%, #0A84FF 0%, transparent 48%),
+      #1a1030;
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:22px;
+    padding:28px;
+  }
+
+  /* ── the material ─────────────────────────────────────────────────────── */
+  .lg{
+    position:relative;
+    border-radius:var(--r, 28px);
+    background:rgba(255,255,255,.10);
+    -webkit-backdrop-filter:blur(var(--blur,8px)) saturate(180%);
+            backdrop-filter:blur(var(--blur,8px)) saturate(180%);
+    /* size -> thickness: bigger elements get a deeper shadow (WWDC25) */
+    box-shadow:0 var(--sh-y,8px) var(--sh-b,28px) rgba(0,0,0,var(--sh-a,.34));
+    color:#fff; display:grid; place-items:center;
+    font-weight:600; letter-spacing:.01em;
+    text-shadow:0 1px 3px rgba(0,0,0,.45);
+    isolation:isolate;
+    transition:transform .22s cubic-bezier(.32,.72,0,1),
+               background .22s cubic-bezier(.32,.72,0,1);
+    touch-action:none; user-select:none; cursor:pointer;
+  }
+
+  /* RIM: a 1.4px ring, drawn with the mask-xor trick so it hugs the radius. */
+  .lg::before{
+    content:""; position:absolute; inset:0; border-radius:inherit;
+    padding:1.4px;
+    background:rgba(255,255,255,.20);
+    -webkit-mask:linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+            mask:linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite:xor; mask-composite:exclude;
+    pointer-events:none; z-index:2;
+  }
+
+  /* SPECULAR: a soft blob living INSIDE the ring mask. Tilt translates it.
+     transform only -> compositor only -> free at 60fps. */
+  .lg::after{
+    content:""; position:absolute; inset:-40%; border-radius:inherit;
+    background:radial-gradient(circle at 50% 50%,
+       rgba(255,255,255,.95) 0%, rgba(255,255,255,.55) 18%,
+       rgba(255,255,255,.10) 34%, transparent 55%);
+    opacity:var(--spec-opacity);
+    -webkit-mask:
+      linear-gradient(#000 0 0) content-box,
+      linear-gradient(#000 0 0);
+    pointer-events:none; z-index:3;
+    transform:translate3d(var(--tilt-x), var(--tilt-y), 0);
+    will-change:transform;
+  }
+  /* clip the blob to the rim only: an inner cut-out the size of the panel */
+  .rimclip{
+    position:absolute; inset:0; border-radius:inherit; overflow:hidden;
+    -webkit-mask:linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+            mask:linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite:xor; mask-composite:exclude;
+    padding:1.6px; pointer-events:none; z-index:3;
+  }
+  .rimclip i{
+    position:absolute; inset:-50%; display:block;
+    background:radial-gradient(circle at 50% 50%,
+      rgba(255,255,255,1) 0%, rgba(255,255,255,.6) 16%,
+      rgba(255,255,255,.12) 32%, transparent 52%);
+    opacity:var(--spec-opacity);
+    transform:translate3d(var(--tilt-x), var(--tilt-y), 0);
+    will-change:transform;
+  }
+  .lg::after{ display:none; }   /* the .rimclip version is the real one */
+
+  /* press: illuminate FROM UNDERNEATH + gel compress */
+  .lg[data-press="true"]{
+    transform:scale(.968);
+    background:rgba(255,255,255,.17);
+  }
+  .lg[data-press="true"] .underglow{ opacity:1; }
+  .underglow{
+    position:absolute; inset:0; border-radius:inherit; z-index:1;
+    background:radial-gradient(120% 90% at 50% 115%,
+       rgba(255,255,255,.55) 0%, rgba(255,255,255,.18) 38%, transparent 68%);
+    opacity:0; transition:opacity .22s cubic-bezier(.32,.72,0,1);
+    pointer-events:none;
+  }
+
+  .lg .cap{position:relative; z-index:4; font-size:14px}
+
+  /* three sizes, to show size -> thickness */
+  .s-pill  { width:190px; height:44px;  --r:999px; --blur:6px;  --sh-y:4px;  --sh-b:14px; --sh-a:.26; font-size:13px }
+  .s-card  { width:300px; height:130px; --r:26px;  --blur:10px; --sh-y:8px;  --sh-b:28px; --sh-a:.34 }
+  .s-sheet { width:min(430px,100%); height:150px; --r:34px; --blur:16px; --sh-y:16px; --sh-b:46px; --sh-a:.44 }
+
+  /* ── accessibility, non-negotiable ───────────────────────────────────── */
+  @media (prefers-reduced-motion: reduce){
+    .rimclip i{ transform:none !important; }
+    .lg{ transition:none }
+  }
+  @media (prefers-reduced-transparency: reduce){
+    .lg{ -webkit-backdrop-filter:none; backdrop-filter:none; background:#1C1C1E; }
+    .rimclip i{ opacity:.25 }
+  }
+
+  /* ── panel ───────────────────────────────────────────────────────────── */
+  .panel{background:var(--panel); border:1px solid var(--rule); border-radius:14px; padding:16px}
+  .panel h2{font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--ink2);
+    margin:0 0 12px; font-family:var(--mono); font-weight:500}
+  label{display:block; font-size:12px; color:var(--ink2); margin:12px 0 4px}
+  label b{color:var(--ink); font-family:var(--mono); font-weight:500; float:right}
+  input[type=range]{width:100%; accent-color:#0A84FF}
+  button{
+    font:inherit; font-size:13px; font-weight:600; width:100%; margin-top:12px;
+    background:#0A84FF; color:#fff; border:0; border-radius:999px; padding:11px;
+    min-height:44px; cursor:pointer;
+  }
+  button.sec{background:transparent; color:var(--ink2); border:1px solid var(--rule)}
+  table{width:100%; border-collapse:collapse; font-size:12px; font-family:var(--mono)}
+  td{padding:5px 0; border-bottom:1px solid var(--rule)}
+  td:last-child{text-align:right; color:var(--ink)}
+  td:first-child{color:var(--ink2)}
+  tr:last-child td{border-bottom:0}
+  .ok{color:var(--ok)} .bad{color:var(--bad)}
+  .cap2{font-size:11px; color:var(--ink2); margin-top:10px; line-height:1.5}
+</style>
+</head>
+<body>
+
+<h1>Gyro specular highlight</h1>
+<p class="sub">The highlight is a soft blob clipped to the rim. Tilting the phone <b>translates</b> it &mdash; a compositor-only transform, so it costs nothing per frame. Refraction stays static and cached; only this moves.</p>
+
+<div class="grid">
+  <div>
+    <div class="stage" id="stage">
+      <div class="lg s-pill"  data-lg><span class="underglow"></span><span class="rimclip"><i></i></span><span class="cap">Connection HUD</span></div>
+      <div class="lg s-card"  data-lg><span class="underglow"></span><span class="rimclip"><i></i></span><span class="cap">Inspector panel</span></div>
+      <div class="lg s-sheet" data-lg><span class="underglow"></span><span class="rimclip"><i></i></span><span class="cap">Settings sheet</span></div>
+    </div>
+    <p class="cap2" id="hint">Press and hold any panel &mdash; it compresses and illuminates from underneath, the way the material does on iOS. Drag anywhere on the stage to simulate tilt if this device has no gyro.</p>
+  </div>
+
+  <div>
+    <div class="panel">
+      <h2>Motion source</h2>
+      <table>
+        <tr><td>DeviceOrientation</td><td id="mSrc">&mdash;</td></tr>
+        <tr><td>permission</td><td id="mPerm">&mdash;</td></tr>
+        <tr><td>beta (front/back)</td><td id="mB">&mdash;</td></tr>
+        <tr><td>gamma (left/right)</td><td id="mG">&mdash;</td></tr>
+        <tr><td>highlight offset</td><td id="mOff">&mdash;</td></tr>
+        <tr><td>reduce-motion</td><td id="mRM">&mdash;</td></tr>
+      </table>
+      <button id="enable">Enable device motion</button>
+      <button class="sec" id="sim">Simulate tilt (10s)</button>
+    </div>
+
+    <div class="panel" style="margin-top:16px">
+      <h2>Tuning</h2>
+      <label>Amplitude <b id="vAmp">6px</b></label>
+      <input type="range" id="amp" min="0" max="16" value="6">
+      <p class="cap2">Apple's stated ceiling is <b>6px</b>. Past ~10px it stops reading as a highlight and starts reading as a moving object &mdash; and it is a nausea trigger for motion-sensitive users.</p>
+
+      <label>Smoothing <b id="vSm">0.14</b></label>
+      <input type="range" id="sm" min="2" max="60" value="14">
+      <p class="cap2">Raw gyro is noisy. This is a one-euro-style low pass; too little and the highlight jitters while the phone rests on a table.</p>
+
+      <label>Intensity <b id="vInt">0.85</b></label>
+      <input type="range" id="int" min="0" max="100" value="85">
+    </div>
+
+    <div class="panel" style="margin-top:16px">
+      <h2>Cost</h2>
+      <table>
+        <tr><td>style writes / s</td><td id="cW">&mdash;</td></tr>
+        <tr><td>layout thrash</td><td id="cL">&mdash;</td></tr>
+        <tr><td>property animated</td><td id="cP">transform</td></tr>
+        <tr><td>map rebuilds</td><td id="cM" class="ok">0</td></tr>
+      </table>
+      <p class="cap2">Zero map rebuilds is the whole point. The expensive refraction asset never changes while the phone moves &mdash; only a translate does.</p>
+    </div>
+  </div>
+</div>
+
+<script>
+const root = document.documentElement;
+const stage = document.getElementById('stage');
+const panels = [...document.querySelectorAll('[data-lg]')];
+
+let amp = 6, smooth = 0.14, intensity = 0.85;
+let tx = 0, ty = 0, rawX = 0, rawY = 0;
+let writes = 0, lastWriteReport = performance.now();
+
+const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+document.getElementById('mRM').textContent = reduceMotion ? 'ON — parallax off' : 'off';
+document.getElementById('mRM').className = reduceMotion ? 'bad' : 'ok';
+
+/* ── press: gel compress + underglow ──────────────────────────────────── */
+for (const p of panels){
+  const down = () => p.setAttribute('data-press','true');
+  const up   = () => p.setAttribute('data-press','false');
+  p.addEventListener('pointerdown', e => { down(); p.setPointerCapture(e.pointerId); });
+  p.addEventListener('pointerup', up);
+  p.addEventListener('pointercancel', up);
+  p.addEventListener('pointerleave', up);
+}
+
+/* ── motion input ─────────────────────────────────────────────────────── */
+function setTiltFromAngles(beta, gamma){
+  // beta  = front/back tilt (-180..180), gamma = left/right (-90..90)
+  // Light is fixed in world space, so tilting the device moves the highlight
+  // the OPPOSITE way — that inversion is what sells it as a reflection.
+  rawX = Math.max(-1, Math.min(1, -(gamma ?? 0) / 45));
+  rawY = Math.max(-1, Math.min(1, -((beta ?? 0) - 45) / 45));
+  document.getElementById('mB').textContent = (beta ?? 0).toFixed(1) + '°';
+  document.getElementById('mG').textContent = (gamma ?? 0).toFixed(1) + '°';
+}
+
+function onOrient(e){
+  document.getElementById('mSrc').textContent = 'live';
+  document.getElementById('mSrc').className = 'ok';
+  setTiltFromAngles(e.beta, e.gamma);
+}
+
+document.getElementById('enable').addEventListener('click', async () => {
+  const DOE = window.DeviceOrientationEvent;
+  if (!DOE){
+    document.getElementById('mSrc').textContent = 'unsupported';
+    document.getElementById('mSrc').className = 'bad';
+    return;
+  }
+  if (typeof DOE.requestPermission === 'function'){
+    try{
+      const r = await DOE.requestPermission();
+      document.getElementById('mPerm').textContent = r;
+      document.getElementById('mPerm').className = r === 'granted' ? 'ok' : 'bad';
+      if (r !== 'granted') return;
+    }catch(err){
+      document.getElementById('mPerm').textContent = 'denied';
+      document.getElementById('mPerm').className = 'bad';
+      return;
+    }
+  } else {
+    document.getElementById('mPerm').textContent = 'not required';
+  }
+  window.addEventListener('deviceorientation', onOrient);
+});
+
+/* Desktop fallback: pointer position across the stage stands in for tilt. */
+stage.addEventListener('pointermove', e => {
+  const r = stage.getBoundingClientRect();
+  rawX = ((e.clientX - r.left) / r.width  - .5) * 2;
+  rawY = ((e.clientY - r.top)  / r.height - .5) * 2;
+  const src = document.getElementById('mSrc');
+  if (src.textContent !== 'live') src.textContent = 'pointer (sim)';
+});
+
+/* ── the loop: one style write, transform only ────────────────────────── */
+function tick(){
+  if (!reduceMotion){
+    tx += (rawX * amp - tx) * smooth;
+    ty += (rawY * amp - ty) * smooth;
+    root.style.setProperty('--tilt-x', tx.toFixed(2) + 'px');
+    root.style.setProperty('--tilt-y', ty.toFixed(2) + 'px');
+    writes++;
+  }
+  const now = performance.now();
+  if (now - lastWriteReport > 1000){
+    document.getElementById('cW').textContent = writes + ' / s';
+    document.getElementById('cL').textContent = 'none';
+    document.getElementById('cL').className = 'ok';
+    document.getElementById('mOff').textContent =
+      tx.toFixed(1) + ', ' + ty.toFixed(1) + ' px';
+    writes = 0; lastWriteReport = now;
+  }
+  requestAnimationFrame(tick);
+}
+requestAnimationFrame(tick);
+
+/* simulate a slow tilt so the effect is visible without a phone */
+document.getElementById('sim').addEventListener('click', e => {
+  const t0 = performance.now();
+  e.target.textContent = 'Simulating…';
+  (function step(t){
+    const p = (t - t0) / 10000;
+    rawX = Math.sin(p * Math.PI * 4);
+    rawY = Math.cos(p * Math.PI * 3);
+    if (t - t0 < 10000) requestAnimationFrame(step);
+    else e.target.textContent = 'Simulate tilt (10s)';
+  })(t0);
+});
+
+/* ── tuning ───────────────────────────────────────────────────────────── */
+const bindRange = (id, out, fmt, apply) => {
+  const el = document.getElementById(id);
+  el.addEventListener('input', () => {
+    document.getElementById(out).textContent = fmt(el.value);
+    apply(+el.value);
+  });
+};
+bindRange('amp', 'vAmp', v => v + 'px', v => amp = v);
+bindRange('sm',  'vSm',  v => (v/100).toFixed(2), v => smooth = v/100);
+bindRange('int', 'vInt', v => (v/100).toFixed(2), v => {
+  intensity = v/100;
+  root.style.setProperty('--spec-opacity', intensity.toFixed(2));
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- direct flavor only (our own website's build). Adds back exactly what the
+     in-app self-updater needs: permission to install packages, and the
+     FileProvider that hands the downloaded APK to the system installer.
+     AGP merges this additively into the main manifest for the "direct" flavor
+     only — playstore/aptoide/uptodown/amazonstore never see either of these. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- In-app self-update: download the new APK and hand it to the system installer. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+
+    <application>
+        <!-- Lets us hand the downloaded APK to the system installer via a content://
+             URI (required on Android 7+; file:// URIs are blocked). -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+    </application>
+
+</manifest>

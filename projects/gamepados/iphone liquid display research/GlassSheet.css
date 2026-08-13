@@ -1,0 +1,51 @@
+.sheet-scrim{
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.28);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+/* .glass comes from tokens.css. Only geometry lives here. */
+.sheet{
+  width: 100%;
+  max-width: 520px;
+  border-radius: var(--r-sheet);
+  padding: var(--s-4);
+  font-family: var(--font);
+}
+
+.sheet-head{
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  margin-bottom: var(--s-3);
+}
+
+.sheet-title{
+  flex: 1;
+  margin: 0;
+  font-size: var(--t-headline);
+  font-weight: 600;
+  color: var(--label);
+}
+
+.sheet-close{
+  min-width: var(--tap-min);
+  min-height: var(--tap-min);
+  border: 0;
+  border-radius: var(--r-pill);
+  background: var(--fill-3);
+  color: var(--label-2);
+  font-size: var(--t-subhead);
+}
+
+/* Element sitting ON glass: flat fill so it reads as part of the material. */
+.sheet-body{
+  background: var(--fill-4);
+  border-radius: var(--inner-radius);
+  padding: var(--s-3);
+  color: var(--label);
+  font-size: var(--t-body);
+}

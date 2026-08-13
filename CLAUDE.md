@@ -37,23 +37,47 @@ Full detail: **`context/INVENTORY.md`** (the folder map) and **`context/README.m
 
 ## Folder map
 
-| Folder | What it is |
-|---|---|
-| `hlooo/` | **GamepadOS — the product.** `apps/` (android-client, controller-ui, pc-server, pc-server-rs, ios-client), `website/` (own repo), `tools/`, `releases/`, `marketing/`, `docs/` |
-| `App with login/` | Git fork of `hlooo` — the account-system rebuild. Legitimate, not a duplicate to delete |
-| `context/` | **The durable brain** — inventory, all 108 docs, merged memory, rebuild commands |
-| `flexsquares/` | Flexsquares — sell-the-white-space site |
-| `daily-news-app/` | echonews-ai — unrelated side project |
-| `minor spotify project corizo/` | Corizo academic project |
-| `keys/` | **Plaintext secrets. Never commit, never upload.** |
-| `Android/` | Android SDK + NDK |
-| `capcut/`, `Daddy's retirement/` | Video projects and family media |
+Reorganised 2026-08-13. Folder names with spaces are gone, and `hlooo` — which meant nothing —
+is now `projects/gamepados`.
+
+```
+D:\AKHIL\HP\
+├── CLAUDE.md                 <- this file
+├── context/                  <- the durable brain (inventory, 108 docs, memory, rebuild steps)
+├── projects/
+│   ├── gamepados/            <- THE PRODUCT (was "hlooo")
+│   │   ├── apps/             <- android-client, controller-ui, pc-server, pc-server-rs, ios-client
+│   │   ├── website/          <- its own repo: gamepadadmin01-tech/gamepad
+│   │   ├── tools/            <- pinned JDK 17 + Gradle 9.6.1 (do not delete)
+│   │   ├── releases/  marketing/  store-assets/  docs/
+│   ├── gamepados-account/    <- the account-system fork (was "App with login")
+│   ├── flexsquares/          <- sell-the-white-space site
+│   ├── daily-news-app/       <- echonews-ai, unrelated
+│   └── spotify-corizo/       <- Corizo academic project
+├── toolchain/
+│   ├── android-sdk/          <- SDK root (was "Android/Sdk")
+│   └── android-cli/          <- was "Android/AndroidCLI"
+├── media/capcut/
+├── installers/
+├── keys/                     <- PLAINTEXT SECRETS. Never commit, never upload.
+└── _TO_DELETE_2026-08-13/    <- staged, awaiting Akhil's go-ahead
+```
+
+`projects/gamepados-account/` is a legitimate fork, not a duplicate to delete.
 
 ## Build — the parts that bite
 
 - **Gradle 9.6.1 is mandatory.** The app is on AGP 9.3.1, which requires Gradle 9.5.0+ and rejects
-  every 8.x. `tools/gradle-8.5`, `8.9`, `8.14.4` are kept for reference and **cannot build this
-  app**. There is no `gradlew` — Gradle is invoked by absolute path.
+  every 8.x. The dead 8.5 / 8.9 / 8.14.4 copies were retired on 2026-08-13. There is no `gradlew`
+  — Gradle is invoked by absolute path.
+- **The build hardcodes absolute paths.** After the 2026-08-13 reorganisation these are:
+  `JAVA_HOME=D:\AKHIL\HP\projects\gamepados\tools\jdk\jdk-17.0.19+10`,
+  `ANDROID_HOME=D:\AKHIL\HP\toolchain\android-sdk`, and gradle at
+  `D:\AKHIL\HP\projects\gamepados\tools\gradle-9.6.1\bin\gradle.bat`. If you ever move a folder,
+  the files to fix are `apps/android-client/build_apk.bat` (+ its backup copy),
+  `apps/android-client/local.properties` (`sdk.dir`), `build_exact_composite.py`,
+  `create_stacked_promo.py`, `tools/regression-check.sh`, and `HP/.claude/launch.json`.
+  **This has silently broken the build twice before.**
 - **Always copy `apps/controller-ui/dist/index.html` → `apps/android-client/app/src/main/assets/dist/`
   before building the APK**, or it silently ships the previous UI.
 - **Pillow ≥ 12 needs `PIL.ImageFont` and `PIL._imagingft` bundled** in the PyInstaller spec, or
@@ -66,11 +90,11 @@ Full detail: **`context/INVENTORY.md`** (the folder map) and **`context/README.m
 
 | Path | Remote | Risk |
 |---|---|---|
-| `App with login` | `gamepadadmin01-tech/app-with-login` | 3 commits unpushed |
-| `flexsquares` | `gamepadadmin01-tech/flexspace` | fine |
-| `hlooo/website` | `gamepadadmin01-tech/gamepad` | fine |
-| `hlooo/` (incl. `apps/`) | `gamepadadmin01-tech/gamepados` | **new as of 2026-08-13 — confirm it is pushed** |
-| `keys/`, `capcut/`, `Daddy's retirement/` | none | 🔴 no backup |
+| `D:\AKHIL\HP` (this repo: `CLAUDE.md`, `context/`, `projects/gamepados/`) | **none yet** | 🔴 **created 2026-08-13, NOT pushed — do this first** |
+| `projects/gamepados-account` | `gamepadadmin01-tech/app-with-login` | 3 commits unpushed |
+| `projects/flexsquares` | `gamepadadmin01-tech/flexspace` | fine |
+| `projects/gamepados/website` | `gamepadadmin01-tech/gamepad` | fine |
+| `keys/`, `media/capcut/`, `projects/spotify-corizo/`, `projects/daily-news-app/` | none | 🔴 no backup |
 
 `D:` is a **local** disk. No cloud sync, no version history, no VSS, no File History. An earlier
 memory claimed the old `F:` drive was Google Drive-synced — that was wrong, and it is why the

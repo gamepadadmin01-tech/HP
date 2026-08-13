@@ -1,4 +1,4 @@
-# `context/` — the durable brain of `D:\AKHIL\HP`
+﻿# `context/` — the durable brain of `D:\AKHIL\HP`
 
 Created 2026-08-13.
 
@@ -39,6 +39,6 @@ A new laptop gets it with `git clone`.
 
 ## Where the real risk is
 
-`hlooo/apps/` — the actual GamepadOS product source — had **no version control of any kind** as of
+`projects/gamepados/apps/` — the actual GamepadOS product source — had **no version control of any kind** as of
 2026-08-13. Not a stale repo, not an old remote: nothing. That is being fixed, and until the fix is
 confirmed pushed, one bad delete loses the product. See `INVENTORY.md` for the full risk table.
