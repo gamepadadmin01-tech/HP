@@ -1,0 +1,1175 @@
+From a02534261070998be2a4421ef345f567ee782523 Mon Sep 17 00:00:00 2001
+From: Akhil <gamepadadmin01@gmail.com>
+Date: Fri, 24 Jul 2026 18:40:15 +0530
+Subject: [PATCH 1/3] Phase 0: remove the Supabase account prototype and its
+ unsafe tooling
+
+The account prototype was never wired into App.tsx (App.tsx is byte-identical
+to the hlooo baseline), so none of this code ever rendered. What it did do was
+ship 222 KB of Supabase SDK and a broken AuthProvider into every APK.
+
+Removed:
+- AuthContext/AuthModal/EditProfileModal/ProfileButton/TabProfile/ProfileSection
+  ProfileSection claimed "Cloud Sync Active - Your gamepads are backed up" with
+  no backend. TabProfile hardcoded layout counts, an always-on "Android Phone"
+  device row, an invented "Standard Account" tier, and themes/controller styles
+  that no engine implements.
+- FirstLaunchIntro: a launch-time sign-in gate, the pattern we explicitly reject.
+- supabaseClient.ts + @supabase/supabase-js: identity moves to our own Railway
+  backend, which already has scrypt sessions, email verification and audit logs.
+- inject.js / injectMain.js / fixApp.js: regex patchers for App.tsx. Two of the
+  five anchors could never match (ProfileButton is absent; the portal anchor uses
+  \n against a CRLF file), and fixApp.js exists only to repair the ~60 lines an
+  earlier run deleted. App.tsx is edited surgically from now on, never by regex.
+
+AuthContext shipped `setIsGuest(true)` with no such setter - present verbatim in
+the installed APK as `g=()=>{setIsGuest(!0),v()}`. The build script is `vite
+build` with no `tsc`, so it compiled clean.
+
+Kept GuestAccountMenu.tsx: no auth dependency, matches the spec, no fake data.
+
+Also drops --accept-data-loss from the backend prestart. It ran `prisma db push
+--accept-data-loss` on every deploy, free to drop columns and tables; that is
+not acceptable once User and Layout hold customer data. Full migration baseline
+lands with the Railway database move.
+
+Bundle: 783,892 -> 561,870 bytes. Verified zero occurrences of supabase,
+signInWithPassword, auth_user and setIsGuest in the built output; Android
+assets bundle re-synced and hash-matched.
+---
+ apps/controller-ui/inject.js                  |  97 --------
+ apps/controller-ui/injectMain.js              |  10 -
+ apps/controller-ui/package.json               |   1 -
+ .../src/app/components/AuthContext.tsx        | 100 ---------
+ .../src/app/components/AuthModal.tsx          | 197 ----------------
+ .../src/app/components/EditProfileModal.tsx   | 159 -------------
+ .../src/app/components/FirstLaunchIntro.tsx   | 112 ----------
+ .../src/app/components/ProfileButton.tsx      |  38 ----
+ .../src/app/components/ProfileSection.tsx     |  60 -----
+ .../src/app/components/TabProfile.tsx         | 210 ------------------
+ apps/controller-ui/src/app/supabaseClient.ts  |  21 --
+ apps/controller-ui/src/main.tsx               |  15 +-
+ website/backend/package.json                  |   2 +-
+ 13 files changed, 5 insertions(+), 1017 deletions(-)
+ delete mode 100644 apps/controller-ui/inject.js
+ delete mode 100644 apps/controller-ui/injectMain.js
+ delete mode 100644 apps/controller-ui/src/app/components/AuthContext.tsx
+ delete mode 100644 apps/controller-ui/src/app/components/AuthModal.tsx
+ delete mode 100644 apps/controller-ui/src/app/components/EditProfileModal.tsx
+ delete mode 100644 apps/controller-ui/src/app/components/FirstLaunchIntro.tsx
+ delete mode 100644 apps/controller-ui/src/app/components/ProfileButton.tsx
+ delete mode 100644 apps/controller-ui/src/app/components/ProfileSection.tsx
+ delete mode 100644 apps/controller-ui/src/app/components/TabProfile.tsx
+ delete mode 100644 apps/controller-ui/src/app/supabaseClient.ts
+
+diff --git a/apps/controller-ui/inject.js b/apps/controller-ui/inject.js
+deleted file mode 100644
+index 37a4b14..0000000
+--- a/apps/controller-ui/inject.js
++++ /dev/null
+@@ -1,97 +0,0 @@
+-const fs = require('fs');
+-const path = require('path');
+-
+-const file = 'F:\\App with login\\apps\\controller-ui\\src\\app\\App.tsx';
+-let content = fs.readFileSync(file, 'utf8');
+-
+-// 1. Add Imports
+-if (!content.includes('GuestAccountMenu')) {
+-  const imports = `import { GuestAccountMenu } from './components/GuestAccountMenu';
+-import { TabProfile } from './components/TabProfile';
+-import { EditProfileModal } from './components/EditProfileModal';
+-import { AuthModal } from './components/AuthModal';
+-import { useAuth } from './components/AuthContext';\n`;
+-  content = content.replace('import { motion, AnimatePresence } from "framer-motion";', 'import { motion, AnimatePresence } from "framer-motion";\n' + imports);
+-}
+-
+-// 2. Add DashboardScreen state variables
+-if (!content.includes('isGuest, user, logout')) {
+-  const hookState = `  const { isGuest, user, logout } = useAuth();
+-  const [showGuestMenu, setShowGuestMenu] = useState(false);
+-  const [showEditProfile, setShowEditProfile] = useState(false);
+-  const [showAuth, setShowAuth] = useState(false);`;
+-  
+-  content = content.replace(
+-    /const \[tab, setTab\] = useState<DashTab>\("home"\);\s*const \[slideClass, setSlideClass\] = useState\("tab-r"\);\s*const prevIdxRef = useRef\(0\);/,
+-    `const [tab, setTab] = useState<DashTab>("home");
+-  const [slideClass, setSlideClass] = useState("tab-r");
+-  const prevIdxRef = useRef(0);\n${hookState}`
+-  );
+-}
+-
+-// 3. Change ProfileButton
+-if (!content.includes('setShowGuestMenu(true)')) {
+-  content = content.replace(
+-    /<ProfileButton onClick=\{\(\) => \{[^}]+\}\} \/>/,
+-    `<ProfileButton onClick={() => {
+-            if (isGuest) setShowGuestMenu(true);
+-            else setTab("profile");
+-          }} />`
+-  );
+-}
+-
+-// 4. Add Modals inside Portal
+-if (!content.includes('<GuestAccountMenu')) {
+-  const newPortal = `{createPortal(
+-        <AnimatePresence>
+-          <GuestAccountMenu 
+-            isOpen={showGuestMenu} 
+-            onClose={() => setShowGuestMenu(false)} 
+-            onSignIn={() => { setShowGuestMenu(false); setShowAuth(true); }}
+-            onSignUp={() => { setShowGuestMenu(false); setShowAuth(true); }}
+-          />
+-          <EditProfileModal 
+-            isOpen={showEditProfile}
+-            onClose={() => setShowEditProfile(false)}
+-          />
+-          <AuthModal 
+-            isOpen={showAuth}
+-            onClose={() => setShowAuth(false)}
+-          />`;
+-  content = content.replace('{createPortal(\n        <AnimatePresence>', newPortal);
+-}
+-
+-// 5. Add TabProfile next to TabSession
+-if (!content.includes('<TabProfile')) {
+-  const oldTabSession = `{tab === "session" && (
+-              <TabSession
+-                credits={credits}
+-                setCredits={setCredits}
+-                premium={premium}
+-                setPremium={setPremium}
+-                gyroOn={gyroOn}
+-                onOpenAuth={onOpenAuth}
+-              />
+-            )}`;
+-            
+-  const newTabProfile = `${oldTabSession}
+-            {tab === "profile" && (
+-              <TabProfile
+-                user={user!}
+-                onEditProfile={() => setShowEditProfile(true)}
+-                onChangePassword={() => {}}
+-                onSignOut={() => { logout(); setTab("home"); }}
+-                customPadsCount={customPads.length}
+-                realTelemetry={realTelemetry}
+-                versionName={(window as any).AndroidBridge?.getVersionName?.() || "1.0.0"}
+-              />
+-            )}`;
+-  // Regex to handle whitespace variations
+-  content = content.replace(/\{tab === "session" && \(\s*<TabSession[\s\S]*?\/>\s*\)\}/, newTabProfile);
+-}
+-
+-// 6. Wrap <App> in AuthProvider (in main.tsx instead, or directly in App.tsx)
+-// Wait, we can just edit main.tsx too!
+-
+-fs.writeFileSync(file, content, 'utf8');
+-console.log('App.tsx patched successfully');
+diff --git a/apps/controller-ui/injectMain.js b/apps/controller-ui/injectMain.js
+deleted file mode 100644
+index 6ea48d5..0000000
+--- a/apps/controller-ui/injectMain.js
++++ /dev/null
+@@ -1,10 +0,0 @@
+-const fs = require('fs');
+-const file = 'F:\\App with login\\apps\\controller-ui\\src\\main.tsx';
+-let content = fs.readFileSync(file, 'utf8');
+-
+-if (!content.includes('AuthProvider')) {
+-  content = content.replace('import App from "./app/App";', 'import App from "./app/App";\nimport { AuthProvider } from "./app/components/AuthContext";');
+-  content = content.replace('<App />', '<AuthProvider>\n      <App />\n    </AuthProvider>');
+-  fs.writeFileSync(file, content, 'utf8');
+-  console.log('main.tsx patched successfully');
+-}
+diff --git a/apps/controller-ui/package.json b/apps/controller-ui/package.json
+index 3ad845e..bd05fd8 100644
+--- a/apps/controller-ui/package.json
++++ b/apps/controller-ui/package.json
+@@ -40,7 +40,6 @@
+     "@radix-ui/react-toggle": "1.1.2",
+     "@radix-ui/react-toggle-group": "1.1.2",
+     "@radix-ui/react-tooltip": "1.1.8",
+-    "@supabase/supabase-js": "^2.110.8",
+     "canvas-confetti": "1.9.4",
+     "class-variance-authority": "0.7.1",
+     "clsx": "2.1.1",
+diff --git a/apps/controller-ui/src/app/components/AuthContext.tsx b/apps/controller-ui/src/app/components/AuthContext.tsx
+deleted file mode 100644
+index 03a0ba4..0000000
+--- a/apps/controller-ui/src/app/components/AuthContext.tsx
++++ /dev/null
+@@ -1,100 +0,0 @@
+-import React, { createContext, useContext, useState, useEffect } from "react";
+-import { supabase } from "../supabaseClient";
+-
+-export type User = { 
+-  name: string; 
+-  email: string; 
+-  username?: string; 
+-  theme?: string; 
+-  controllerStyle?: string; 
+-  createdAt?: string; 
+-} | null;
+-
+-interface AuthState {
+-  user: User;
+-  isGuest: boolean;
+-  login: (email: string, pass: string) => Promise<void>;
+-  signup: (name: string, email: string, pass: string) => Promise<void>;
+-  logout: () => void;
+-  updateProfile: (updates: Partial<NonNullable<User>>) => Promise<void>;
+-  continueAsGuest: () => void;
+-  hasSeenIntro: boolean;
+-  markIntroSeen: () => void;
+-}
+-
+-const AuthContext = createContext<AuthState | null>(null);
+-
+-export function AuthProvider({ children }: { children: React.ReactNode }) {
+-  const [user, setUser] = useState<User>(() => {
+-    try {
+-      const saved = localStorage.getItem("auth_user");
+-      return saved ? JSON.parse(saved) : null;
+-    } catch { return null; }
+-  });
+-
+-  const isGuest = user === null;
+-
+-  const [hasSeenIntro, setHasSeenIntro] = useState<boolean>(() => {
+-    try { return localStorage.getItem("auth_intro_seen") === "true"; } catch { return false; }
+-  });
+-
+-  useEffect(() => {
+-    localStorage.setItem("auth_user", user ? JSON.stringify(user) : "");
+-    localStorage.setItem("auth_intro_seen", hasSeenIntro ? "true" : "false");
+-  }, [user, hasSeenIntro]);
+-
+-  const login = async (email: string, pass: string) => {
+-    const { data, error } = await supabase.auth.signInWithPassword({ email, password: pass });
+-    if (error) throw error;
+-    setUser({ name: data.user?.user_metadata?.name || email.split("@")[0], email });
+-  };
+-
+-  const signup = async (name: string, email: string, pass: string) => {
+-    const { data, error } = await supabase.auth.signUp({ 
+-      email, 
+-      password: pass,
+-      options: { data: { name, createdAt: new Date().toISOString() } }
+-    });
+-    if (error) throw error;
+-    setUser({ 
+-      name, 
+-      email,
+-      createdAt: data.user?.user_metadata?.createdAt || new Date().toISOString() 
+-    });
+-  };
+-
+-  const logout = async () => {
+-    await supabase.auth.signOut();
+-    setUser(null);
+-  };
+-
+-  const updateProfile = async (updates: Partial<NonNullable<User>>) => {
+-    if (!user) return;
+-    const { data, error } = await supabase.auth.updateUser({
+-      data: updates
+-    });
+-    if (error) throw error;
+-    setUser({ ...user, ...updates });
+-  };
+-
+-  const continueAsGuest = () => {
+-    setIsGuest(true);
+-    markIntroSeen();
+-  };
+-
+-  const markIntroSeen = () => {
+-    setHasSeenIntro(true);
+-  };
+-
+-  return (
+-    <AuthContext.Provider value={{ user, isGuest, login, signup, logout, updateProfile, continueAsGuest, hasSeenIntro, markIntroSeen }}>
+-      {children}
+-    </AuthContext.Provider>
+-  );
+-}
+-
+-export function useAuth() {
+-  const ctx = useContext(AuthContext);
+-  if (!ctx) throw new Error("useAuth must be within AuthProvider");
+-  return ctx;
+-}
+diff --git a/apps/controller-ui/src/app/components/AuthModal.tsx b/apps/controller-ui/src/app/components/AuthModal.tsx
+deleted file mode 100644
+index bdfd743..0000000
+--- a/apps/controller-ui/src/app/components/AuthModal.tsx
++++ /dev/null
+@@ -1,197 +0,0 @@
+-import React, { useState } from "react";
+-import { motion, AnimatePresence } from "framer-motion";
+-import { X, Mail, Lock, User as UserIcon, LogIn, UserPlus } from "lucide-react";
+-import { useAuth } from "./AuthContext";
+-
+-export function AuthModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
+-  const { login, signup } = useAuth();
+-  const [mode, setMode] = useState<"signin" | "signup">("signin");
+-  const [email, setEmail] = useState("");
+-  const [pass, setPass] = useState("");
+-  const [name, setName] = useState("");
+-  const [loading, setLoading] = useState(false);
+-  const [error, setError] = useState("");
+-
+-  const handleSubmit = async (e: React.FormEvent) => {
+-    e.preventDefault();
+-    setError("");
+-    setLoading(true);
+-    try {
+-      if (mode === "signin") {
+-        await login(email, pass);
+-      } else {
+-        await signup(name, email, pass);
+-      }
+-      onClose();
+-    } catch (err) {
+-      setError("An error occurred.");
+-    } finally {
+-      setLoading(false);
+-    }
+-  };
+-
+-  return (
+-    <AnimatePresence>
+-      {isOpen && (
+-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+-          <motion.div 
+-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+-            onClick={onClose}
+-            className="absolute inset-0 bg-black/60 backdrop-blur-md"
+-          />
+-          <motion.div 
+-            initial={{ opacity: 0, scale: 0.95, y: 10 }}
+-            animate={{ opacity: 1, scale: 1, y: 0 }}
+-            exit={{ opacity: 0, scale: 0.95, y: 10 }}
+-            onClick={(e: React.MouseEvent) => e.stopPropagation()}
+-            className="relative w-full max-w-sm rounded-2xl overflow-hidden shadow-2xl"
+-            style={{ 
+-              background: "#151A23",
+-              border: "1px solid rgba(79,134,198,0.12)",
+-              fontFamily: "'Inter',sans-serif"
+-            }}
+-          >
+-            {/* Close button */}
+-            <button
+-              onClick={(e: React.MouseEvent) => { e.stopPropagation(); onClose(); }}
+-              onPointerDown={(e: React.PointerEvent) => { e.stopPropagation(); onClose(); }}
+-              className="absolute top-3 right-3 p-3 rounded-full transition-all z-20"
+-              style={{
+-                touchAction: "manipulation", minWidth: 44, minHeight: 44,
+-                background: "rgba(79,134,198,0.08)",
+-                border: "1px solid rgba(79,134,198,0.15)",
+-                color: "#7C8AA0"
+-              }}
+-              aria-label="Close"
+-            >
+-              <X size={18} />
+-            </button>
+-            
+-            <div className="p-6 pt-8 pb-4 relative z-10">
+-              {/* Icon */}
+-              <div className="flex justify-center mb-5">
+-                <div className="w-12 h-12 rounded-xl flex items-center justify-center"
+-                  style={{
+-                    background: "rgba(79,134,198,0.12)",
+-                    border: "1px solid rgba(79,134,198,0.25)",
+-                    boxShadow: "0 0 20px rgba(79,134,198,0.15)"
+-                  }}
+-                >
+-                  {mode === "signin"
+-                    ? <LogIn size={22} style={{ color: "#4F86C6" }} />
+-                    : <UserPlus size={22} style={{ color: "#4F86C6" }} />}
+-                </div>
+-              </div>
+-              
+-              {/* Title */}
+-              <h2 className="text-xl font-bold text-center mb-1.5"
+-                style={{ fontFamily: "'Space Grotesk','Inter',sans-serif", color: "#E2E8F0" }}
+-              >
+-                {mode === "signin" ? "Welcome Back" : "Create Account"}
+-              </h2>
+-              <p className="text-center text-xs mb-6" style={{ color: "#7C8AA0" }}>
+-                {mode === "signin"
+-                  ? "Sign in to sync your custom gamepads across devices."
+-                  : "Join to save and share your custom layouts."}
+-              </p>
+-
+-              <form onSubmit={handleSubmit} className="space-y-3">
+-                {error && (
+-                  <div className="p-3 rounded-xl text-sm text-center"
+-                    style={{
+-                      background: "rgba(224,87,79,0.12)",
+-                      border: "1px solid rgba(224,87,79,0.25)",
+-                      color: "#E0574F"
+-                    }}
+-                  >
+-                    {error}
+-                  </div>
+-                )}
+-                
+-                {mode === "signup" && (
+-                  <div className="relative">
+-                    <UserIcon size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2" style={{ color: "#7C8AA0" }} />
+-                    <input 
+-                      type="text" placeholder="Full Name" required value={name} onChange={e => setName(e.target.value)}
+-                      className="w-full rounded-xl py-3 pl-10 pr-4 text-sm focus:outline-none transition-all"
+-                      style={{
+-                        background: "#1B2230",
+-                        border: "1px solid rgba(79,134,198,0.12)",
+-                        color: "#E2E8F0",
+-                        fontFamily: "'Inter',sans-serif"
+-                      }}
+-                      onFocus={e => { e.currentTarget.style.borderColor = "rgba(79,134,198,0.4)"; e.currentTarget.style.boxShadow = "0 0 0 2px rgba(79,134,198,0.15)"; }}
+-                      onBlur={e => { e.currentTarget.style.borderColor = "rgba(79,134,198,0.12)"; e.currentTarget.style.boxShadow = "none"; }}
+-                    />
+-                  </div>
+-                )}
+-                <div className="relative">
+-                  <Mail size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2" style={{ color: "#7C8AA0" }} />
+-                  <input 
+-                    type="email" placeholder="Email Address" required value={email} onChange={e => setEmail(e.target.value)}
+-                    className="w-full rounded-xl py-3 pl-10 pr-4 text-sm focus:outline-none transition-all"
+-                    style={{
+-                      background: "#1B2230",
+-                      border: "1px solid rgba(79,134,198,0.12)",
+-                      color: "#E2E8F0",
+-                      fontFamily: "'Inter',sans-serif"
+-                    }}
+-                    onFocus={e => { e.currentTarget.style.borderColor = "rgba(79,134,198,0.4)"; e.currentTarget.style.boxShadow = "0 0 0 2px rgba(79,134,198,0.15)"; }}
+-                    onBlur={e => { e.currentTarget.style.borderColor = "rgba(79,134,198,0.12)"; e.currentTarget.style.boxShadow = "none"; }}
+-                  />
+-                </div>
+-                <div className="relative">
+-                  <Lock size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2" style={{ color: "#7C8AA0" }} />
+-                  <input 
+-                    type="password" placeholder="Password" required value={pass} onChange={e => setPass(e.target.value)}
+-                    className="w-full rounded-xl py-3 pl-10 pr-4 text-sm focus:outline-none transition-all"
+-                    style={{
+-                      background: "#1B2230",
+-                      border: "1px solid rgba(79,134,198,0.12)",
+-                      color: "#E2E8F0",
+-                      fontFamily: "'Inter',sans-serif"
+-                    }}
+-                    onFocus={e => { e.currentTarget.style.borderColor = "rgba(79,134,198,0.4)"; e.currentTarget.style.boxShadow = "0 0 0 2px rgba(79,134,198,0.15)"; }}
+-                    onBlur={e => { e.currentTarget.style.borderColor = "rgba(79,134,198,0.12)"; e.currentTarget.style.boxShadow = "none"; }}
+-                  />
+-                </div>
+-                
+-                <button 
+-                  type="submit" disabled={loading}
+-                  className="w-full py-3 mt-1 rounded-xl font-bold text-sm tracking-wide transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+-                  style={{
+-                    fontFamily: "'Space Grotesk','Inter',sans-serif",
+-                    background: "#4F86C6",
+-                    color: "#0B0E14",
+-                    boxShadow: "0 0 16px rgba(79,134,198,0.3)"
+-                  }}
+-                >
+-                  {loading ? "Please wait..." : mode === "signin" ? "Sign In" : "Create Account"}
+-                </button>
+-              </form>
+-            </div>
+-            
+-            {/* Footer toggle */}
+-            <div className="p-4 text-center relative z-10"
+-              style={{
+-                borderTop: "1px solid rgba(79,134,198,0.08)",
+-                background: "#10141C"
+-              }}
+-            >
+-              <p className="text-xs" style={{ color: "#7C8AA0" }}>
+-                {mode === "signin" ? "Don't have an account?" : "Already have an account?"}{" "}
+-                <button 
+-                  onClick={() => setMode(mode === "signin" ? "signup" : "signin")}
+-                  className="font-semibold hover:opacity-80 transition-opacity"
+-                  style={{ color: "#4F86C6" }}
+-                >
+-                  {mode === "signin" ? "Sign up" : "Sign in"}
+-                </button>
+-              </p>
+-            </div>
+-          </motion.div>
+-        </div>
+-      )}
+-    </AnimatePresence>
+-  );
+-}
+diff --git a/apps/controller-ui/src/app/components/EditProfileModal.tsx b/apps/controller-ui/src/app/components/EditProfileModal.tsx
+deleted file mode 100644
+index 33abbc7..0000000
+--- a/apps/controller-ui/src/app/components/EditProfileModal.tsx
++++ /dev/null
+@@ -1,159 +0,0 @@
+-import React, { useState } from "react";
+-import { motion, AnimatePresence } from "framer-motion";
+-import { X, User, AtSign, Palette, Gamepad2 } from "lucide-react";
+-import { useAuth, User as UserType } from "./AuthContext";
+-
+-export function EditProfileModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
+-  const { user, updateProfile } = useAuth();
+-  const [name, setName] = useState(user?.name || "");
+-  const [username, setUsername] = useState(user?.username || "");
+-  const [theme, setTheme] = useState(user?.theme || "Graphite Steel");
+-  const [controllerStyle, setControllerStyle] = useState(user?.controllerStyle || "Modern");
+-  const [loading, setLoading] = useState(false);
+-  const [error, setError] = useState("");
+-
+-  const handleSubmit = async (e: React.FormEvent) => {
+-    e.preventDefault();
+-    setError("");
+-    setLoading(true);
+-    try {
+-      await updateProfile({ name, username, theme, controllerStyle });
+-      onClose();
+-    } catch (err) {
+-      setError("Failed to update profile.");
+-    } finally {
+-      setLoading(false);
+-    }
+-  };
+-
+-  return (
+-    <AnimatePresence>
+-      {isOpen && (
+-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+-          <motion.div 
+-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+-            onClick={onClose}
+-            className="absolute inset-0 bg-black/60 backdrop-blur-md"
+-          />
+-          <motion.div 
+-            initial={{ opacity: 0, scale: 0.95, y: 10 }}
+-            animate={{ opacity: 1, scale: 1, y: 0 }}
+-            exit={{ opacity: 0, scale: 0.95, y: 10 }}
+-            onClick={(e: React.MouseEvent) => e.stopPropagation()}
+-            className="relative w-full max-w-sm rounded-2xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]"
+-            style={{ 
+-              background: "#151A23",
+-              border: "1px solid rgba(79,134,198,0.12)",
+-              fontFamily: "'Inter',sans-serif"
+-            }}
+-          >
+-            {/* Header */}
+-            <div className="flex-shrink-0 p-5 border-b border-white/5 flex items-center justify-between" style={{ background: "#10141C" }}>
+-              <h2 className="text-lg font-bold" style={{ fontFamily: "'Space Grotesk', sans-serif", color: "#E2E8F0" }}>Edit Profile</h2>
+-              <button onClick={onClose} className="p-2 -mr-2 rounded-full text-white/50 hover:bg-white/5 hover:text-white transition-colors">
+-                <X size={18} />
+-              </button>
+-            </div>
+-            
+-            {/* Scrollable Form */}
+-            <div className="flex-1 overflow-y-auto p-5">
+-              <form id="edit-profile-form" onSubmit={handleSubmit} className="space-y-4">
+-                {error && (
+-                  <div className="p-3 rounded-xl text-sm text-center" style={{ background: "rgba(224,87,79,0.12)", border: "1px solid rgba(224,87,79,0.25)", color: "#E0574F" }}>
+-                    {error}
+-                  </div>
+-                )}
+-                
+-                {/* Avatar Placeholder */}
+-                <div className="flex flex-col items-center mb-6">
+-                  <div className="w-20 h-20 rounded-full flex items-center justify-center mb-2 shadow-lg relative"
+-                    style={{ background: "linear-gradient(135deg, #4F86C6 0%, #2A4B75 100%)", border: "2px solid rgba(79,134,198,0.4)" }}>
+-                    <span className="text-3xl font-bold text-white shadow-sm" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+-                      {(name || user?.name || "A").charAt(0).toUpperCase()}
+-                    </span>
+-                    <div className="absolute -bottom-1 -right-1 bg-[#151A23] rounded-full p-1 border border-white/10 text-primary">
+-                      <Palette size={12} />
+-                    </div>
+-                  </div>
+-                  <p className="text-[10px] text-white/40 uppercase tracking-widest font-bold">Custom avatars coming soon</p>
+-                </div>
+-
+-                <div className="space-y-1">
+-                  <label className="text-xs font-bold px-1" style={{ color: "#7C8AA0" }}>Display Name</label>
+-                  <div className="relative">
+-                    <User size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2" style={{ color: "#7C8AA0" }} />
+-                    <input 
+-                      type="text" required value={name} onChange={e => setName(e.target.value)}
+-                      className="w-full rounded-xl py-2.5 pl-10 pr-4 text-sm focus:outline-none transition-all"
+-                      style={{ background: "#1B2230", border: "1px solid rgba(79,134,198,0.12)", color: "#E2E8F0" }}
+-                    />
+-                  </div>
+-                </div>
+-
+-                <div className="space-y-1">
+-                  <label className="text-xs font-bold px-1" style={{ color: "#7C8AA0" }}>Username (Optional)</label>
+-                  <div className="relative">
+-                    <AtSign size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2" style={{ color: "#7C8AA0" }} />
+-                    <input 
+-                      type="text" placeholder="GamerTag" value={username} onChange={e => setUsername(e.target.value)}
+-                      className="w-full rounded-xl py-2.5 pl-10 pr-4 text-sm focus:outline-none transition-all"
+-                      style={{ background: "#1B2230", border: "1px solid rgba(79,134,198,0.12)", color: "#E2E8F0" }}
+-                    />
+-                  </div>
+-                </div>
+-
+-                <div className="space-y-1 pt-2">
+-                  <label className="text-xs font-bold px-1" style={{ color: "#7C8AA0" }}>Preferred Theme</label>
+-                  <div className="relative">
+-                    <Palette size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2" style={{ color: "#7C8AA0" }} />
+-                    <select 
+-                      value={theme} onChange={e => setTheme(e.target.value)}
+-                      className="w-full rounded-xl py-2.5 pl-10 pr-4 text-sm focus:outline-none transition-all appearance-none"
+-                      style={{ background: "#1B2230", border: "1px solid rgba(79,134,198,0.12)", color: "#E2E8F0" }}
+-                    >
+-                      <option>Graphite Steel</option>
+-                      <option>Midnight Blue</option>
+-                      <option>Crimson Red</option>
+-                    </select>
+-                  </div>
+-                </div>
+-
+-                <div className="space-y-1">
+-                  <label className="text-xs font-bold px-1" style={{ color: "#7C8AA0" }}>Preferred Controller Style</label>
+-                  <div className="relative">
+-                    <Gamepad2 size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2" style={{ color: "#7C8AA0" }} />
+-                    <select 
+-                      value={controllerStyle} onChange={e => setControllerStyle(e.target.value)}
+-                      className="w-full rounded-xl py-2.5 pl-10 pr-4 text-sm focus:outline-none transition-all appearance-none"
+-                      style={{ background: "#1B2230", border: "1px solid rgba(79,134,198,0.12)", color: "#E2E8F0" }}
+-                    >
+-                      <option>Modern</option>
+-                      <option>Classic Arcade</option>
+-                      <option>FPS Pro</option>
+-                    </select>
+-                  </div>
+-                </div>
+-
+-              </form>
+-            </div>
+-
+-            {/* Footer Action */}
+-            <div className="flex-shrink-0 p-4 border-t border-white/5" style={{ background: "#10141C" }}>
+-              <button 
+-                type="submit" form="edit-profile-form" disabled={loading}
+-                className="w-full py-3 rounded-xl font-bold text-sm tracking-wide transition-all disabled:opacity-50"
+-                style={{
+-                  fontFamily: "'Space Grotesk','Inter',sans-serif",
+-                  background: "#4F86C6", color: "#0B0E14", boxShadow: "0 0 16px rgba(79,134,198,0.3)"
+-                }}
+-              >
+-                {loading ? "Saving..." : "Save Changes"}
+-              </button>
+-            </div>
+-
+-          </motion.div>
+-        </div>
+-      )}
+-    </AnimatePresence>
+-  );
+-}
+diff --git a/apps/controller-ui/src/app/components/FirstLaunchIntro.tsx b/apps/controller-ui/src/app/components/FirstLaunchIntro.tsx
+deleted file mode 100644
+index 4170924..0000000
+--- a/apps/controller-ui/src/app/components/FirstLaunchIntro.tsx
++++ /dev/null
+@@ -1,112 +0,0 @@
+-import React from "react";
+-import { motion, AnimatePresence } from "framer-motion";
+-import { Cloud, Save, Shield, ArrowRight } from "lucide-react";
+-import { useAuth } from "./AuthContext";
+-
+-export function FirstLaunchIntro({ isOpen, onSignIn, onContinueGuest }: { isOpen: boolean; onSignIn: () => void; onContinueGuest: () => void }) {
+-  const { markIntroSeen } = useAuth();
+-
+-  const handleContinueGuest = () => {
+-    markIntroSeen();
+-    onContinueGuest();
+-  };
+-
+-  const handleSignIn = () => {
+-    markIntroSeen();
+-    onSignIn();
+-  };
+-
+-  return (
+-    <AnimatePresence>
+-      {isOpen && (
+-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+-          <motion.div 
+-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+-            className="absolute inset-0 bg-black/80 backdrop-blur-md"
+-          />
+-          <motion.div 
+-            initial={{ opacity: 0, scale: 0.95, y: 10 }}
+-            animate={{ opacity: 1, scale: 1, y: 0 }}
+-            exit={{ opacity: 0, scale: 0.95, y: 10 }}
+-            className="relative w-full max-w-md rounded-2xl overflow-hidden"
+-            style={{ 
+-              background: "#151A23",
+-              border: "1px solid rgba(79,134,198,0.12)",
+-              boxShadow: "0 0 50px rgba(79,134,198,0.1)",
+-              fontFamily: "'Inter',sans-serif"
+-            }}
+-          >
+-            <div className="p-8 pb-6 relative z-10 text-center">
+-              {/* Icon */}
+-              <div className="flex justify-center mb-6">
+-                <div className="w-16 h-16 rounded-2xl flex items-center justify-center"
+-                  style={{
+-                    background: "rgba(79,134,198,0.12)",
+-                    border: "1px solid rgba(79,134,198,0.25)",
+-                    boxShadow: "0 0 30px rgba(79,134,198,0.2)"
+-                  }}
+-                >
+-                  <Cloud size={32} style={{ color: "#4F86C6" }} />
+-                </div>
+-              </div>
+-              
+-              {/* Title */}
+-              <h2 className="text-2xl font-bold mb-4"
+-                style={{ fontFamily: "'Space Grotesk','Inter',sans-serif", color: "#E2E8F0" }}
+-              >
+-                Never Lose Your Layouts
+-              </h2>
+-              <p className="mb-8 leading-relaxed text-sm" style={{ color: "#7C8AA0" }}>
+-                Sign in to automatically back up your custom controller layouts to the cloud. Access them on any device and never lose your perfect setup.
+-              </p>
+-
+-              {/* Feature bullets */}
+-              <div className="space-y-4 text-left mb-8">
+-                <div className="flex items-center gap-3">
+-                  <div className="p-2 rounded-lg" style={{ background: "rgba(52,169,138,0.1)", border: "1px solid rgba(52,169,138,0.2)" }}>
+-                    <Save size={18} style={{ color: "#34A98A" }} />
+-                  </div>
+-                  <span className="text-sm" style={{ color: "#93A2BB" }}>Automatic cloud sync</span>
+-                </div>
+-                <div className="flex items-center gap-3">
+-                  <div className="p-2 rounded-lg" style={{ background: "rgba(79,134,198,0.1)", border: "1px solid rgba(79,134,198,0.2)" }}>
+-                    <Shield size={18} style={{ color: "#4F86C6" }} />
+-                  </div>
+-                  <span className="text-sm" style={{ color: "#93A2BB" }}>Secure and private</span>
+-                </div>
+-              </div>
+-
+-              {/* CTA Buttons */}
+-              <div className="space-y-3">
+-                <button 
+-                  onClick={handleSignIn}
+-                  className="w-full flex items-center justify-center gap-2 py-3 rounded-xl font-bold text-sm tracking-wide transition-all"
+-                  style={{
+-                    fontFamily: "'Space Grotesk','Inter',sans-serif",
+-                    background: "#4F86C6",
+-                    color: "#0B0E14",
+-                    boxShadow: "0 0 20px rgba(79,134,198,0.3)"
+-                  }}
+-                >
+-                  Sign In or Create Account
+-                  <ArrowRight size={18} />
+-                </button>
+-                <button 
+-                  onClick={handleContinueGuest}
+-                  className="w-full py-3 rounded-xl font-semibold text-sm transition-all"
+-                  style={{
+-                    background: "rgba(79,134,198,0.06)",
+-                    color: "#7C8AA0",
+-                    border: "1px solid rgba(79,134,198,0.12)"
+-                  }}
+-                >
+-                  Continue as Guest
+-                </button>
+-              </div>
+-            </div>
+-          </motion.div>
+-        </div>
+-      )}
+-    </AnimatePresence>
+-  );
+-}
+diff --git a/apps/controller-ui/src/app/components/ProfileButton.tsx b/apps/controller-ui/src/app/components/ProfileButton.tsx
+deleted file mode 100644
+index d527d20..0000000
+--- a/apps/controller-ui/src/app/components/ProfileButton.tsx
++++ /dev/null
+@@ -1,38 +0,0 @@
+-import React from "react";
+-import { User } from "lucide-react";
+-import { useAuth } from "./AuthContext";
+-
+-export function ProfileButton({ onClick }: { onClick: () => void }) {
+-  const { user } = useAuth();
+-
+-  return (
+-    <button 
+-      onClick={onClick}
+-      className={`flex items-center gap-2 px-3 py-1.5 rounded-full transition-all duration-200 active:scale-95 ${
+-        user 
+-          ? "bg-primary/15 hover:bg-primary/25 border border-primary/40 shadow-[0_0_12px_rgba(37,99,235,0.2)]" 
+-          : "bg-white/8 hover:bg-white/15 border border-white/15 hover:border-white/30"
+-      }`}
+-    >
+-      {user ? (
+-        <>
+-          <div className="w-6 h-6 rounded-full bg-primary flex items-center justify-center text-white font-bold text-xs shadow-sm" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+-            {user.name.charAt(0).toUpperCase()}
+-          </div>
+-          <span className="text-xs font-bold text-white max-w-[90px] truncate tracking-wide" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+-            {user.name}
+-          </span>
+-        </>
+-      ) : (
+-        <>
+-          <div className="w-5 h-5 rounded-full bg-white/15 flex items-center justify-center text-white/80">
+-            <User size={12} />
+-          </div>
+-          <span className="text-xs font-bold text-white/90 tracking-wide pr-1" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+-            Guest
+-          </span>
+-        </>
+-      )}
+-    </button>
+-  );
+-}
+diff --git a/apps/controller-ui/src/app/components/ProfileSection.tsx b/apps/controller-ui/src/app/components/ProfileSection.tsx
+deleted file mode 100644
+index 2149f07..0000000
+--- a/apps/controller-ui/src/app/components/ProfileSection.tsx
++++ /dev/null
+@@ -1,60 +0,0 @@
+-import React from "react";
+-import { useAuth } from "./AuthContext";
+-import { User, Mail, Cloud, LogOut, LogIn } from "lucide-react";
+-
+-export function ProfileSection({ onOpenAuth }: { onOpenAuth: () => void }) {
+-  const { user, logout } = useAuth();
+-
+-  return (
+-    <div className="bg-white/5 border border-white/10 rounded-2xl p-6 mb-6">
+-      <h3 className="text-lg font-bold text-white mb-4" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>Account & Sync</h3>
+-      
+-      {user ? (
+-        <div className="space-y-6">
+-          <div className="flex items-center gap-4">
+-            <div className="w-14 h-14 rounded-full bg-primary/20 flex items-center justify-center text-primary text-xl font-bold border border-primary/30 shadow-[0_0_15px_rgba(37,99,235,0.2)]">
+-              {user.name.charAt(0).toUpperCase()}
+-            </div>
+-            <div>
+-              <div className="text-white font-semibold text-lg">{user.name}</div>
+-              <div className="text-white/50 text-sm flex items-center gap-1.5 mt-0.5">
+-                <Mail size={12} /> {user.email}
+-              </div>
+-            </div>
+-          </div>
+-          
+-          <div className="flex items-center justify-between p-4 rounded-xl bg-primary/10 border border-primary/20">
+-            <div className="flex items-center gap-3">
+-              <Cloud className="text-primary" size={20} />
+-              <div>
+-                <div className="text-white text-sm font-semibold">Cloud Sync Active</div>
+-                <div className="text-white/50 text-xs">Your gamepads are backed up</div>
+-              </div>
+-            </div>
+-            <div className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)] animate-pulse" />
+-          </div>
+-
+-          <button 
+-            onClick={logout}
+-            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20 transition-all font-semibold text-sm"
+-          >
+-            <LogOut size={16} /> Sign Out
+-          </button>
+-        </div>
+-      ) : (
+-        <div className="text-center py-6">
+-          <div className="w-16 h-16 rounded-full bg-white/5 flex items-center justify-center text-white/30 mx-auto mb-4">
+-            <User size={32} />
+-          </div>
+-          <p className="text-white/70 mb-4 text-sm">You are currently using GamepadOS as a guest. Sign in to sync your layouts across devices.</p>
+-          <button 
+-            onClick={onOpenAuth}
+-            className="flex items-center gap-2 px-6 py-2.5 mx-auto rounded-xl bg-primary text-white font-bold hover:bg-primary/90 transition-all shadow-[0_0_15px_rgba(37,99,235,0.3)]"
+-          >
+-            <LogIn size={18} /> Sign In / Sign Up
+-          </button>
+-        </div>
+-      )}
+-    </div>
+-  );
+-}
+diff --git a/apps/controller-ui/src/app/components/TabProfile.tsx b/apps/controller-ui/src/app/components/TabProfile.tsx
+deleted file mode 100644
+index d2b0364..0000000
+--- a/apps/controller-ui/src/app/components/TabProfile.tsx
++++ /dev/null
+@@ -1,210 +0,0 @@
+-import React from "react";
+-import { User as UserType } from "./AuthContext";
+-import { User, LogOut, Key, Settings, Server, Monitor, Gamepad2, Cloud, HardDrive, Edit3, Shield, MonitorSmartphone, Smartphone, Terminal, History, Users, Download, Trash2, Info } from "lucide-react";
+-
+-export function TabProfile({
+-  user,
+-  onEditProfile,
+-  onChangePassword,
+-  onSignOut,
+-  customPadsCount,
+-  realTelemetry,
+-  versionName
+-}: {
+-  user: UserType;
+-  onEditProfile: () => void;
+-  onChangePassword: () => void;
+-  onSignOut: () => void;
+-  customPadsCount: number;
+-  realTelemetry: any;
+-  versionName: string;
+-}) {
+-  if (!user) return null;
+-
+-  const connectedType = realTelemetry?.connectionType; // "usbdebug" | "wired" | "wireless" | "none"
+-  const isConnected = !!(realTelemetry && realTelemetry.linkAlive);
+-
+-  return (
+-    <div className="space-y-6 pb-10">
+-      
+-      {/* Header Profile Info */}
+-      <div className="flex flex-col items-center pt-2">
+-        <div className="w-20 h-20 rounded-full flex items-center justify-center mb-3 shadow-lg"
+-          style={{ 
+-            background: "linear-gradient(135deg, #4F86C6 0%, #2A4B75 100%)",
+-            border: "2px solid rgba(79,134,198,0.4)"
+-          }}>
+-          <span className="text-3xl font-bold text-white shadow-sm" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+-            {user.name.charAt(0).toUpperCase()}
+-          </span>
+-        </div>
+-        <h2 className="text-xl font-bold text-white mb-1" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+-          {user.name}
+-        </h2>
+-        {user.username && <p className="text-sm font-medium" style={{ color: "#4F86C6" }}>@{user.username}</p>}
+-        <p className="text-xs mt-1" style={{ color: "#7C8AA0" }}>{user.email}</p>
+-        <div className="mt-3 px-3 py-1 rounded-full text-[10px] font-bold tracking-widest uppercase bg-white/5 border border-white/10 text-white/70">
+-          Standard Account
+-        </div>
+-      </div>
+-
+-      {/* Account Actions */}
+-      <div className="grid grid-cols-2 gap-2">
+-        <button onClick={onEditProfile} className="flex items-center justify-center gap-2 p-3 rounded-xl bg-white/5 hover:bg-white/10 transition-colors border border-white/5 text-sm font-medium text-white/90">
+-          <Edit3 size={16} className="text-primary" /> Edit Profile
+-        </button>
+-        <button onClick={onChangePassword} className="flex items-center justify-center gap-2 p-3 rounded-xl bg-white/5 hover:bg-white/10 transition-colors border border-white/5 text-sm font-medium text-white/90">
+-          <Key size={16} className="text-primary" /> Password
+-        </button>
+-        <button onClick={onSignOut} className="col-span-2 flex items-center justify-center gap-2 p-3 rounded-xl bg-red-500/10 hover:bg-red-500/20 transition-colors border border-red-500/20 text-sm font-medium text-red-400 mt-2">
+-          <LogOut size={16} /> Sign Out
+-        </button>
+-      </div>
+-
+-      {/* Controller Library */}
+-      <section>
+-        <h3 className="text-xs font-bold tracking-widest uppercase mb-3 px-1" style={{ color: "#7C8AA0" }}>Controller Library</h3>
+-        <div className="grid grid-cols-2 gap-2">
+-          <StatCard title="Standard Layouts" value="1" icon={<Gamepad2 size={16} />} />
+-          <StatCard title="Custom Layouts" value={customPadsCount.toString()} icon={<Edit3 size={16} />} />
+-          <StatCard title="Favorites" value="0" icon={<History size={16} />} />
+-          <StatCard title="Cloud Saved" value="0" icon={<Cloud size={16} />} />
+-        </div>
+-      </section>
+-
+-      {/* Connected Devices */}
+-      <section>
+-        <h3 className="text-xs font-bold tracking-widest uppercase mb-3 px-1" style={{ color: "#7C8AA0" }}>Connected Devices</h3>
+-        <div className="rounded-xl overflow-hidden border border-white/5 bg-black/20">
+-          
+-          <DeviceRow icon={<Smartphone size={18} />} name="Android Phone" subtitle="Current Device" status="Active" color="#34A98A" />
+-          
+-          {isConnected ? (
+-            <DeviceRow 
+-              icon={<Monitor size={18} />} 
+-              name="Windows PC" 
+-              subtitle={connectedType === "wireless" ? "Connected via Wi-Fi" : "Connected via USB"} 
+-              status="Connected" 
+-              color="#4F86C6" 
+-            />
+-          ) : (
+-            <div className="p-4 flex flex-col items-center justify-center text-center opacity-70">
+-              <MonitorSmartphone size={24} className="mb-2 text-white/40" />
+-              <p className="text-sm font-medium text-white/80 mb-1">No devices linked yet</p>
+-              <p className="text-xs" style={{ color: "#7C8AA0" }}>Connect a PC Server to see it here.</p>
+-            </div>
+-          )}
+-        </div>
+-      </section>
+-
+-      {/* Backup & Cloud */}
+-      <section>
+-        <h3 className="text-xs font-bold tracking-widest uppercase mb-3 px-1" style={{ color: "#7C8AA0" }}>Backup & Cloud</h3>
+-        <div className="p-4 rounded-xl border border-white/5 bg-black/20 flex items-center gap-4">
+-          <div className="p-3 rounded-full bg-primary/10 border border-primary/20">
+-            <Cloud size={20} className="text-primary" />
+-          </div>
+-          <div className="flex-1">
+-            <h4 className="text-sm font-bold text-white/90">Cloud Sync</h4>
+-            <p className="text-xs mt-0.5" style={{ color: "#7C8AA0" }}>Not Configured</p>
+-          </div>
+-          <button className="text-xs font-bold px-3 py-1.5 rounded-lg bg-primary/20 text-primary border border-primary/30">
+-            Enable
+-          </button>
+-        </div>
+-      </section>
+-
+-      {/* Preferences */}
+-      <section>
+-        <h3 className="text-xs font-bold tracking-widest uppercase mb-3 px-1" style={{ color: "#7C8AA0" }}>Preferences</h3>
+-        <div className="rounded-xl overflow-hidden border border-white/5 bg-black/20">
+-          <SettingRow icon={<Settings size={16} />} title="Theme" value={user.theme || "Graphite Steel"} />
+-          <SettingRow icon={<Gamepad2 size={16} />} title="Controller Style" value={user.controllerStyle || "Modern"} />
+-          <SettingRow icon={<Terminal size={16} />} title="Language" value="English" />
+-        </div>
+-      </section>
+-
+-      {/* Future Integrations */}
+-      <section>
+-        <h3 className="text-xs font-bold tracking-widest uppercase mb-3 px-1" style={{ color: "#7C8AA0" }}>Integrations <span className="ml-2 text-[9px] bg-primary/20 text-primary px-1.5 py-0.5 rounded">COMING SOON</span></h3>
+-        <div className="rounded-xl overflow-hidden border border-white/5 bg-black/20 opacity-50 pointer-events-none">
+-          <SettingRow icon={<Users size={16} />} title="Community Layouts" value="Browse" />
+-          <SettingRow icon={<Server size={16} />} title="Steam Integration" value="Link" />
+-        </div>
+-      </section>
+-
+-      {/* Privacy & About */}
+-      <section>
+-        <h3 className="text-xs font-bold tracking-widest uppercase mb-3 px-1" style={{ color: "#7C8AA0" }}>Privacy</h3>
+-        <div className="rounded-xl overflow-hidden border border-white/5 bg-black/20">
+-          <ActionRow icon={<Download size={16} />} title="Download My Data" />
+-          <ActionRow icon={<Shield size={16} />} title="Privacy Policy" />
+-          <ActionRow icon={<Info size={16} />} title="Terms of Service" />
+-          <ActionRow icon={<Trash2 size={16} className="text-red-400" />} title={<span className="text-red-400">Delete Account</span>} />
+-        </div>
+-      </section>
+-
+-      {/* Footer Info */}
+-      <div className="pt-4 pb-8 flex flex-col items-center justify-center gap-1 opacity-50">
+-        <div className="flex items-center gap-2 text-white font-bold tracking-widest text-xs" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+-          <Gamepad2 size={14} className="text-primary" /> GamepadOS
+-        </div>
+-        <p className="text-[10px]" style={{ color: "#7C8AA0" }}>Version {versionName} • Standard Channel</p>
+-      </div>
+-
+-    </div>
+-  );
+-}
+-
+-function StatCard({ title, value, icon }: { title: string; value: string; icon: React.ReactNode }) {
+-  return (
+-    <div className="p-3 rounded-xl border border-white/5 bg-black/20 flex flex-col">
+-      <div className="flex items-center justify-between mb-2 opacity-70">
+-        <span className="text-[10px] uppercase font-bold tracking-wider" style={{ color: "#7C8AA0" }}>{title}</span>
+-        <div className="text-primary">{icon}</div>
+-      </div>
+-      <span className="text-xl font-bold text-white/90" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>{value}</span>
+-    </div>
+-  );
+-}
+-
+-function DeviceRow({ icon, name, subtitle, status, color }: { icon: React.ReactNode; name: string; subtitle: string; status: string; color: string }) {
+-  return (
+-    <div className="flex items-center gap-3 p-4 border-b border-white/5 last:border-0">
+-      <div className="p-2.5 rounded-xl bg-white/5 text-white/70">
+-        {icon}
+-      </div>
+-      <div className="flex-1 min-w-0">
+-        <p className="text-sm font-bold text-white/90 truncate">{name}</p>
+-        <p className="text-xs truncate" style={{ color: "#7C8AA0" }}>{subtitle}</p>
+-      </div>
+-      <div className="flex items-center gap-1.5 px-2 py-1 rounded border" style={{ background: `${color}15`, borderColor: `${color}30` }}>
+-        <div className="w-1.5 h-1.5 rounded-full" style={{ background: color, boxShadow: `0 0 6px ${color}80` }} />
+-        <span className="text-[9px] font-bold tracking-wider uppercase" style={{ color }}>{status}</span>
+-      </div>
+-    </div>
+-  );
+-}
+-
+-function SettingRow({ icon, title, value }: { icon: React.ReactNode; title: string; value: string }) {
+-  return (
+-    <div className="flex items-center justify-between p-4 border-b border-white/5 last:border-0">
+-      <div className="flex items-center gap-3">
+-        <div className="opacity-70 text-white/70">{icon}</div>
+-        <span className="text-sm font-medium text-white/90">{title}</span>
+-      </div>
+-      <span className="text-xs font-semibold" style={{ color: "#4F86C6" }}>{value}</span>
+-    </div>
+-  );
+-}
+-
+-function ActionRow({ icon, title }: { icon: React.ReactNode; title: React.ReactNode }) {
+-  return (
+-    <button className="w-full flex items-center justify-between p-4 border-b border-white/5 last:border-0 hover:bg-white/5 transition-colors text-left">
+-      <div className="flex items-center gap-3">
+-        <div className="opacity-70 text-white/70">{icon}</div>
+-        <span className="text-sm font-medium text-white/90">{title}</span>
+-      </div>
+-    </button>
+-  );
+-}
+diff --git a/apps/controller-ui/src/app/supabaseClient.ts b/apps/controller-ui/src/app/supabaseClient.ts
+deleted file mode 100644
+index 5641f1b..0000000
+--- a/apps/controller-ui/src/app/supabaseClient.ts
++++ /dev/null
+@@ -1,21 +0,0 @@
+-import { createClient, SupabaseClient } from '@supabase/supabase-js';
+-
+-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
+-const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+-
+-// Flag: true when real credentials are configured
+-export const supabaseConfigured = !!(supabaseUrl && supabaseKey && !supabaseUrl.includes('placeholder'));
+-
+-if (!supabaseConfigured) {
+-  console.warn(
+-    '[Supabase] No real credentials configured — auth features are disabled. ' +
+-    'Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in .env to enable login.'
+-  );
+-}
+-
+-// Always create a client so the rest of the app can import it without crashing.
+-// With placeholder/empty values, auth calls will simply fail gracefully.
+-export const supabase: SupabaseClient = createClient(
+-  supabaseUrl || 'https://placeholder.supabase.co',
+-  supabaseKey || 'placeholder_key'
+-);
+diff --git a/apps/controller-ui/src/main.tsx b/apps/controller-ui/src/main.tsx
+index d3d7f74..ea3c0b5 100644
+--- a/apps/controller-ui/src/main.tsx
++++ b/apps/controller-ui/src/main.tsx
+@@ -1,12 +1,5 @@
++import { createRoot } from "react-dom/client";
++import App from "./app/App.tsx";
++import "./styles/index.css";
+ 
+-  import { createRoot } from "react-dom/client";
+-  import App from "./app/App.tsx";
+-  import "./styles/index.css";
+-  import { AuthProvider } from "./app/components/AuthContext";
+-
+-  createRoot(document.getElementById("root")!).render(
+-    <AuthProvider>
+-      <App />
+-    </AuthProvider>
+-  );
+-  
+\ No newline at end of file
++createRoot(document.getElementById("root")!).render(<App />);
+diff --git a/website/backend/package.json b/website/backend/package.json
+index 9b5ecb0..7152158 100644
+--- a/website/backend/package.json
++++ b/website/backend/package.json
+@@ -4,7 +4,7 @@
+   "description": "Support/ticketing backend for GamepadOS (tickets, admin portal, email)",
+   "main": "server.js",
+   "scripts": {
+-    "prestart": "npx prisma generate && npx prisma db push --accept-data-loss",
++    "prestart": "npx prisma generate && npx prisma db push",
+     "start": "node --env-file-if-exists=.env server.js",
+     "dev": "node --env-file-if-exists=.env --watch server.js",
+     "test": "node inbound.test.js && node auth.test.js"

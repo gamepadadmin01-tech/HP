@@ -1,0 +1,471 @@
+From 12df162cf807d0e6dfa196a6e22dfd398d74a7fa Mon Sep 17 00:00:00 2001
+From: Akhil <gamepadadmin01@gmail.com>
+Date: Fri, 24 Jul 2026 18:44:09 +0530
+Subject: [PATCH 2/3] =?UTF-8?q?Phase=201:=20typed=20native=20fa=C3=A7ade?=
+ =?UTF-8?q?=20+=20installation=20identity?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Adds apps/controller-ui/src/app/platform/native.ts â€” the single door between the
+UI and Android. Nothing else may touch window.AndroidBridge from now on.
+
+The bridge is 46 methods reached as (window as any).AndroidBridge?.foo?.(), so a
+wrong name is invisible: the optional chain swallows it and the caller quietly
+takes its fallback. That is how the removed patch called getVersionName() â€” the
+real method is getAppVersionName â€” and would have shown a fake "1.0.0" forever.
+Typed, that is a compile error. Every wrapper is total: no bridge, missing
+method, or a throw from Kotlin returns a declared default instead of blanking
+the UI, so `npm run dev` in a desktop browser still works.
+
+getAppInfo() returns version/build/channel from BuildConfig, and getDeviceInfo()
+/getDeviceLabel() return the real phone. Unavailable values stay empty rather
+than defaulting, so callers hide the row instead of inventing content.
+
+Installation identity (getInstallId): a random uuid for this install on this
+phone, created on first call. Not an account and not a hardware id â€” guests get
+one, so device management and layout ownership need no sign-in, and it is the
+tie-breaker when one account edits a layout on two phones. It carries no
+tracking identity and dies with the app.
+
+Backed by two new bridge methods, prefGet/prefSet over the existing "gamepados"
+SharedPreferences (the file the storage migration already uses), with a
+localStorage fallback under the same key so an install upgrading into a
+bridge-capable build keeps its id. Native storage matters here because
+localStorage is cleared with WebView data â€” a cache wipe would otherwise turn
+one phone into a second device. These carry identifiers, not secrets; auth
+tokens will need EncryptedSharedPreferences, a separate change.
+
+Also settles an open question: the WebView serves from
+https://appassets.androidplatform.net, not file://.
+
+Verified: gradle assembleDirectDebug exits 0, app-direct-debug.apk (6.74 MB)
+produced, bridge count 44 -> 46. prefGet/prefSet are not yet exercised at
+runtime â€” that happens when the Account screen reads them in Phase 3.
+---
+ .../arm64-v8a/configure_fingerprint.bin       |  24 +-
+ .../armeabi-v7a/configure_fingerprint.bin     |  24 +-
+ .../191w3o4u/x86_64/configure_fingerprint.bin |  24 +-
+ .../java/com/gamepad/client/MainActivity.kt   |  22 ++
+ apps/controller-ui/src/app/platform/native.ts | 240 ++++++++++++++++++
+ 5 files changed, 298 insertions(+), 36 deletions(-)
+ create mode 100644 apps/controller-ui/src/app/platform/native.ts
+
+diff --git a/apps/android-client/app/.cxx/Debug/191w3o4u/arm64-v8a/configure_fingerprint.bin b/apps/android-client/app/.cxx/Debug/191w3o4u/arm64-v8a/configure_fingerprint.bin
+index 49a43a0..6874da1 100644
+--- a/apps/android-client/app/.cxx/Debug/191w3o4u/arm64-v8a/configure_fingerprint.bin
++++ b/apps/android-client/app/.cxx/Debug/191w3o4u/arm64-v8a/configure_fingerprint.bin
+@@ -2,27 +2,27 @@ C/C++ Structured Logh
+ f
+ dF:\App with login\apps\android-client\app\.cxx\Debug\191w3o4u\arm64-v8a\additional_project_files.txtC
+ A
+-?com.android.build.gradle.internal.cxx.io.EncodedFileFingerPrint	äªĞù3 ìµ€şø3e
++?com.android.build.gradle.internal.cxx.io.EncodedFileFingerPrint	Àæˆ¢ù3 ìµ€şø3e
+ c
+-aF:\App with login\apps\android-client\app\.cxx\Debug\191w3o4u\arm64-v8a\android_gradle_build.json	äªĞù3ù	 ›¶€şø3j
++aF:\App with login\apps\android-client\app\.cxx\Debug\191w3o4u\arm64-v8a\android_gradle_build.json	Áæˆ¢ù3ù	 ›¶€şø3j
+ h
+-fF:\App with login\apps\android-client\app\.cxx\Debug\191w3o4u\arm64-v8a\android_gradle_build_mini.json	äªĞù3å ç¹€şø3W
++fF:\App with login\apps\android-client\app\.cxx\Debug\191w3o4u\arm64-v8a\android_gradle_build_mini.json	Áæˆ¢ù3å ç¹€şø3W
+ U
+-SF:\App with login\apps\android-client\app\.cxx\Debug\191w3o4u\arm64-v8a\build.ninja	äªĞù3şÂ Õ©€şø3[
++SF:\App with login\apps\android-client\app\.cxx\Debug\191w3o4u\arm64-v8a\build.ninja	Áæˆ¢ù3şÂ Õ©€şø3[
+ Y
+-WF:\App with login\apps\android-client\app\.cxx\Debug\191w3o4u\arm64-v8a\build.ninja.txt	äªĞù3`
++WF:\App with login\apps\android-client\app\.cxx\Debug\191w3o4u\arm64-v8a\build.ninja.txt	Áæˆ¢ù3`
+ ^
+-\F:\App with login\apps\android-client\app\.cxx\Debug\191w3o4u\arm64-v8a\build_file_index.txt	äªĞù3E ´½€şø3a
++\F:\App with login\apps\android-client\app\.cxx\Debug\191w3o4u\arm64-v8a\build_file_index.txt	Áæˆ¢ù3E ´½€şø3a
+ _
+-]F:\App with login\apps\android-client\app\.cxx\Debug\191w3o4u\arm64-v8a\compile_commands.json	äªĞù3» Ñ©€şø3e
++]F:\App with login\apps\android-client\app\.cxx\Debug\191w3o4u\arm64-v8a\compile_commands.json	Áæˆ¢ù3» Ñ©€şø3e
+ c
+-aF:\App with login\apps\android-client\app\.cxx\Debug\191w3o4u\arm64-v8a\compile_commands.json.bin	äªĞù3	™ Ñ©€şø3k
++aF:\App with login\apps\android-client\app\.cxx\Debug\191w3o4u\arm64-v8a\compile_commands.json.bin	Áæˆ¢ù3	™ Ñ©€şø3k
+ i
+-gF:\App with login\apps\android-client\app\.cxx\Debug\191w3o4u\arm64-v8a\metadata_generation_command.txt	äªĞù3
++gF:\App with login\apps\android-client\app\.cxx\Debug\191w3o4u\arm64-v8a\metadata_generation_command.txt	Áæˆ¢ù3
+ ã Õº€şø3^
+ \
+-ZF:\App with login\apps\android-client\app\.cxx\Debug\191w3o4u\arm64-v8a\prefab_config.json	åªĞù3( Ø»€şø3c
++ZF:\App with login\apps\android-client\app\.cxx\Debug\191w3o4u\arm64-v8a\prefab_config.json	Áæˆ¢ù3( Ø»€şø3c
+ a
+-_F:\App with login\apps\android-client\app\.cxx\Debug\191w3o4u\arm64-v8a\symbol_folder_index.txt	åªĞù3^ Å¼€şø3I
++_F:\App with login\apps\android-client\app\.cxx\Debug\191w3o4u\arm64-v8a\symbol_folder_index.txt	Áæˆ¢ù3^ Å¼€şø3I
+ G
+-EF:\App with login\apps\android-client\app\src\main\cpp\CMakeLists.txt	åªĞù3Ø Ïäìˆô3
+\ No newline at end of file
++EF:\App with login\apps\android-client\app\src\main\cpp\CMakeLists.txt	Áæˆ¢ù3Ø Ïäìˆô3
+\ No newline at end of file
+diff --git a/apps/android-client/app/.cxx/Debug/191w3o4u/armeabi-v7a/configure_fingerprint.bin b/apps/android-client/app/.cxx/Debug/191w3o4u/armeabi-v7a/configure_fingerprint.bin
+index 48be6e4..22a2aea 100644
+--- a/apps/android-client/app/.cxx/Debug/191w3o4u/armeabi-v7a/configure_fingerprint.bin
++++ b/apps/android-client/app/.cxx/Debug/191w3o4u/armeabi-v7a/configure_fingerprint.bin
+@@ -2,28 +2,28 @@ C/C++ Structured Logj
+ h
+ fF:\App with login\apps\android-client\app\.cxx\Debug\191w3o4u\armeabi-v7a\additional_project_files.txtC
+ A
+-?com.android.build.gradle.internal.cxx.io.EncodedFileFingerPrint	†°Ğù3 ´ä€şø3g
++?com.android.build.gradle.internal.cxx.io.EncodedFileFingerPrint	Íïˆ¢ù3 ´ä€şø3g
+ e
+-cF:\App with login\apps\android-client\app\.cxx\Debug\191w3o4u\armeabi-v7a\android_gradle_build.json	†°Ğù3
++cF:\App with login\apps\android-client\app\.cxx\Debug\191w3o4u\armeabi-v7a\android_gradle_build.json	Íïˆ¢ù3
+  ½ä€şø3l
+ j
+-hF:\App with login\apps\android-client\app\.cxx\Debug\191w3o4u\armeabi-v7a\android_gradle_build_mini.json	†°Ğù3í ää€şø3Y
++hF:\App with login\apps\android-client\app\.cxx\Debug\191w3o4u\armeabi-v7a\android_gradle_build_mini.json	Íïˆ¢ù3í ää€şø3Y
+ W
+-UF:\App with login\apps\android-client\app\.cxx\Debug\191w3o4u\armeabi-v7a\build.ninja	†°Ğù3ÆÃ ˆã€şø3]
++UF:\App with login\apps\android-client\app\.cxx\Debug\191w3o4u\armeabi-v7a\build.ninja	Íïˆ¢ù3ÆÃ ˆã€şø3]
+ [
+-YF:\App with login\apps\android-client\app\.cxx\Debug\191w3o4u\armeabi-v7a\build.ninja.txt	†°Ğù3b
++YF:\App with login\apps\android-client\app\.cxx\Debug\191w3o4u\armeabi-v7a\build.ninja.txt	Íïˆ¢ù3b
+ `
+-^F:\App with login\apps\android-client\app\.cxx\Debug\191w3o4u\armeabi-v7a\build_file_index.txt	†°Ğù3E èä€şø3c
++^F:\App with login\apps\android-client\app\.cxx\Debug\191w3o4u\armeabi-v7a\build_file_index.txt	Íïˆ¢ù3E èä€şø3c
+ a
+-_F:\App with login\apps\android-client\app\.cxx\Debug\191w3o4u\armeabi-v7a\compile_commands.json	†°Ğù3Ö ƒã€şø3g
++_F:\App with login\apps\android-client\app\.cxx\Debug\191w3o4u\armeabi-v7a\compile_commands.json	Íïˆ¢ù3Ö ƒã€şø3g
+ e
+-cF:\App with login\apps\android-client\app\.cxx\Debug\191w3o4u\armeabi-v7a\compile_commands.json.bin	†°Ğù3	Â ƒã€şø3m
++cF:\App with login\apps\android-client\app\.cxx\Debug\191w3o4u\armeabi-v7a\compile_commands.json.bin	Íïˆ¢ù3	Â ƒã€şø3m
+ k
+-iF:\App with login\apps\android-client\app\.cxx\Debug\191w3o4u\armeabi-v7a\metadata_generation_command.txt	†°Ğù3
++iF:\App with login\apps\android-client\app\.cxx\Debug\191w3o4u\armeabi-v7a\metadata_generation_command.txt	Íïˆ¢ù3
+ í æä€şø3`
+ ^
+-\F:\App with login\apps\android-client\app\.cxx\Debug\191w3o4u\armeabi-v7a\prefab_config.json	†°Ğù3( çä€şø3e
++\F:\App with login\apps\android-client\app\.cxx\Debug\191w3o4u\armeabi-v7a\prefab_config.json	Íïˆ¢ù3( çä€şø3e
+ c
+-aF:\App with login\apps\android-client\app\.cxx\Debug\191w3o4u\armeabi-v7a\symbol_folder_index.txt	†°Ğù3` èä€şø3I
++aF:\App with login\apps\android-client\app\.cxx\Debug\191w3o4u\armeabi-v7a\symbol_folder_index.txt	Íïˆ¢ù3` èä€şø3I
+ G
+-EF:\App with login\apps\android-client\app\src\main\cpp\CMakeLists.txt	†°Ğù3Ø Ïäìˆô3
+\ No newline at end of file
++EF:\App with login\apps\android-client\app\src\main\cpp\CMakeLists.txt	Íïˆ¢ù3Ø Ïäìˆô3
+\ No newline at end of file
+diff --git a/apps/android-client/app/.cxx/Debug/191w3o4u/x86_64/configure_fingerprint.bin b/apps/android-client/app/.cxx/Debug/191w3o4u/x86_64/configure_fingerprint.bin
+index 1695a70..294720e 100644
+--- a/apps/android-client/app/.cxx/Debug/191w3o4u/x86_64/configure_fingerprint.bin
++++ b/apps/android-client/app/.cxx/Debug/191w3o4u/x86_64/configure_fingerprint.bin
+@@ -2,27 +2,27 @@ C/C++ Structured Loge
+ c
+ aF:\App with login\apps\android-client\app\.cxx\Debug\191w3o4u\x86_64\additional_project_files.txtC
+ A
+-?com.android.build.gradle.internal.cxx.io.EncodedFileFingerPrint	õ¾Ğù3 š†şø3b
++?com.android.build.gradle.internal.cxx.io.EncodedFileFingerPrint	¦òˆ¢ù3 š†şø3b
+ `
+-^F:\App with login\apps\android-client\app\.cxx\Debug\191w3o4u\x86_64\android_gradle_build.json	õ¾Ğù3í	 £†şø3g
++^F:\App with login\apps\android-client\app\.cxx\Debug\191w3o4u\x86_64\android_gradle_build.json	¦òˆ¢ù3í	 £†şø3g
+ e
+-cF:\App with login\apps\android-client\app\.cxx\Debug\191w3o4u\x86_64\android_gradle_build_mini.json	ö¾Ğù3Ù »†şø3T
++cF:\App with login\apps\android-client\app\.cxx\Debug\191w3o4u\x86_64\android_gradle_build_mini.json	¦òˆ¢ù3Ù »†şø3T
+ R
+-PF:\App with login\apps\android-client\app\.cxx\Debug\191w3o4u\x86_64\build.ninja	ö¾Ğù3×Â  …şø3X
++PF:\App with login\apps\android-client\app\.cxx\Debug\191w3o4u\x86_64\build.ninja	¦òˆ¢ù3×Â  …şø3X
+ V
+-TF:\App with login\apps\android-client\app\.cxx\Debug\191w3o4u\x86_64\build.ninja.txt	ö¾Ğù3]
++TF:\App with login\apps\android-client\app\.cxx\Debug\191w3o4u\x86_64\build.ninja.txt	¦òˆ¢ù3]
+ [
+-YF:\App with login\apps\android-client\app\.cxx\Debug\191w3o4u\x86_64\build_file_index.txt	ö¾Ğù3E ¿†şø3^
++YF:\App with login\apps\android-client\app\.cxx\Debug\191w3o4u\x86_64\build_file_index.txt	¦òˆ¢ù3E ¿†şø3^
+ \
+-ZF:\App with login\apps\android-client\app\.cxx\Debug\191w3o4u\x86_64\compile_commands.json	ö¾Ğù3· œ…şø3b
++ZF:\App with login\apps\android-client\app\.cxx\Debug\191w3o4u\x86_64\compile_commands.json	¦òˆ¢ù3· œ…şø3b
+ `
+-^F:\App with login\apps\android-client\app\.cxx\Debug\191w3o4u\x86_64\compile_commands.json.bin	ö¾Ğù3	• œ…şø3h
++^F:\App with login\apps\android-client\app\.cxx\Debug\191w3o4u\x86_64\compile_commands.json.bin	¦òˆ¢ù3	• œ…şø3h
+ f
+-dF:\App with login\apps\android-client\app\.cxx\Debug\191w3o4u\x86_64\metadata_generation_command.txt	ö¾Ğù3
++dF:\App with login\apps\android-client\app\.cxx\Debug\191w3o4u\x86_64\metadata_generation_command.txt	¦òˆ¢ù3
+ Ô ¼†şø3[
+ Y
+-WF:\App with login\apps\android-client\app\.cxx\Debug\191w3o4u\x86_64\prefab_config.json	ö¾Ğù3( ½†şø3`
++WF:\App with login\apps\android-client\app\.cxx\Debug\191w3o4u\x86_64\prefab_config.json	¦òˆ¢ù3( ½†şø3`
+ ^
+-\F:\App with login\apps\android-client\app\.cxx\Debug\191w3o4u\x86_64\symbol_folder_index.txt	ö¾Ğù3[ ¾†şø3I
++\F:\App with login\apps\android-client\app\.cxx\Debug\191w3o4u\x86_64\symbol_folder_index.txt	¦òˆ¢ù3[ ¾†şø3I
+ G
+-EF:\App with login\apps\android-client\app\src\main\cpp\CMakeLists.txt	ö¾Ğù3Ø Ïäìˆô3
+\ No newline at end of file
++EF:\App with login\apps\android-client\app\src\main\cpp\CMakeLists.txt	¦òˆ¢ù3Ø Ïäìˆô3
+\ No newline at end of file
+diff --git a/apps/android-client/app/src/main/java/com/gamepad/client/MainActivity.kt b/apps/android-client/app/src/main/java/com/gamepad/client/MainActivity.kt
+index 3a826e0..cb57bf1 100644
+--- a/apps/android-client/app/src/main/java/com/gamepad/client/MainActivity.kt
++++ b/apps/android-client/app/src/main/java/com/gamepad/client/MainActivity.kt
+@@ -897,6 +897,28 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback, android.hardwa
+                     }.toString()
+                 }
+ 
++                // Durable key/value for the UI, backed by the same "gamepados"
++                // SharedPreferences the storage migration already uses. The web
++                // layer keeps its own localStorage copy; this one is what makes
++                // the installation id survive a WebView data clear, so a phone
++                // does not silently turn into a second device after a cache wipe.
++                // Values are small identifiers, not secrets â€” auth tokens will
++                // need EncryptedSharedPreferences, which is a separate change.
++                @android.webkit.JavascriptInterface
++                fun prefGet(key: String): String {
++                    return try {
++                        getSharedPreferences("gamepados", MODE_PRIVATE).getString(key, "") ?: ""
++                    } catch (t: Throwable) { "" }
++                }
++
++                @android.webkit.JavascriptInterface
++                fun prefSet(key: String, value: String) {
++                    try {
++                        getSharedPreferences("gamepados", MODE_PRIVATE)
++                            .edit().putString(key, value).apply()
++                    } catch (t: Throwable) { }
++                }
++
+                 // Open a URL (e.g. the new APK) in the browser / package installer.
+                 @android.webkit.JavascriptInterface
+                 fun openUrl(url: String) {
+diff --git a/apps/controller-ui/src/app/platform/native.ts b/apps/controller-ui/src/app/platform/native.ts
+new file mode 100644
+index 0000000..5ca6b56
+--- /dev/null
++++ b/apps/controller-ui/src/app/platform/native.ts
+@@ -0,0 +1,240 @@
++// â”€â”€â”€ Native bridge faÃ§ade â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
++//
++// Every call into Android goes through this file. Nothing else in the UI may
++// touch `window.AndroidBridge` directly.
++//
++// Why this exists: the bridge is 40+ methods reached as
++// `(window as any).AndroidBridge?.foo?.()`, so a wrong method name is invisible
++// â€” the optional-chain swallows it and the caller silently takes its fallback.
++// That is exactly how a since-removed patch shipped `getVersionName()` (the real
++// method is `getAppVersionName`) and would have displayed a fake "1.0.0" version
++// forever. Typed here, that mistake is a compile error.
++//
++// The bridge is absent in a desktop browser (`npm run dev`), so every wrapper
++// degrades to a sensible default instead of throwing. `isNative()` tells the UI
++// which world it is in when the difference actually matters.
++
++/** The Kotlin object bound as `AndroidBridge`. Optional members = added in a
++ *  later APK than some installs in the field, so always feature-detect. */
++export interface AndroidBridge {
++  // Layout / window
++  getSafeAreaTop(): number;
++  getSafeAreaBottom(): number;
++  getSafeAreaLeft(): number;
++  getSafeAreaRight(): number;
++  setScreenOrientation(orientation: "portrait" | "landscape"): void;
++
++  // Input path
++  sendGamepadPacketNative(base64Data: string): void;
++  sendGamepadPacketL1(data: string): void;
++  setNativeInputGeometry(json: string): void;
++  setNativeInputActive(active: boolean): void;
++  setNativeGyroConfig(json: string): void;
++  nativeGyroCalibrate(): void;
++  setInputStreaming(on: boolean): void;
++
++  // Session / transport
++  connectToPC(ip: string, port: number, key: string): void;
++  exitSession(): void;
++  stopEngine(): void;
++  startCameraScan(): void;
++  stopCameraScan(): void;
++
++  // Telemetry
++  getSystemStatsJson(): string;
++  getGyroscopeDataJson(): string;
++  getNetworkTelemetryJson(): string;
++  getNetworkDetailsJson(): string;
++  getWifiInfoJson(): string;
++  getRumbleState(): string;
++  isUsbTetherActive(): boolean;
++  getUsbBroadcastAddress(): string;
++  logMetric(line: string): void;
++
++  // Identity of the build
++  getAppVersionName(): string;
++  getAppVersionCode(): number;
++  getDistributionChannel(): string;
++  getDeviceInfoJson(): string;
++
++  // Haptics
++  triggerHaptic(durationMs: number): void;
++  triggerRumble(left: number, right: number, durationMs: number): void;
++  getHapticCapabilities(): string;
++  playHaptic(event: string): void;
++  playHapticWaveform(timingsCsv: string, ampsCsv: string): void;
++
++  // System
++  openUrl(url: string): void;
++  exitApp(): void;
++  onUiReady(): void;
++  isBatteryOptimized(): boolean;
++  requestBatteryExemption(): void;
++  requestShizukuPermission(): void;
++  setChargeBypass(enabled: boolean): void;
++  showTextInput(currentValue: string, hint: string): void;
++
++  // Durable key/value owned by Android (SharedPreferences "gamepados").
++  // Added after 1.3.23 â€” feature-detect before use. Survives WebView storage
++  // being cleared, which localStorage does not.
++  prefGet?(key: string): string;
++  prefSet?(key: string, value: string): void;
++}
++
++function bridge(): AndroidBridge | null {
++  const b = (window as unknown as { AndroidBridge?: AndroidBridge }).AndroidBridge;
++  return b ?? null;
++}
++
++export function isNative(): boolean {
++  return bridge() !== null;
++}
++
++/** Call a bridge method, returning `fallback` if the bridge, the method, or the
++ *  call itself fails. Never throws â€” a native hiccup must not blank the UI. */
++function call<K extends keyof AndroidBridge, T>(
++  method: K,
++  invoke: (b: AndroidBridge) => T,
++  fallback: T,
++): T {
++  const b = bridge();
++  if (!b || typeof b[method] !== "function") return fallback;
++  try {
++    return invoke(b);
++  } catch {
++    return fallback;
++  }
++}
++
++function parseJson<T>(raw: string, fallback: T): T {
++  try {
++    return raw ? (JSON.parse(raw) as T) : fallback;
++  } catch {
++    return fallback;
++  }
++}
++
++// â”€â”€â”€ Build identity â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
++
++export type AppInfo = {
++  /** e.g. "1.3.23" â€” empty string when not running natively. */
++  version: string;
++  /** versionCode, 0 when unknown. */
++  build: number;
++  /** "direct" | "play" | "amazon" | â€¦ â€” empty string when unknown. */
++  channel: string;
++};
++
++/** Real values from BuildConfig. Anything unavailable stays empty/0 so the UI
++ *  can hide the row rather than invent a version number. */
++export function getAppInfo(): AppInfo {
++  return {
++    version: call("getAppVersionName", (b) => b.getAppVersionName(), ""),
++    build: call("getAppVersionCode", (b) => b.getAppVersionCode(), 0),
++    channel: call("getDistributionChannel", (b) => b.getDistributionChannel(), ""),
++  };
++}
++
++// â”€â”€â”€ Device identity â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
++
++export type DeviceInfo = {
++  model: string;
++  manufacturer: string;
++  os: string;
++  appVersion: string;
++  appCode: number;
++};
++
++const EMPTY_DEVICE: DeviceInfo = {
++  model: "", manufacturer: "", os: "", appVersion: "", appCode: 0,
++};
++
++export function getDeviceInfo(): DeviceInfo {
++  const raw = call("getDeviceInfoJson", (b) => b.getDeviceInfoJson(), "");
++  return parseJson<DeviceInfo>(raw, EMPTY_DEVICE);
++}
++
++/** Human label for this phone, e.g. "Xiaomi 2311DRK48I". Empty when unknown â€”
++ *  callers must render nothing rather than a placeholder like "Android Phone". */
++export function getDeviceLabel(): string {
++  const d = getDeviceInfo();
++  return [d.manufacturer, d.model].filter(Boolean).join(" ").trim();
++}
++
++// â”€â”€â”€ Installation identity â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
++//
++// A stable id for THIS install on THIS phone. Deliberately not an account and
++// not a hardware id:
++//   â€¢ guests have one, so device management and layout ownership work with no
++//     sign-in;
++//   â€¢ it is the tie-breaker when the same account edits a layout on two phones;
++//   â€¢ it is random per install, so it carries no advertising/tracking identity
++//     and disappears with the app.
++//
++// Stored natively when the bridge supports it (survives clearing WebView data);
++// otherwise localStorage. The key name is shared by both so an install that
++// upgrades into a bridge-capable build keeps its existing id.
++
++const INSTALL_ID_KEY = "gp_install_id";
++
++function readStored(key: string): string {
++  const native = call("prefGet", (b) => b.prefGet!(key), "");
++  if (native) return native;
++  try {
++    return localStorage.getItem(key) ?? "";
++  } catch {
++    return "";
++  }
++}
++
++function writeStored(key: string, value: string): void {
++  call("prefSet", (b) => b.prefSet!(key, value), undefined as void);
++  try {
++    localStorage.setItem(key, value);
++  } catch {
++    /* private mode / quota â€” the native copy is the durable one */
++  }
++}
++
++function newId(): string {
++  const c = globalThis.crypto;
++  if (c && typeof c.randomUUID === "function") return c.randomUUID();
++  // Older WebViews lack randomUUID; getRandomValues is available far earlier.
++  const bytes = new Uint8Array(16);
++  if (c && typeof c.getRandomValues === "function") {
++    c.getRandomValues(bytes);
++  } else {
++    for (let i = 0; i < 16; i++) bytes[i] = Math.floor(Math.random() * 256);
++  }
++  bytes[6] = (bytes[6] & 0x0f) | 0x40;
++  bytes[8] = (bytes[8] & 0x3f) | 0x80;
++  const hex = Array.from(bytes, (x) => x.toString(16).padStart(2, "0")).join("");
++  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
++}
++
++let cachedInstallId = "";
++
++/** Stable installation id, created on first call and persisted from then on. */
++export function getInstallId(): string {
++  if (cachedInstallId) return cachedInstallId;
++  let id = readStored(INSTALL_ID_KEY);
++  if (!id) {
++    id = newId();
++    writeStored(INSTALL_ID_KEY, id);
++  }
++  cachedInstallId = id;
++  return id;
++}
++
++// â”€â”€â”€ Misc â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
++
++/** Open a URL in the system browser. No-op off-device. */
++export function openUrl(url: string): void {
++  call("openUrl", (b) => b.openUrl(url), undefined as void);
++}
++
++/** Haptic capability report, or null when the device/build cannot say. */
++export function getHapticCapabilities(): Record<string, unknown> | null {
++  const raw = call("getHapticCapabilities", (b) => b.getHapticCapabilities(), "");
++  return raw ? parseJson<Record<string, unknown> | null>(raw, null) : null;
++}
