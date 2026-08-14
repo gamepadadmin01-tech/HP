@@ -13,7 +13,7 @@ D:\AKHIL\HP\
 ├── context/                  this folder — the durable brain
 ├── projects/
 │   ├── gamepados/            THE PRODUCT (was "hlooo")
-│   ├── gamepados-account/    account-system fork (was "App with login")
+│   │                         (gamepados-account/ was deleted 2026-08-14)
 │   ├── flexsquares/          sell-the-white-space site
 │   ├── daily-news-app/       echonews-ai, unrelated
 │   └── spotify-corizo/       Corizo academic project
@@ -34,7 +34,7 @@ from 43.5 GB to 81.5 GB.
 | Folder (old name) | Size | Files | Now |
 |---|---|---|---|
 | `hlooo` | 9.19 GB | 110,891 | `projects/gamepados` — 3.55 GB after cache removal |
-| `App with login` | 7.06 GB | 103,240 | `projects/gamepados-account` |
+| `App with login` | 7.06 GB | 103,240 | **deleted 2026-08-14** (was `projects/gamepados-account`) |
 | `capcut` | 5.70 GB | 15,291 | `media/capcut` |
 | `Android` | 2.03 GB | 56,785 | `toolchain/android-sdk` + `android-cli` |
 | `DaVinci Resolve Studio 21.0.0.48` | 9.46 GB | 8 | `installers/` |
@@ -57,7 +57,7 @@ confirmed a copy exists on another laptop).
 | Path | Remote | Risk |
 |---|---|---|
 | `D:\AKHIL\HP` (this repo) | **none yet** | 🔴 **created 2026-08-13, NOT pushed — do this first** |
-| `projects/gamepados-account` | `gamepadadmin01-tech/app-with-login` | 3 commits unpushed |
+| ~~`projects/gamepados-account`~~ | `gamepadadmin01-tech/app-with-login` | **deleted 2026-08-14**; 3 unpushed commits saved as patches |
 | `projects/flexsquares` | `gamepadadmin01-tech/flexspace` | 2 files dirty |
 | `projects/gamepados/website` | `gamepadadmin01-tech/gamepad` | 9 files dirty |
 | `keys/`, `media/capcut/`, `projects/spotify-corizo/`, `projects/daily-news-app/` | none | 🔴 no backup |
@@ -139,8 +139,19 @@ repo uses a **whitelist** `.gitignore` so a stray `git add -A` cannot reach `key
 
 ## 5. Structural findings
 
-- **`projects/gamepados-account` is a legitimate fork**, not junk. It is the account-system
-  rebuild and is safely on GitHub. **Do not delete it as a "duplicate."**
+- **`projects/gamepados-account` was DELETED 2026-08-14** (3,541 files, 1.93 GB after its build
+  caches had already been cleared). It was superseded — the account system lives in the main tree,
+  which has `AccountAuth.tsx`, `TabAccount.tsx`, `api/account.ts` and `store/account.ts`, none of
+  which the fork ever had. Its 3 unpushed commits are preserved as patches at
+  `context/archive/gamepados-account-unpushed-commits/`; its unique `native.ts` and Gradle wrapper
+  at `context/archive/gamepados-account-unique/`. The GitHub repo `app-with-login` still exists.
+
+  ⚠️ **Consequence to be aware of:** 48 shadcn/ui component files and the original design assets
+  (`controller.jpeg`, `game_controller.pdf`, `image-1..6.png`) now exist **only in that GitHub
+  repo** — the local copies are gone from the recycle bin, the staging folder and the fork. Main's
+  code references none of them, so nothing is broken, but they are one `git clone` away rather
+  than on disk. The blueprint markdown survives in `context/docs/`.
+
 - **`apps/GamepadOS-iOS` vs `apps/ios-client` — RESOLVED 2026-08-13.** `GamepadOS-iOS` is a strict
   superset: `ios-client` has **zero** unique files, and all six files that differ are **newer and
   larger** in `GamepadOS-iOS` (`project.yml`, `bridge-shim.js`, `Haptics.swift` 11.2 KB vs 4.7 KB,
@@ -156,8 +167,11 @@ repo uses a **whitelist** `.gitignore` so a stray `git add -A` cannot reach `key
   98,271 files). Note this was **not** the live Windows recycle bin (that lives at `D:\$RECYCLE.BIN`
   and was untouched); it was a leftover copy carried over when the tree was moved off the old `F:`
   drive root. Verified before deletion: **zero files newer than live**, and all 68 files unique to
-  it (the shadcn/ui library and `src/imports/` design assets) survive in `gamepados-account`, which
-  is on GitHub. Live code imports none of them. **Deleted 2026-08-14.**
+  it were the shadcn/ui library plus `src/imports/` design assets, which live code imports nowhere.
+  **Deleted 2026-08-14.** At the time they also existed in `gamepados-account`, but that folder was
+  deleted the same day — so those 48 component files and the design assets (`controller.jpeg`,
+  `game_controller.pdf`, `image-1..6.png`) now survive **only in the `app-with-login` GitHub repo**.
+  Nothing local depends on them; the blueprint markdown is in `context/docs/`.
 - **Three guide PDFs** in `projects\gamepados\docs\notes\` have no backup and are not markdown, so
   they are not in `context/docs/`. Three other guide files were already lost when `F:` was
   formatted on 2026-07-26.

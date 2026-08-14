@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 04fa20ba-c801-4536-9b63-6783224ac0d6
-  modified: 2026-08-13T13:04:56.792Z
+  modified: 2026-08-14T04:36:34.324Z
 ---
 
 # The working drive: `D:\AKHIL\HP`
@@ -64,7 +64,7 @@ widely before being corrected.
 |---|---|
 | `D:\AKHIL\HP` (one repo: CLAUDE.md + context/ + projects/gamepados) | **none yet — NOT pushed** |
 | `projects/gamepados/website` | `gamepadadmin01-tech/gamepad` |
-| `projects/gamepados-account` | `gamepadadmin01-tech/app-with-login` |
+| ~~`projects/gamepados-account`~~ — **deleted 2026-08-14** | `gamepadadmin01-tech/app-with-login` (repo still exists) |
 | `projects/flexsquares` | `gamepadadmin01-tech/flexspace` |
 | `keys/`, `media/`, `spotify-corizo`, `daily-news-app` | none |
 

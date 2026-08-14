@@ -132,12 +132,26 @@ frontend to Vercel, both from `main`.
 
 ---
 
-## 6. `App with login` — the fork
+## 6. `gamepados-account` — the fork (DELETED 2026-08-14)
 
-Same commands, same layout. Deleted there: `apps/pc-server-rs/target` (4.20 GB), `.cargo`
-(0.68 GB), `apps/controller-ui/node_modules` (0.24 GB).
+This folder no longer exists locally. It was a superseded duplicate of the main tree and was
+removed on 2026-08-14.
 
-It is a git repo (`gamepadadmin01-tech/app-with-login`), so a clean checkout also works.
+Nothing here needs rebuilding, but if you ever need it back:
+
+```bash
+git clone https://github.com/gamepadadmin01-tech/app-with-login.git
+```
+
+Then apply the 3 commits that were never pushed:
+
+```bash
+git am D:\AKHIL\HP\context\archive\gamepados-account-unpushed-commits\*.patch
+```
+
+That repo is also the **only** remaining home of 48 shadcn/ui component files and the original
+design assets (`controller.jpeg`, `game_controller.pdf`, `image-1..6.png`). Main's code imports
+none of them.
 
 ---
 

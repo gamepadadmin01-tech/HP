@@ -54,7 +54,6 @@ D:\AKHIL\HP\
 │   │   ├── website/          <- its own repo: gamepadadmin01-tech/gamepad
 │   │   ├── tools/            <- pinned JDK 17 + Gradle 9.6.1 (do not delete)
 │   │   ├── releases/  marketing/  store-assets/  docs/
-│   ├── gamepados-account/    <- the account-system fork (was "App with login")
 │   ├── flexsquares/          <- sell-the-white-space site
 │   ├── daily-news-app/       <- echonews-ai, unrelated
 │   └── spotify-corizo/       <- Corizo academic project
@@ -68,7 +67,9 @@ D:\AKHIL\HP\
 
 **HP is 22.32 GB / 97,774 files** — down from 60.2 GB / ~390,000 on 2026-08-13.
 
-`projects/gamepados-account/` is a legitimate fork, not a duplicate to delete.
+**`projects/gamepados-account/` was deleted 2026-08-14** — it was a superseded 7 GB duplicate; the
+account system lives in the main tree. Its 3 unpushed commits are preserved as patches at
+`context/archive/gamepados-account-unpushed-commits/`, and the GitHub repo still exists.
 
 ## Build — the parts that bite
 
@@ -88,15 +89,15 @@ D:\AKHIL\HP\
 - **Pillow ≥ 12 needs `PIL.ImageFont` and `PIL._imagingft` bundled** in the PyInstaller spec, or
   the PC server exe crashes at startup.
 - Five Android flavours: `direct`, `playstore`, `aptoide`, `uptodown`, `amazonstore`.
-- Full commands: **`context/REBUILD.md`**. Release process: `hlooo/RELEASE.md`.
-- After any significant change: `hlooo/docs/REGRESSION_CHECKLIST.md`.
+- Full commands: **`context/REBUILD.md`**. Release process: `projects/gamepados/RELEASE.md`.
+- After any significant change: `projects/gamepados/docs/REGRESSION_CHECKLIST.md`.
 
 ## Backup status — read this before deleting anything
 
 | Path | Remote | Risk |
 |---|---|---|
 | `D:\AKHIL\HP` (this repo: `CLAUDE.md`, `context/`, `projects/gamepados/`) | **none yet** | 🔴 **created 2026-08-13, NOT pushed — do this first** |
-| `projects/gamepados-account` | `gamepadadmin01-tech/app-with-login` | 3 commits unpushed |
+| ~~`projects/gamepados-account`~~ | `gamepadadmin01-tech/app-with-login` | **deleted 2026-08-14**; 3 unpushed commits saved as patches in `context/archive/` |
 | `projects/flexsquares` | `gamepadadmin01-tech/flexspace` | fine |
 | `projects/gamepados/website` | `gamepadadmin01-tech/gamepad` | fine |
 | `keys/`, `media/capcut/`, `projects/spotify-corizo/`, `projects/daily-news-app/` | none | 🔴 no backup |
@@ -126,4 +127,4 @@ memory claimed the old `F:` drive was Google Drive-synced — that was wrong, an
 - `context/REBUILD.md` — how to regenerate anything deleted as cache
 - `context/docs/INDEX.md` — all 108 project documents, indexed
 - `context/memory/` — Claude's memory, merged from three namespaces and path-corrected
-- `hlooo/docs/handoffs/` — the project diary; the newest handoff is the best catch-up
+- `projects/gamepados/docs/handoffs/` — the project diary; the newest handoff is the best catch-up
