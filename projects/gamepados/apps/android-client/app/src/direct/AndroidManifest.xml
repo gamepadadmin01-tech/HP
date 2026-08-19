@@ -21,6 +21,21 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths" />
         </provider>
+
+        <!-- Razorpay checkout host, direct flavor only. Translucent and with no
+             layout of its own: it exists purely because the SDK reports its
+             result to the Activity that opened the sheet, and MainActivity is
+             shared by all seven flavors so it cannot implement a Razorpay
+             interface. See RazorpayActivity.kt.
+
+             not exported — nothing outside the app may start a payment screen.
+             configChanges keeps a rotation from recreating it mid-payment. -->
+        <activity
+            android:name=".RazorpayActivity"
+            android:exported="false"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar"
+            android:configChanges="orientation|screenSize|keyboardHidden" />
+
     </application>
 
 </manifest>

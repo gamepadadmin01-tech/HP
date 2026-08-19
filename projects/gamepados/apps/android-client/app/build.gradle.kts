@@ -179,8 +179,39 @@ android {
         // ⚠️ AGP 9 reworked the CMake/NDK integration and this app binds JNI by
         // symbol name. A clean build does not prove the native input path still
         // works: device-test pairing + input before this ships.
-        versionCode = 51
-        versionName = "1.3.27"
+        // 52 = 1.3.28: RE-RELEASE OF 1.3.27, no code change whatsoever — 51 was
+        // already consumed on Play Console (confirmed 2026-08-17), and a
+        // versionCode is burned permanently the instant any track sees it. The
+        // artifacts are otherwise identical to the 1.3.27 build: AGP 9.3.1 /
+        // Gradle 9.6.1 toolchain, same UI bundle, same native inputs.
+        // versionName was bumped alongside it so two different builds never share
+        // the name "1.3.27" in support conversations.
+        // 53 = 1.3.28 again: 52 was ALSO already consumed on Play (2026-08-17).
+        // versionName deliberately NOT bumped this time — no user has ever received
+        // a build called 1.3.28, so reusing the name is unambiguous, and bumping it
+        // per rejected upload would fill the changelog with versions that never
+        // shipped. Play only requires versionCode to be unique and increasing.
+        // Codes 51 and 52 are both burned; neither can ever be reused.
+        // 54 = 1.3.29: the first build since 1.3.26 with real user-facing change,
+        // so the versionName moves too (1.3.27/1.3.28 were toolchain-only and
+        // versionCode re-rolls after Play consumed 51 and 52).
+        //
+        //   * Battery: the WS worker's 3 ms tick is now adaptive — 3 ms while
+        //     streaming, 250 ms idle. It used to wake ~333x/second for the life
+        //     of the app, on every screen, with no clearInterval anywhere.
+        //   * Battery: onPause now clears FLAG_KEEP_SCREEN_ON and releases the
+        //     Wi-Fi low-latency and multicast locks. Backgrounding used to leave
+        //     all three held indefinitely.
+        //   * Battery: the gyro requestAnimationFrame loop is screen-gated. It
+        //     was the only loop in the app with no isActive guard — a JSON.parse
+        //     and a packet send per frame, at 120 Hz, on every screen.
+        //   * Anonymous install id on in-app ratings, so feedback from different
+        //     people stops collapsing into one apparent person.
+        //
+        // None of this touches the input path. Findings from the 2026-08-18
+        // performance audit; see docs/research/GAMEPADOS_AUDIT_ROUND2.md §7.
+        versionCode = 54
+        versionName = "1.3.29"
 
         ndk {
             // Broad device coverage (universal APK for sideload + in-app updater):
@@ -284,6 +315,15 @@ android {
     }
 
     buildTypes {
+        // A debug build installs as com.gamepad.client.dev, so a test build
+        // pointed at a LAN backend sits BESIDE the real app instead of
+        // replacing it — the release APK is signed with release.keystore and a
+        // debug-signed APK of the same applicationId could only be installed by
+        // uninstalling first, taking the user's layouts with it.
+        debug {
+            applicationIdSuffix = ".dev"
+            versionNameSuffix = "-dev"
+        }
         release {
             isMinifyEnabled = true
             isShrinkResources = true   // strip unused resources (smaller APK for users)
@@ -361,4 +401,22 @@ dependencies {
     // Must never leak into direct/other-store builds: Play-services update UI in
     // a non-Play build is dead weight and confuses store reviews.
     add("playstoreImplementation", "com.google.android.play:app-update:2.1.0")
+
+    // ── Billing, per flavor ──────────────────────────────────────────────────
+    // Deliberately NOT in the shared `implementation` block. Each store forbids
+    // the others' payment path for digital goods, so the SDK a build must not
+    // use is not merely unreachable in it — it is not in the APK at all. The
+    // matching BillingBridge lives in the same flavor's source set
+    // (src/playstore/java, src/direct/java) and src/store/java has neither.
+    //
+    // Google Play Billing — playstore flavor only.
+    add("playstoreImplementation", "com.android.billingclient:billing-ktx:7.1.1")
+    // Razorpay Checkout — direct flavor only (our own site's build, no store cut).
+    // 1.6.38, NOT 1.6.40. From 1.6.40 the SDK is split into
+    // com.razorpay:checkout + com.razorpay:core, and both artifacts declare the
+    // namespace "com.razorpay" -- which AGP 9 rejects outright at manifest
+    // merge ("Namespace is used in multiple modules"). It compiles fine and
+    // fails only when an APK is actually assembled, so do not "upgrade" this
+    // without assembling a direct build to check.
+    add("directImplementation", "com.razorpay:checkout:1.6.38")
 }

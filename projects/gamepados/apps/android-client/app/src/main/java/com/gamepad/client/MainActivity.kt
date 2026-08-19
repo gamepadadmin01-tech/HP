@@ -552,12 +552,24 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback, android.hardwa
                 mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
             }
             clearCache(true)
+
+            // Purchase results (Play Billing or Razorpay, depending on flavor)
+            // reach JS through here. JSONObject.quote makes the payload a valid
+            // JS string literal — an SDK error message can contain quotes and
+            // newlines, and this is being concatenated into a script.
+            PurchaseRelay.attach { json ->
+                evalJs("window.onPurchaseResult && window.onPurchaseResult(" +
+                    org.json.JSONObject.quote(json) + ")")
+            }
             
-            // JSI-like JS-to-Java WebView Bridge. Extends UpdaterBridge — a
-            // flavor-specific class (src/direct or src/store) that either does or
-            // doesn't add a startApkUpdate method to this object's class hierarchy;
-            // see UpdaterBridgeBase.kt for why that's the store-safety boundary.
-            addJavascriptInterface(object : UpdaterBridge(this@MainActivity) {
+            // JSI-like JS-to-Java WebView Bridge. Extends BillingBridge, which
+            // extends UpdaterBridge — both flavor-specific classes (src/direct,
+            // src/playstore or src/store) that either do or don't add
+            // startApkUpdate / startRazorpayCheckout / startPlayPurchase to this
+            // object's class hierarchy; see UpdaterBridgeBase.kt for why that's
+            // the store-safety boundary. A method absent from the chain is
+            // absent from window.AndroidBridge, not merely disabled.
+            addJavascriptInterface(object : BillingBridge(this@MainActivity) {
                 @android.webkit.JavascriptInterface
                 fun getSafeAreaTop(): Float { return lastTopDp }
                 @android.webkit.JavascriptInterface
@@ -770,6 +782,40 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback, android.hardwa
                 @android.webkit.JavascriptInterface
                 fun setInputStreaming(on: Boolean) {
                     try { setInputStreamingNative(on) } catch (t: Throwable) {}
+                }
+
+                /**
+                 * Send a playtime capability ticket to the PC server.
+                 *
+                 * The ticket rides the SAME UDP socket as input, unencrypted,
+                 * because that is the only channel every user actually has: the
+                 * native engine opens exactly one socket (SOCK_DGRAM), and the
+                 * loopback WebSocket bridge is reachable only through
+                 * `adb reverse`, i.e. USB debugging. Wi-Fi and tether users --
+                 * the whole population this gates -- never touch it. The server
+                 * agrees; see the comment above the ticket drain in
+                 * pc-server-rs/src/main.rs.
+                 *
+                 * Not encrypted, and it does not need to be: the ticket is
+                 * Ed25519-signed and the server verifies the signature. GRX
+                 * seals 20-byte input frames into 41 bytes, so an encrypted
+                 * ticket would not survive `looks_like_ticket` anyway.
+                 *
+                 * Not flavor-gated. Quota applies to every build; only the
+                 * ability to BUY is flavor-specific (see BillingBridge).
+                 */
+                @android.webkit.JavascriptInterface
+                fun sendPlaytimeTicket(base64Ticket: String) {
+                    try {
+                        val bytes = android.util.Base64.decode(base64Ticket, android.util.Base64.NO_WRAP)
+                        nativeGrxSendRaw(bytes)
+                    } catch (t: Throwable) {
+                        // A ticket that cannot be sent is not fatal: the PC's
+                        // gate stays un-armed and simply never tears the session
+                        // down, which is the same permissive behaviour every
+                        // pre-2.1.0 server already has.
+                        android.util.Log.w("Playtime", "ticket send failed", t)
+                    }
                 }
 
                 @android.webkit.JavascriptInterface
@@ -1661,6 +1707,14 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback, android.hardwa
 
     override fun onResume() {
         super.onResume()
+        // Restore the keep-awake flag that onPause drops. Symmetric by design:
+        // the flag is scoped to "the user is looking at us", not to the process
+        // lifetime, which is what it used to be.
+        //
+        // Scoping it further — to the controller screen only, so browsing pads
+        // doesn't hold the display awake — is the next improvement, and needs
+        // the isActive signal plumbed through to native.
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         // Register ONLY the fused rotation-vector sensor for steering. Raw accel/gyro
         // are no longer used (they had a gravity blind-spot at steep/vertical holds).
         // FASTEST = up to 200 Hz on this device (vs 50 Hz for GAME) → more samples
@@ -1689,6 +1743,39 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback, android.hardwa
         super.onPause()
         sensorManager.unregisterListener(this)
         mainHandler.removeCallbacks(usbWatchRunnable)
+
+        // ── Release everything that only makes sense while the user is here ──
+        //
+        // Until this was added, a backgrounded-but-still-paired app kept the
+        // screen forced awake, Wi-Fi power-save disabled and a multicast lock
+        // held — indefinitely, because none of them were released anywhere
+        // except on explicit teardown. Leaving the app entirely did not stop
+        // them. That is the battery and heat complaint a paying user notices,
+        // and it costs nothing to fix.
+        //
+        // FLAG_KEEP_SCREEN_ON is the worst of the three: it was added once,
+        // under a comment reading "OLED Blackout & Thermal Optimization", and
+        // never cleared. It did the exact opposite of what the comment claims.
+        window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        releaseRadioLocks()
+
+        // NOTE: the UDP engine is deliberately NOT stopped here. It holds the
+        // standing link the PC server expects on every screen, and tearing it
+        // down on a notification shade or an incoming call would drop the
+        // session and force a re-pair. Stopping it needs the reconnect path
+        // exercised on a real device first — see the audit's P0-2.
+    }
+
+    /**
+     * Drop the Wi-Fi low-latency and multicast locks if we hold them.
+     *
+     * Safe to call when they are already released or were never taken: both are
+     * null-checked and `isHeld`-checked. They are re-acquired by the connect
+     * path, so a resume that reconnects gets them back.
+     */
+    private fun releaseRadioLocks() {
+        try { multicastLock?.let { if (it.isHeld) it.release() } } catch (ignored: Exception) {}
+        try { wifiLock?.let { if (it.isHeld) it.release() } } catch (ignored: Exception) {}
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -1904,6 +1991,9 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback, android.hardwa
 
     override fun onDestroy() {
         super.onDestroy()
+        // Before anything else: a payment SDK can call back on its own thread
+        // well after this point, and the sink it would reach is about to die.
+        PurchaseRelay.detach()
         cameraExecutor.shutdown()
         try { sensorManager.unregisterListener(this) } catch (e: Exception) {}
         sensorThread?.quitSafely(); sensorThread = null; sensorHandler = null
