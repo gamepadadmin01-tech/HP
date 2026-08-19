@@ -63,6 +63,24 @@ export interface AndroidBridge {
   playHaptic(event: string): void;
   playHapticWaveform(timingsCsv: string, ampsCsv: string): void;
 
+  // Billing. Optional on every build: the store flavours never ship them, and
+  // an install older than the billing release will not have them either — so
+  // the UI must feature-detect rather than assume. Both are fire-and-forget;
+  // the answer arrives on `window.onPurchaseResult`.
+  startPlayPurchase?(productId: string, accountId: string): void;
+  startRazorpayCheckout?(optionsJson: string): void;
+  /** Play Billing only: re-deliver purchases made outside the app (or lost to a
+   *  crash between payment and acknowledgement). Answers on the same callback. */
+  restorePurchases?(): void;
+  /** Play Billing only: last-resort acknowledgement for a purchase the SERVER
+   *  already credited but could not acknowledge itself. Play auto-refunds
+   *  anything unacknowledged after three days. */
+  acknowledgeIfServerCredited?(purchaseToken: string): void;
+
+  /** Playtime: forward a capability ticket to the PC over the input socket.
+   *  Present on every flavour — quota is not a store-specific concern. */
+  sendPlaytimeTicket?(base64Ticket: string): void;
+
   // System
   openUrl(url: string): void;
   exitApp(): void;
@@ -147,5 +165,81 @@ export function testRumble(): boolean {
 /** Open a URL in the system browser. No-op off-device. */
 export function openUrl(url: string): void {
   call("openUrl", (b) => b.openUrl(url), undefined as void);
+}
+
+// ─── Billing ──────────────────────────────────────────────────────────────────
+
+/** Launch Google Play's purchase sheet. Returns false when this build has no
+ *  Play Billing in it, so the caller can say so rather than hang on a callback
+ *  that will never fire. */
+export function startPlayPurchase(productId: string, accountId: string): boolean {
+  const b = bridge();
+  if (!b || typeof b.startPlayPurchase !== "function") return false;
+  try {
+    // accountId is the raw user id; the native side hashes it into the
+    // obfuscated account id Play stamps on the purchase, which the backend
+    // checks before crediting. Without it a purchase cannot be bound to a user.
+    b.startPlayPurchase(productId, accountId);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Launch Razorpay's checkout sheet with an order created server-side. */
+export function startRazorpayCheckout(options: unknown): boolean {
+  const b = bridge();
+  if (!b || typeof b.startRazorpayCheckout !== "function") return false;
+  try {
+    b.startRazorpayCheckout(JSON.stringify(options));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Ask Play to re-deliver owned purchases. No-op where unsupported. */
+export function restorePurchases(): boolean {
+  const b = bridge();
+  if (!b || typeof b.restorePurchases !== "function") return false;
+  try {
+    b.restorePurchases();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Whether this build can restore purchases — i.e. is a Play build. Used to
+ *  decide whether to offer the button at all, since there is nothing to restore
+ *  on a Razorpay build (entitlements there live on the account, not the store). */
+export function canRestorePurchases(): boolean {
+  const b = bridge();
+  return !!b && typeof b.restorePurchases === "function";
+}
+
+/** Belt-and-braces acknowledgement after our server credited a Play purchase.
+ *  Safe to call unconditionally; absent on non-Play builds. */
+export function acknowledgePlayPurchase(purchaseToken: string): void {
+  call("acknowledgeIfServerCredited",
+    (b) => b.acknowledgeIfServerCredited!(purchaseToken), undefined as void);
+}
+
+// ─── Playtime ─────────────────────────────────────────────────────────────────
+
+/** Forward a capability ticket to the PC server.
+ *
+ *  Returns false when the bridge cannot do it — an older install, or a desktop
+ *  browser. That is not an error: the PC's gate stays un-armed and never tears
+ *  the session down, which is exactly how every pre-2.1.0 server behaves. */
+export function sendPlaytimeTicket(base64Ticket: string): boolean {
+  const b = bridge();
+  if (!b || typeof b.sendPlaytimeTicket !== "function") return false;
+  try {
+    b.sendPlaytimeTicket(base64Ticket);
+    return true;
+  } catch {
+    return false;
+  }
 }
 

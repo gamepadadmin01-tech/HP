@@ -118,145 +118,19 @@ export function TuningDialog({ open, pollingHz, setPollingHz, kernelBypass, setK
   );
 }
 
-// ─── Playtime Credits Dialog ──────────────────────────────────────────────────
-export function CreditsDialog({ open, credits, premium, setPremium, setCredits, onDismiss }: {
-  open: boolean;
-  credits: number; premium: boolean;
-  setPremium: (v: boolean) => void; setCredits: (fn: (c: number) => number) => void;
-  onDismiss: () => void;
-}) {
-  const [watching, setWatching] = useState(false);
-  const [adPct, setAdPct] = useState(0);
-  const adRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  useEffect(() => () => { if (adRef.current) clearInterval(adRef.current); }, []);
-  const mins = Math.floor(credits / 60), secs = credits % 60;
-
-  function watchAd() {
-    setWatching(true); setAdPct(0); let p = 0;
-    adRef.current = setInterval(() => {
-      p += 3.33; setAdPct(Math.min(100, p));
-      if (p >= 100) { clearInterval(adRef.current!); setWatching(false); setAdPct(0); setCredits(c => c + 35 * 60); }
-    }, 100);
-  }
-
-  return (
-    <DialogShell open={open} onClickOutside={onDismiss}>
-      <div className="rounded-2xl border p-5"
-        style={{ background: "rgba(10,14,24,0.98)", borderColor: "rgba(79,134,198,0.15)", boxShadow: "0 0 48px rgba(0,0,0,0.9)" }}>
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-base font-bold text-primary tracking-widest" style={{ fontFamily: "'Space Grotesk',sans-serif" }}>PLAYTIME CREDITS</h3>
-          <button onClick={onDismiss} className="w-8 h-8 flex items-center justify-center rounded-full text-muted-foreground"
-            style={{ background: "rgba(255,255,255,0.05)" }}><X size={14} /></button>
-        </div>
-        <div className="text-center py-4 rounded-xl mb-4 border"
-          style={{ background: "rgba(255,255,255,0.02)", borderColor: "rgba(255,255,255,0.06)" }}>
-          {premium
-            ? <><p className="text-3xl font-bold" style={{ fontFamily: "'Space Grotesk',sans-serif", color: "#64748B" }}>∞</p>
-              <p className="text-xs font-mono text-muted-foreground mt-1">Unlimited · Premium Active</p></>
-            : <><p className="text-3xl font-bold text-foreground tabular-nums" style={{ fontFamily: "'Space Grotesk',sans-serif" }}>
-              {String(mins).padStart(2,"0")}:{String(secs).padStart(2,"0")}</p>
-              <p className="text-xs font-mono text-muted-foreground mt-1">Remaining</p>
-              <div className="mx-6 mt-2 h-1 bg-muted rounded-full overflow-hidden">
-                <div className="h-full bg-primary rounded-full transition-all" style={{ width: `${Math.min(100,(credits/(35*60))*100)}%` }} />
-              </div></>}
-        </div>
-        <div className="space-y-2.5">
-          {!premium && (
-            watching
-              ? <div className="p-3.5 rounded-xl border" style={{ background: "rgba(22,101,52,0.12)", borderColor: "rgba(22,101,52,0.3)" }}>
-                <p className="text-xs font-mono text-green-400 mb-2">Watching… reward unlocks in {Math.ceil((100 - adPct) / 33.3)}s</p>
-                <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-                  <div className="h-full bg-green-500 rounded-full transition-all" style={{ width: `${adPct}%` }} />
-                </div>
-              </div>
-              : <button onClick={watchAd} className="w-full py-3.5 rounded-xl font-mono text-sm font-semibold"
-                style={{ background: "rgba(22,101,52,0.15)", border: "1px solid rgba(22,101,52,0.35)", color: "#4ade80" }}>
-                ▶ WATCH AD  ·  +35 MINUTES
-              </button>
-          )}
-          <button onClick={() => { setPremium(!premium); if (!premium) onDismiss(); }}
-            className="w-full py-3.5 rounded-xl font-mono text-sm font-semibold"
-            style={{ background: "rgba(147,51,234,0.12)", border: "1px solid rgba(147,51,234,0.35)", color: "#64748B" }}>
-            {premium ? "✓ PREMIUM ACTIVE — tap to revoke" : "⚡ UPGRADE TO LIFETIME PREMIUM"}
-          </button>
-        </div>
-        <button onClick={onDismiss} className="mt-3 w-full py-2.5 rounded-xl font-mono text-xs text-muted-foreground"
-          style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}>DISMISS</button>
-      </div>
-    </DialogShell>
-  );
-}
-
-// ─── Playtime Lockout Overlay ─────────────────────────────────────────────────
-export function LockoutOverlay({ open, setCredits, setPremium }: {
-  open: boolean;
-  setCredits: (fn: (c: number) => number) => void; setPremium: (v: boolean) => void;
-}) {
-  const { mounted, visible } = useAnimatedDialog(open);
-  const [watching, setWatching] = useState(false);
-  const [adPct, setAdPct] = useState(0);
-  const adRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  useEffect(() => () => { if (adRef.current) clearInterval(adRef.current); }, []);
-
-  function watchAd() {
-    setWatching(true); setAdPct(0); let p = 0;
-    adRef.current = setInterval(() => {
-      p += 3.33; setAdPct(Math.min(100, p));
-      if (p >= 100) { clearInterval(adRef.current!); setWatching(false); setAdPct(0); setCredits(() => 35 * 60); }
-    }, 100);
-  }
-
-  if (!mounted) return null;
-  return (
-    <div className="absolute inset-0 flex flex-col items-center justify-center px-6"
-      style={{
-        zIndex: 40,
-        background: "rgba(0,0,0,0.97)",
-        opacity: visible ? 1 : 0,
-        transition: `opacity ${DIALOG_DUR}ms ease`,
-      }}>
-      <div style={{
-        transform: visible ? "translateY(0) scale(1)" : "translateY(24px) scale(0.96)",
-        transition: `transform ${DIALOG_DUR}ms cubic-bezier(0.34,1.56,0.64,1)`,
-        display: "flex", flexDirection: "column", alignItems: "center", width: "100%",
-      }}>
-        <div className="relative w-16 h-16 mb-6">
-          <div className="absolute inset-0 rounded-full"
-            style={{ border: "3px solid rgba(185,28,28,0.25)" }} />
-          <div className="absolute inset-0 rounded-full"
-            style={{ border: "3px solid transparent", borderTopColor: "#dc2626", borderRightColor: "#dc2626", transform: "rotate(-30deg)" }} />
-          <div className="absolute inset-2 rounded-full flex items-center justify-center">
-            <div className="w-px h-5 bg-red-600 rounded-full" style={{ transform: "rotate(-30deg)" }} />
-          </div>
-        </div>
-        <h2 className="text-xl font-bold text-red-500 text-center mb-2 tracking-widest"
-          style={{ fontFamily: "'Space Grotesk',sans-serif" }}>SESSION PLAYTIME EXHAUSTED</h2>
-        <p className="text-sm text-muted-foreground text-center mb-8 max-w-xs leading-relaxed">
-          Streaming session limit reached. Recharge by watching a partner ad or unlock uncapped access instantly.
-        </p>
-        <div className="w-full max-w-xs space-y-3">
-          {watching
-            ? <div className="p-4 rounded-2xl border" style={{ background: "rgba(22,101,52,0.1)", borderColor: "rgba(22,101,52,0.3)" }}>
-              <p className="text-xs font-mono text-green-400 mb-2 text-center">
-                Watching Ad — reward in {Math.ceil((100 - adPct) / 33.3)}s
-              </p>
-              <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-                <div className="h-full bg-green-500 rounded-full transition-all" style={{ width: `${adPct}%` }} />
-              </div>
-            </div>
-            : <button onClick={watchAd} className="w-full py-4 rounded-2xl font-mono font-semibold text-sm"
-              style={{ background: "rgba(22,101,52,0.15)", border: "2px solid rgba(22,101,52,0.4)", color: "#4ade80" }}>
-              ▶  WATCH AD  ·  +35 MINUTES FREE
-            </button>}
-          <button onClick={() => setPremium(true)} className="w-full py-4 rounded-2xl font-mono font-semibold text-sm"
-            style={{ background: "rgba(147,51,234,0.15)", border: "2px solid rgba(147,51,234,0.4)", color: "#64748B" }}>
-            ⚡  UPGRADE TO LIFETIME PREMIUM
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
+// The playtime credit / lockout dialogs that used to live here were REMOVED.
+//
+// They were a leftover of an ad-supported design that was never adopted: a
+// "WATCH AD +35 MINUTES" button and an "UPGRADE TO LIFETIME PREMIUM" button
+// whose entire implementation was setPremium(!premium) — a client-side boolean
+// with no server behind it. Neither was ever rendered; both were imported by
+// App.tsx and mounted nowhere.
+//
+// They are deleted rather than left dead because the real quota UI is arriving
+// (see store/billing.ts and components/PlanPanel.tsx) and a plausible-looking
+// fake lockout sitting next to the real one is a trap. Pricing and behaviour
+// now come from docs/research/BILLING_DECISIONS.md: 1 hour a day free, no ads,
+// and an entitlement only the server can grant.
 
 // Button bitmask mapping (matching gamepad-engine.cpp)
 

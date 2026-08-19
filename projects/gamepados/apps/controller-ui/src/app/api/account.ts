@@ -8,7 +8,19 @@
 // appassets.androidplatform.net and the API lives on gamepad.space, so a cookie
 // would be third-party and dropped.
 
-const BASE = "https://supportportal.gamepad.space/api/account";
+/** Backend origin. Exported because billing lives at /api/billing and /api/play,
+ *  not under /api/account — one host, declared once.
+ *
+ *  Overridable at BUILD time with VITE_API_ORIGIN so a test build can be pointed
+ *  at a backend on the LAN — the same pattern the website uses (VITE_API_BASE in
+ *  website/frontend/js/config.js). Unset, which is every real build, it is
+ *  production. Nothing reads it at runtime, so a shipped APK cannot be
+ *  redirected by anything on the device. */
+export const API_ORIGIN = (
+  (import.meta as any).env?.VITE_API_ORIGIN || "https://supportportal.gamepad.space"
+).replace(/\/+$/, "");
+
+const BASE = `${API_ORIGIN}/api/account`;
 
 export type User = { id: string; email: string; displayName: string };
 

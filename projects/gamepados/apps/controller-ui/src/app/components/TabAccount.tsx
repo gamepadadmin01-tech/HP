@@ -8,6 +8,7 @@ import { ApiError } from "../api/account";
 import { getSyncState, onSyncChange, syncNow, lastSyncedAt, cancelScheduledSync } from "../store/sync";
 import { autoSyncEnabled, setAutoSyncEnabled } from "../store/prefs";
 import { AccountAuth } from "./AccountAuth";
+import { PlanPanel } from "./PlanPanel";
 
 // ─── GamepadOS Account ────────────────────────────────────────────────────────
 //
@@ -109,6 +110,11 @@ export function TabAccount({
           <Mail size={11} /> {user.email}
         </p>
       </section>
+
+      {/* ── Plan, quota and upgrades ── Placed first because it is what this
+          tab is opened to check, and because a limit the user cannot find is
+          indistinguishable from a limit that appeared without warning. ── */}
+      <PlanPanel />
 
       {/* ── The user's own layouts ── */}
       <Section title="Controller Library">
@@ -328,6 +334,9 @@ function SignOutRow() {
       ) : (
         <motion.div
           key="confirm"
+          // Kept as a height animation deliberately: these are one-line status
+          // rows in a small panel, so the reflow is trivial. The plans list was
+          // different — a tall list inside a long scrolling column.
           initial={{ opacity: 0, height: 0 }}
           animate={{ opacity: 1, height: "auto" }}
           exit={{ opacity: 0, height: 0 }}

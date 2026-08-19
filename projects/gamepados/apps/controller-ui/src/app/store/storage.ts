@@ -50,6 +50,26 @@ export const KEYS = {
   autoSync: "gp_auto_sync",         // "1"/"0" — back up automatically after edits
   syncMark: "gp_sync_mark",         // fingerprint of the last synced library
 
+  // Plan + quota, cached so the Account tab renders instantly and still shows
+  // something useful offline. Never authoritative — the server decides.
+  billing: "gp_billing",
+
+  // Stable per-install id for the playtime session. A random UUID, not a
+  // hardware identifier: it only has to distinguish "this install" from "the
+  // other device you were playing on".
+  deviceId: "gp_device_id",
+  // Locally counted playtime for the current period. The server is
+  // authoritative when reachable, but this is what governs offline and what
+  // stops a clear-data wipe from restoring a spent quota.
+  playtime: "gp_playtime",
+
+  // Which one-off in-app notice has been dismissed, by id. A plain string so a
+  // later announcement can use a new id and is not silenced by an old dismissal.
+  noticeDismissed: "gp_notice_dismissed",
+  // Set once the user has actually sent app feedback, so the launch notice can
+  // stop asking for it.
+  feedbackSent: "gp_feedback_sent",
+
   // Storage schema
   schemaVersion: "gp_schema_version",
 } as const;

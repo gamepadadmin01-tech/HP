@@ -134,7 +134,7 @@ function labelEq(a: React.ReactNode, b: React.ReactNode): boolean {
 // Measured free at the real 61-shape count on a Redmi Note 13 (16.6ms median,
 // 0 frames >20ms). It IS a filter though, so cost scales with the device: flip
 // this to false and the gradient lighting alone still carries the look.
-export const PAD_PHONG = true;
+export const PAD_PHONG = false;
 const phong = PAD_PHONG ? "url(#padPhong)" : undefined;
 
 export function PadGlassDefs() {

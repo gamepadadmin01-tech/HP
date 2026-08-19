@@ -2,14 +2,19 @@ import React, { useState, useRef, useEffect, useCallback, useMemo, useSyncExtern
 // @ts-ignore - Ignore missing declaration file error
 import { createPortal } from "react-dom";
 import { Home, Usb, Activity, Gamepad2, QrCode, X, Settings, Sparkles, User } from "lucide-react";
-import { TuningDialog, CreditsDialog, LockoutOverlay, QRScanOverlay } from "./components/Dialogs";
+import { TuningDialog, QRScanOverlay } from "./components/Dialogs";
+import { PlaytimeLockout } from "./components/PlaytimeLockout";
+import { PlaytimeToast } from "./components/PlaytimeToast";
+import { beginPlay, endPlay, getPlaytimeState, isBlocked, onPlaytimeChange } from "./store/playtime";
+import { onDashboardTabRequest } from "./store/navIntent";
+import { LaunchNotice } from "./components/LaunchNotice";
 import { motion, AnimatePresence } from "framer-motion";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 import { View, BtnId, DashTab, PollingHz, GamepadPreset, CustomPad, CustomBtnDef, WidgetType, WidgetShape, WidgetAnchor, BtnPosOverride, PosOverrideMap } from "./types";
 import { CustomPadEditor } from "./components/CustomPadEditor";
 import { FeatureIntroOverlay, recordIntroNav, introRated } from "./FeatureIntroOverlay";
-import { initFeedbackSync } from "./feedback";
+import { FEEDBACK_URL, initFeedbackSync, markFeedbackSent } from "./feedback";
 // Connection state is a 4-way classification, not a boolean — a link that is
 // transmitting but never answered is NOT the same as one that is off. See
 // linkState.ts for why that distinction had to exist.
@@ -581,8 +586,9 @@ const usbWS = {
       }
       function disconnect(){ try{ if(ws) ws.close(); }catch(e){} ws=null; }
       var lastTry=0;
-      setInterval(function(){
-        if(!enabled){ if(ws){ disconnect(); postMessage({t:'open',v:false}); } return; }
+      var timer=null;
+      function tick(){
+        if(!enabled){ if(ws){ disconnect(); postMessage({t:'open',v:false}); } schedule(); return; }
         if(ws && ws.readyState===1){
           // 'stream' gates the re-blast to the CONTROLLER SCREEN only. Without
           // it, one packet ever stored in 'latest' was re-sent at ~200Hz from
@@ -603,12 +609,33 @@ const usbWS = {
           lastTry=Date.now();
           connect();
         }
-      },3);
+        schedule();
+      }
+      // ADAPTIVE CADENCE. This used to be setInterval(...,3) with no
+      // clearInterval anywhere and no worker.terminate() either, so the thread
+      // woke 333x/second for as long as the app was open — on every screen,
+      // forever, evaluating branches with nothing to send.
+      //
+      // The 3 ms re-blast is deliberate and stays EXACTLY as it was while
+      // streaming; it is the mechanism that keeps the pad fed. What changes is
+      // the idle case: with nothing to stream, the only job left is the 1 s
+      // reconnect cooldown, which does not need a 3 ms tick to service. Falling
+      // back to 250 ms there cuts ~333 wakeups/sec to 4 while touching nothing
+      // about the streaming path.
+      function schedule(){
+        var fast = enabled && stream && ws && ws.readyState===1;
+        timer = setTimeout(tick, fast ? 3 : 250);
+      }
+      // Re-arm NOW instead of serving out an idle delay. Without this, tapping
+      // PLAY could sit up to 250 ms before the first re-blast — the one place
+      // the slower idle cadence could have been felt.
+      function wake(){ if(timer!==null) clearTimeout(timer); tick(); }
+      schedule();
       onmessage=function(e){
         var d=e.data;
-        if(d && d.cmd==='connect'){ enabled=true; lastTry=0; }
+        if(d && d.cmd==='connect'){ enabled=true; lastTry=0; wake(); }
         else if(d && d.cmd==='disconnect'){ enabled=false; disconnect(); postMessage({t:'open',v:false}); }
-        else if(d && d.cmd==='stream-on'){ stream=true; }
+        else if(d && d.cmd==='stream-on'){ stream=true; wake(); }
         else if(d && d.cmd==='stream-off'){
           // Also DROP the latched packet: a later stream-on must be primed by
           // fresh input, never replay a snapshot from the previous session.
@@ -651,7 +678,18 @@ usbWS.start(); // creates the worker only; does NOT open the WS until connect() 
 // coordinator, the USB auto-pair handler, and the Wired tab UI.
 // WiredPref, getWiredPref and setWiredPref live in store/prefs.ts.
 
-function useGyro(maxAngle: number = 45, deadzone: number = 0, onGyroChange?: () => void, enabled: boolean = true) {
+function useGyro(maxAngle: number = 45, deadzone: number = 0, onGyroChange?: () => void, enabled: boolean = true, active: boolean = true) {
+  // `enabled` = the user's gyro toggle. When off the loop still runs, so the
+  //             bars glide to rest instead of freezing mid-tilt.
+  // `active`  = is the controller screen actually on screen. When false there is
+  //             nothing to steer and nothing to draw, so the loop should not
+  //             exist at all.
+  //
+  // Deliberately separate. Until `active` existed this was the ONLY loop in the
+  // app with no screen gate: a requestAnimationFrame on every screen doing a
+  // JSON.parse of the bridge string and firing a packet send per frame — 120 of
+  // each per second on a 120 Hz panel, whether or not the phone was moving or
+  // the user was anywhere near the controller.
   const tiltRef = useRef({ left: 0, right: 0, x: 0, y: 0 });
   const leftBarRef = useRef<HTMLDivElement>(null);
   const rightBarRef = useRef<HTMLDivElement>(null);
@@ -683,6 +721,8 @@ function useGyro(maxAngle: number = 45, deadzone: number = 0, onGyroChange?: () 
   useEffect(() => { enabledRef.current = enabled; });
 
   useEffect(() => {
+    // Off screen: no loop, no listener, nothing scheduled.
+    if (!active) return;
     const bridge = (window as any).AndroidBridge;
     if (bridge && bridge.getGyroscopeDataJson) {
       // ONE rAF loop doing two jobs each frame:
@@ -868,16 +908,14 @@ function useGyro(maxAngle: number = 45, deadzone: number = 0, onGyroChange?: () 
 
     window.addEventListener("deviceorientation", handleOrientation);
     return () => window.removeEventListener("deviceorientation", handleOrientation);
-  }, [maxAngle, deadzone]);
+  }, [maxAngle, deadzone, active]);
 
   return { tiltRef, leftBarRef, rightBarRef, calibrate, idleRef, idle };
 }
 
 // ─── Controller Screen ────────────────────────────────────────────────────────
-function ControllerScreen({ onBack, premium, setPremium, credits, setCredits, isActive, activeMapping, customPad, controllerLayout, posOverride, gyroOn, setGyroOn, gyroMaxAngle, gyroMode, gyroDeadzone, gyroHaptic, gyroThrottle, gyroIdleDetect, rumbleOn }: {
+function ControllerScreen({ onBack, isActive, activeMapping, customPad, controllerLayout, posOverride, gyroOn, setGyroOn, gyroMaxAngle, gyroMode, gyroDeadzone, gyroHaptic, gyroThrottle, gyroIdleDetect, rumbleOn }: {
   onBack: () => void; isActive: boolean;
-  premium: boolean; setPremium: (v: boolean) => void;
-  credits: number; setCredits: (fn: (c: number) => number) => void;
   activeMapping: Partial<Record<BtnId, string>>;
   customPad?: CustomPad;
   controllerLayout?: "standard" | "mobile";
@@ -894,6 +932,23 @@ function ControllerScreen({ onBack, premium, setPremium, credits, setCredits, is
 }) {
   const [rumble, setRumble] = useState({ left: 0, right: 0, lt: 0, rt: 0 });
   const rumbleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // ── Playtime ──────────────────────────────────────────────────────────────
+  // Gated on `isActive`, the same signal the streaming worker uses (see the
+  // 1.3.23 always-streaming fix). BILLING_DECISIONS 2.2 is explicit that this
+  // must be the billing clock and that a second signal must not be invented:
+  // if the two disagreed, the app would bill for time it was not streaming.
+  // isBlocked, NOT getPlaytimeState: the state object is rebuilt every second
+  // while the clock ticks, so subscribing to it re-rendered this whole screen --
+  // pad SVG included -- once a second during play. A boolean flips at most once
+  // a session, so React bails out until it actually changes.
+  const outOfTime = useSyncExternalStore(onPlaytimeChange, isBlocked, isBlocked);
+
+  useEffect(() => {
+    if (!isActive) return;
+    void beginPlay();
+    return () => { void endPlay(); };
+  }, [isActive]);
 
   useEffect(() => {
     if (!isActive) return;
@@ -1012,7 +1067,9 @@ function ControllerScreen({ onBack, premium, setPremium, credits, setCredits, is
     sendTelemetryRef.current();
     setRtFillState(v);
   }, []);
-  const gyroTilt = useGyro(gyroMaxAngle, gyroDeadzone, () => sendTelemetryRef.current(), gyroOn);
+  // `isActive` is the same signal the streaming worker uses — see the 1.3.23
+  // always-streaming fix. One source of truth for "the user is playing".
+  const gyroTilt = useGyro(gyroMaxAngle, gyroDeadzone, () => sendTelemetryRef.current(), gyroOn, isActive);
   const lastGyroHitMax = useRef({ x: false, y: false });
   const [realTelemetry, setRealTelemetry] = useState(null);
 
@@ -1293,18 +1350,24 @@ function ControllerScreen({ onBack, premium, setPremium, credits, setCredits, is
   // DASHBOARD, pad_writes=1. The wired CONNECTION stays open (standing link);
   // only transmission is gated. Cleanup also fires on unmount.
   useEffect(() => {
-    usbWS.setStreaming(isActive);
+    // `&& !outOfTime` is the actual enforcement on this side. The overlay below
+    // is only what the user sees -- a dialog that can be dismissed, or that
+    // fails to mount, must never be the thing standing between a spent quota
+    // and input reaching the PC. Latching NEUTRAL here also means the pad goes
+    // inert rather than freezing on whatever was last held down.
+    const streaming = isActive && !outOfTime;
+    usbWS.setStreaming(streaming);
     // Same gate for the NATIVE engine (Wi-Fi/tether). Its ~30Hz keep-alive
     // otherwise re-broadcasts the last real payload from every screen; when
     // gated off it latches NEUTRAL and keeps the keep-alive running, so the
     // link (ACK-driven) stays alive but the pad is inert. See checklist B0.
     const bridge = (window as any).AndroidBridge;
-    try { bridge?.setInputStreaming?.(isActive); } catch {}
+    try { bridge?.setInputStreaming?.(streaming); } catch {}
     return () => {
       usbWS.setStreaming(false);
       try { bridge?.setInputStreaming?.(false); } catch {}
     };
-  }, [isActive]);
+  }, [isActive, outOfTime]);
 
   // Layout — scaled up to fill the 1264×570 canvas
   // Helper to apply position override for a named button
@@ -1944,7 +2007,24 @@ function ControllerScreen({ onBack, premium, setPremium, credits, setCredits, is
       {/* Rumble indicators removed — the phone's vibration is the feedback; no on-screen bars during play. */}
 
 
-      {/* Tuning/Credits/Lockout dialogs removed for v1.0 (free, fixed 1000Hz). */}
+      {/* Countdown warnings (15/10/5 min). Owns its own store subscription so a
+          warning never re-renders the pad, and is pointer-events:none so it
+          cannot swallow a tap during play. */}
+      <PlaytimeToast />
+
+      {/* Out of playtime. Rendered last so it sits over the pad. Note this is
+          the SYMPTOM, not the mechanism -- transmission is already stopped by
+          the streaming gate above, so a failure to mount this cannot leak
+          input. */}
+      <AnimatePresence>
+        {outOfTime && (
+          <PlaytimeLockout
+            key="lockout"
+            {...(({ message, resetsAt }) => ({ message, resetsAt }))(getPlaytimeState())}
+            onBack={onBack}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -3059,6 +3139,12 @@ function TabHome({ onLaunch, onConnect, onLaunchEditor, selectedPresetId, onSele
 
   return (
     <div className="space-y-4">
+      {/* Plans are coming, and the 24h gift is tied to an ACCOUNT — most live
+          users have never made one. Placed above everything else because its
+          whole job is to be seen before the release that introduces the limit.
+          This is the "one release before" notice BILLING_DECISIONS 2.1 asks for. */}
+      <LaunchNotice />
+
       {/* Connect to PC banner */}
       <button onClick={onConnect}
         className="w-full flex items-center justify-between px-4 py-3.5 rounded-2xl transition-all active:scale-[0.98] duration-150"
@@ -3391,7 +3477,8 @@ function TabSystem({ gyroOn, setGyroOn, gyroMaxAngle, setGyroMaxAngle, gyroMode,
 
 // ─── In-app feedback ──────────────────────────────────────────────────────────
 // Sends a message straight into the team's admin portal, tagged source="mobile".
-const FEEDBACK_URL = "https://supportportal.gamepad.space/api/support/ticket";
+// FEEDBACK_URL now lives in feedback.ts, built from API_ORIGIN so a build
+// pointed at a LAN backend does not file test tickets on the live support desk.
 const CONTACT_URL = "https://gamepad.space/contact.html";
 const PRIVACY_URL = "https://gamepad.space/privacy.html";
 // Share / import controller layouts by code. POST here to publish (returns a
@@ -3421,8 +3508,10 @@ function FeedbackCard() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: "App User", email: email.trim(), subject: "feedback", message: message.trim(), source: "mobile" }),
       });
-      if (res.ok) setState("ok");
-      else { setState("err"); setErr("Server error — please try again."); }
+      if (res.ok) {
+        setState("ok");
+        markFeedbackSent();   // lets the launch notice stop asking for feedback
+      } else { setState("err"); setErr("Server error — please try again."); }
     } catch {
       setState("err"); setErr("No connection — check your internet.");
     }
@@ -3773,7 +3862,7 @@ const TABS: { id: DashTab; label: string; Icon: React.ComponentType<{ size?: num
 
 // ─── Dashboard Screen ─────────────────────────────────────────────────────────
 function DashboardScreen({
-  onLaunch, onBack, onLaunchEditor, realTelemetry, premium, setPremium, credits, setCredits, selectedPresetId, onSelectPreset, customPads, onSaveCustomPad, onDeleteCustomPad, onDuplicateCustomPad, presetOverrides, onSavePresetOverride, onResetPreset,
+  onLaunch, onBack, onLaunchEditor, realTelemetry, selectedPresetId, onSelectPreset, customPads, onSaveCustomPad, onDeleteCustomPad, onDuplicateCustomPad, presetOverrides, onSavePresetOverride, onResetPreset,
   posOverrides, onSavePosOverride, onResetPosOverride,
   gyroOn, setGyroOn,
   gyroMaxAngle, setGyroMaxAngle,
@@ -3785,8 +3874,6 @@ function DashboardScreen({
   rumbleOn, setRumbleOn,
 }: {
   onLaunch: () => void; onBack: () => void; onLaunchEditor?: (pad: CustomPad) => void; pendingEditPad?: CustomPad | null; onClearPendingEditPad?: () => void; realTelemetry: any;
-  premium: boolean; setPremium: (v: boolean) => void;
-  credits: number; setCredits: (fn: (c: number) => number) => void;
   selectedPresetId: string; onSelectPreset: (id: string) => void;
   customPads: CustomPad[]; onSaveCustomPad: (p: CustomPad) => void;
   onDeleteCustomPad: (id: string) => void;
@@ -3939,6 +4026,11 @@ function DashboardScreen({
     prevIdxRef.current = newIdx;
     setTab(newTab);
   }
+
+  // Another view asking for a specific tab — currently the controller's
+  // out-of-playtime overlay sending the user to Account to see the plans.
+  // Without this it could only call onBack() and would land on Home.
+  useEffect(() => onDashboardTabRequest((t) => changeTab(t)));
 
   // Register a global hook so handleAndroidBack (App level) can close our dialog
   // instead of navigating to scanner when the Android back gesture fires during keyboard use.
@@ -4620,8 +4712,6 @@ export default function App() {
     }
   }
 
-  const [premium, setPremium] = useState(false);
-  const [credits, setCredits] = useState(35 * 60);
   const [selectedPresetId, setSelectedPresetId] = useState("xbox");
   const [editingPad, setEditingPad] = useState<CustomPad | null>(null);
   // The editor's "Save & Quit" calls onSave and THEN its close handler, which is
@@ -4872,8 +4962,6 @@ export default function App() {
               onBack={() => navigateTo("scanner")}
               onLaunchEditor={openEditor}
               realTelemetry={realTelemetry}
-              premium={premium} setPremium={setPremium}
-              credits={credits} setCredits={setCredits}
               selectedPresetId={selectedPresetId} onSelectPreset={setSelectedPresetId}
               customPads={customPads} onSaveCustomPad={saveCustomPad} onDeleteCustomPad={deleteCustomPad}
               onDuplicateCustomPad={duplicateCustomPad}
@@ -4908,8 +4996,6 @@ export default function App() {
             <ControllerScreen
               onBack={() => navigateTo("dashboard")}
               isActive={view === "controller"}
-              premium={premium} setPremium={setPremium}
-              credits={credits} setCredits={setCredits}
               activeMapping={activeMapping}
               customPad={activeCustomPad}
               controllerLayout={activeCustomPad ? "standard" : controllerLayout}
