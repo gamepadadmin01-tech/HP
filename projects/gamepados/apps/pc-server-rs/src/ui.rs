@@ -36,6 +36,71 @@ use crate::status::Status;
 /// refreshes at 1 Hz — repainting faster would burn GPU for nothing.
 const REPAINT_EVERY: Duration = Duration::from_millis(500);
 
+// --- Colours -----------------------------------------------------------------
+//
+// The same palette the website and the phone app use, so the three surfaces of
+// one product stop looking like three products. This window previously ran
+// egui's stock LIGHT theme -- a grey dialog with default buttons -- which is
+// the whole of why it read as unfinished.
+//
+// COLOURS ONLY. No font sizes, no spacing, no window size, nothing moved.
+//
+// That restriction is the point. A previous attempt re-themed AND re-laid-out
+// this window: bigger type, roomier spacing, elements regrouped into cards. The
+// window is sized to its content (380x420, measured against the real thing), so
+// growing the type pushed the feedback row off the bottom and the cards off
+// both sides. It compiled perfectly and was only wrong once you opened it.
+// Changing paint cannot change layout; changing metrics can.
+const PAPER: egui::Color32 = egui::Color32::from_rgb(0x07, 0x08, 0x0C);
+const SURFACE: egui::Color32 = egui::Color32::from_rgb(0x13, 0x15, 0x1C);
+const SURFACE_2: egui::Color32 = egui::Color32::from_rgb(0x1B, 0x1E, 0x27);
+const INK: egui::Color32 = egui::Color32::from_rgb(0xF4, 0xF5, 0xF8);
+const TEXT: egui::Color32 = egui::Color32::from_rgb(0xD6, 0xD9, 0xE1);
+const ORANGE: egui::Color32 = egui::Color32::from_rgb(0xFF, 0x5A, 0x14);
+const BORDER: egui::Color32 = egui::Color32::from_rgb(0x24, 0x27, 0x33);
+
+/// Paint egui in the product's colours. Called once at startup.
+fn apply_theme(ctx: &egui::Context) {
+    use egui::{Color32, Stroke};
+
+    let mut v = egui::Visuals::dark();
+    v.panel_fill = PAPER;
+    v.window_fill = PAPER;
+    v.extreme_bg_color = egui::Color32::from_rgb(0x04, 0x05, 0x08); // text-edit wells
+    v.faint_bg_color = SURFACE;
+    v.override_text_color = Some(TEXT);
+    v.hyperlink_color = ORANGE;
+    v.window_stroke = Stroke::new(1.0, BORDER);
+
+    // `weak_bg_fill` is what an ordinary button actually paints with;
+    // `bg_fill` is the checked/selected state. Both must be set or half the
+    // widgets stay grey.
+    v.widgets.noninteractive.bg_fill = SURFACE;
+    v.widgets.noninteractive.weak_bg_fill = SURFACE;
+    v.widgets.noninteractive.bg_stroke = Stroke::new(1.0, BORDER);
+    v.widgets.noninteractive.fg_stroke = Stroke::new(1.0, TEXT);
+
+    v.widgets.inactive.bg_fill = SURFACE_2;
+    v.widgets.inactive.weak_bg_fill = SURFACE;
+    v.widgets.inactive.bg_stroke = Stroke::new(1.0, BORDER);
+    v.widgets.inactive.fg_stroke = Stroke::new(1.0, TEXT);
+
+    v.widgets.hovered.bg_fill = SURFACE_2;
+    v.widgets.hovered.weak_bg_fill = SURFACE_2;
+    v.widgets.hovered.bg_stroke = Stroke::new(1.0, ORANGE);
+    v.widgets.hovered.fg_stroke = Stroke::new(1.0, INK);
+
+    v.widgets.active.bg_fill = ORANGE;
+    v.widgets.active.weak_bg_fill = ORANGE;
+    v.widgets.active.bg_stroke = Stroke::new(1.0, ORANGE);
+    v.widgets.active.fg_stroke = Stroke::new(1.0, Color32::WHITE);
+
+    v.selection.bg_fill = ORANGE.gamma_multiply(0.35);
+    v.selection.stroke = Stroke::new(1.0, INK);
+
+    ctx.set_visuals(v);
+}
+
 /// Messages from worker threads back to the UI.
 enum Msg {
     Update(Box<UpdateInfo>),
@@ -107,6 +172,7 @@ impl App {
             feedback_ok: false,
             feedback_sending: false,
         };
+        apply_theme(&cc.egui_ctx);
         app.build_qr_texture(&cc.egui_ctx);
         // Silent auto-check on launch, matching `_run_check(manual=False)`. Only
         // surfaces if an update is actually available — a launch-time popup
