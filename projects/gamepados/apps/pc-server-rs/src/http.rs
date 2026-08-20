@@ -51,12 +51,36 @@ use std::time::Duration;
 /// never meant to be. Patch-level because nothing about the wire protocol,
 /// pairing format or UI changed.
 ///
+/// **2.1.0** — playtime capability tickets (`src/ticket.rs`). The server now
+/// understands a signed permission slip forwarded by the phone over the control
+/// channel and ends the session when fresh ones stop arriving, which is what
+/// makes the daily playtime limit enforceable against a modified APK. MINOR,
+/// not patch: it adds a new client→server message and raises `ws::MAX_FRAME`
+/// from 64 to 96 to carry it.
+///
+/// ⚠️ **Tickets ride UDP, not the WebSocket.** The first cut of 2.1.0 verified
+/// them in `ws.rs`. That bridge binds 127.0.0.1 and is only reachable through
+/// `adb reverse` — USB debugging — while the Android engine opens exactly one
+/// socket, `SOCK_DGRAM`. So Wi-Fi and tether users, the whole population this
+/// exists to police, never touched it. Caught in review before release; the
+/// demux now sits on the UDP path beside the GRX handshake check and costs a
+/// single integer compare (measured at zero over a bare loop). `ws.rs` keeps
+/// its own gate so USB-debugging sessions are covered too.
+///
+/// ⚠️ **This release is deliberately INERT.** A connection that never presents
+/// a ticket is never cut off, so 2.1.0 behaves exactly like 2.0.1 for every
+/// phone built before the billing release. That is what allows it to be shipped
+/// FIRST and spread through the normal updater for weeks before the app starts
+/// requiring it. Ship them together and every user hits a wall on day one.
+/// Enforcement also stays off entirely unless `SESSION_TICKET_PUBLIC_KEY` was
+/// set at build time.
+///
 /// ⚠️ `app_version!` is a macro, not just a const, because `USER_AGENT` needs a
 /// literal for `concat!` — which is how the two used to be separate copies of
 /// the same number. One definition now feeds both; they cannot drift.
 macro_rules! app_version {
     () => {
-        "2.0.1"
+        "2.1.0"
     };
 }
 

@@ -23,7 +23,7 @@
 #define AppName        "Gamepad Server"
 ; ⚠️ Must equal http.rs APP_VERSION and the backend's pc.version at release —
 ; a skew makes the in-app updater loop forever (install → "update available").
-#define AppVersion      "2.0.1"
+#define AppVersion      "2.1.0"
 #define AppPublisher    "GamepadOS"
 #define AppURL          "https://gamepad.space"
 #define ExeName         "GamepadServer.exe"
@@ -65,7 +65,7 @@ AppMutex=RemoteGamepadServerSingleton
 ; the normal user) — RM-restart + [Run] would launch it twice.
 CloseApplications=force
 RestartApplications=no
-VersionInfoVersion=2.0.1.0
+VersionInfoVersion=2.1.0.0
 VersionInfoCompany={#AppPublisher}
 VersionInfoProductName={#AppName}
 VersionInfoDescription={#AppName} Setup

@@ -29,6 +29,7 @@ pub mod qr;
 pub mod session;
 pub mod singleton;
 pub mod status;
+pub mod ticket;
 pub mod ui;
 #[cfg(windows)]
 pub mod vigem;

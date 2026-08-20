@@ -1,6 +1,9 @@
 [package]
 name = "pc-server-rs"
-version = "0.1.0"
+# Kept in step with http.rs app_version!, build.rs and installer/GamepadServer.iss.
+# It sat at 0.1.0 through 2.0.x — harmless, since build-installer.ps1 gates on the
+# other three, but it was a fourth copy of the number quietly disagreeing.
+version = "2.1.0"
 edition = "2024"
 
 [dependencies]
@@ -21,6 +24,13 @@ hkdf = "0.12"
 hmac = "0.12"
 sha2 = "0.10"
 subtle = "2"          # constant-time equality for confirmation tags
+
+# Ed25519 for playtime capability tickets (see src/ticket.rs). Same reasoning as
+# the block above: this is signature verification, and the failure modes of a
+# hand-rolled implementation are silent. Crucially this binary holds only the
+# PUBLIC key, so extracting it from the exe gains an attacker nothing — which is
+# the whole reason it is a signature scheme and not an HMAC.
+ed25519-dalek = { version = "2", default-features = false, features = ["std", "fast"] }
 
 # QR encoding for Wi-Fi pairing. NOT cosmetic: manual connect sends token 0,
 # which is only accepted off-LAN/tether, so a phone on Wi-Fi can ONLY pair by

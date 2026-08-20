@@ -17,8 +17,8 @@ fn main() {
         // Keep in step with http::APP_VERSION and the installer's AppVersion.
         // `installer/build-installer.ps1` now FAILS the build if these three
         // disagree, so a missed edit here is caught before an installer ships.
-        res.set("FileVersion", "2.0.1.0");
-        res.set("ProductVersion", "2.0.1.0");
+        res.set("FileVersion", "2.1.0.0");
+        res.set("ProductVersion", "2.1.0.0");
         if let Err(e) = res.compile() {
             // Never fail the build over cosmetics — but say so loudly, because a
             // shipped exe with the default Rust icon looks like malware to users.

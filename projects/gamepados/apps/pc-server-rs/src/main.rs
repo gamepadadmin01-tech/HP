@@ -511,6 +511,20 @@ fn run_udp<S: pc_server_rs::net::PadSink + Send + 'static>(
     const DETECT_EVERY: Duration = Duration::from_secs(5);
     let mut last_detect = Instant::now();
     let mut buf = [0u8; 2048];
+    // Playtime capability tickets, demuxed out of the same UDP socket the input
+    // frames arrive on.
+    //
+    // WHY UDP AND NOT THE WEBSOCKET. The first cut of this put ticket handling
+    // in ws.rs. That bridge binds 127.0.0.1 and is only reachable through
+    // `adb reverse`, i.e. USB debugging — and the Android engine opens exactly
+    // one socket, SOCK_DGRAM. So Wi-Fi and tether users, the entire population
+    // this is meant to police, never touched it. Tickets ride the UDP socket
+    // because that is the only channel every user actually has.
+    //
+    // Gates are keyed by `session_key` — the same IP string the sessions map
+    // uses — so a lapsed gate maps straight onto the session it must end.
+    let mut gates = pc_server_rs::ticket::TicketRegistry::new();
+    let mut tickets: Vec<(String, [u8; pc_server_rs::ticket::TICKET_LEN])> = Vec::new();
     let mut last_tick = Instant::now();
     let mut last_report = Instant::now();
     // ── Self-instrumentation (the Phase 0 lesson applied to the server) ──────
@@ -560,8 +574,16 @@ fn run_udp<S: pc_server_rs::net::PadSink + Send + 'static>(
                 // anyway, so we keep that and silently discard the rest.
                 latest.clear();
                 handshakes.clear();
+                tickets.clear();
                 if pc_server_rs::grx::is_handshake(&buf[..n]) {
                     handshakes.push((addr, buf[..n].to_vec(), local));
+                } else if pc_server_rs::ticket::looks_like_ticket(&buf[..n]) {
+                    // One integer compare for an input frame — see the doc
+                    // comment on looks_like_ticket. Verification happens AFTER
+                    // the drain, never here.
+                    let mut t = [0u8; pc_server_rs::ticket::TICKET_LEN];
+                    t.copy_from_slice(&buf[..n]);
+                    tickets.push((pc_server_rs::net::session_key(&addr), t));
                 } else {
                     upsert(&mut latest, addr, &buf[..n], local);
                 }
@@ -571,6 +593,10 @@ fn run_udp<S: pc_server_rs::net::PadSink + Send + 'static>(
                         Ok((n2, a2, l2)) => {
                             if pc_server_rs::grx::is_handshake(&buf[..n2]) {
                                 handshakes.push((a2, buf[..n2].to_vec(), l2));
+                            } else if pc_server_rs::ticket::looks_like_ticket(&buf[..n2]) {
+                                let mut t = [0u8; pc_server_rs::ticket::TICKET_LEN];
+                                t.copy_from_slice(&buf[..n2]);
+                                tickets.push((pc_server_rs::net::session_key(&a2), t));
                             } else {
                                 upsert(&mut latest, a2, &buf[..n2], l2);
                             }
@@ -618,6 +644,35 @@ fn run_udp<S: pc_server_rs::net::PadSink + Send + 'static>(
                         println!("frame from {a} -> ACK (batch of {drained})");
                     }
                 }
+                // ── Playtime ────────────────────────────────────────────────
+                // Ed25519 verification happens HERE — once per ticket, roughly
+                // once a minute per phone — never per input frame. Deliberately
+                // after the input above, so a ticket can never delay a frame.
+                for (key, frame) in tickets.iter() {
+                    match gates.offer(key, frame, now) {
+                        Ok(t) => {
+                            if args.verbose {
+                                println!("playtime: {key} ticket seq {} ({}s)", t.seq, t.ttl.as_secs());
+                            }
+                        }
+                        Err(e) => println!("playtime: {key} ticket rejected ({e:?})"),
+                    }
+                }
+                // A registry with nothing armed short-circuits here, so every
+                // build shipped before the billing release does no work at all.
+                if gates.any_armed() {
+                    for key in gates.expired(now) {
+                        if server.sessions.remove(&key).is_some() {
+                            println!("playtime: {key} out of time — pad released");
+                        }
+                        gates.forget(&key);
+                    }
+                    // Forget phones that have gone away, so a long-running
+                    // server does not accumulate a gate per device ever seen.
+                    let live: Vec<String> = server.sessions.keys().cloned().collect();
+                    gates.retain(|k| live.iter().any(|l| l == k));
+                }
+
                 drop(server);
                 if handle_ns.len() < 8192 {
                     handle_ns.push(t_start.elapsed().as_nanos() as u64);

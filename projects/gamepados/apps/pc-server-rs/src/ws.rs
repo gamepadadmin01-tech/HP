@@ -28,8 +28,13 @@ use std::net::TcpStream;
 
 /// RFC 6455 handshake GUID.
 const WS_GUID: &str = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
-/// Frames are 20-byte payloads; Python caps at 64. Anything bigger is bogus.
-pub const MAX_FRAME: usize = 64;
+/// Input frames are 20 bytes. The only larger thing a client may legitimately
+/// send is a playtime capability ticket, which is `ticket::TICKET_LEN` (96) —
+/// 32 bytes of header plus a 64-byte Ed25519 signature, and that signature size
+/// is fixed by the algorithm. Raised from 64 for exactly that reason; a ticket
+/// test asserts the two stay in step. Still far below the 125-byte ceiling the
+/// 7-bit WebSocket length form imposes below, so this remains a tight bound.
+pub const MAX_FRAME: usize = crate::ticket::TICKET_LEN;
 /// Bound on the HTTP upgrade request so a garbage client can't grow our buffer.
 const MAX_HEADER: usize = 8 * 1024;
 
@@ -512,12 +517,31 @@ where
 
     // Receive loop.
     let mut last_frame = Instant::now();
+    // Playtime enforcement for THIS connection. Inert until the phone presents
+    // a ticket, which is what lets this version ship ahead of the app that uses
+    // it — see the rollout note in ticket.rs.
+    let mut gate = crate::ticket::TicketGate::new();
     // Paces the liveness pings sent to an idle-but-sessionless link (see the
     // idle branch below). Without this, once idle the ping would fire on every
     // 250 ms read-timeout tick instead of once per WS_IDLE_TIMEOUT.
     let mut last_ping = Instant::now();
     let result = (|| -> std::io::Result<()> {
         loop {
+            // Playtime. Checked every pass rather than only when idle, because a
+            // phone that has run out of time is usually still streaming input —
+            // waiting for it to go quiet would never cut it off. Returning here
+            // runs the normal teardown below, which frees the pad immediately.
+            //
+            // ⚠️ THIS LOOP CARRIES INPUT FRAMES. `armed()` is a plain bool read
+            // and MUST stay first: it short-circuits before Instant::now(),
+            // which is a clock syscall (QueryPerformanceCounter on Windows).
+            // Written the other way round it cost a syscall on every single
+            // button press, for a gate that is inert on every build shipped so
+            // far. Order matters here; do not "simplify" it.
+            if gate.armed() && gate.expired(Instant::now()) {
+                println!("playtime: no fresh ticket — ending session");
+                return Ok(());
+            }
             let frame = match read_frame(&mut stream) {
                 Ok(f) => f,
                 Err(e) if is_timeout(&e) => {
@@ -573,6 +597,26 @@ where
                 Some(Frame::Binary(payload)) => {
                     last_frame = Instant::now();
                     if payload.len() != crate::wire::PAYLOAD_SIZE {
+                        // Not input. Everything here used to be discarded, so a
+                        // ticket check costs the input path exactly nothing —
+                        // a 20-byte frame never reaches this branch at all.
+                        match gate.offer(&payload, Instant::now()) {
+                            Ok(t) => {
+                                println!(
+                                    "playtime: ticket accepted (seq {}, {}s)",
+                                    t.seq,
+                                    t.ttl.as_secs()
+                                );
+                            }
+                            // Not a ticket either — same as before: ignore it.
+                            Err(crate::ticket::Reject::NotATicket) => {}
+                            Err(e) => {
+                                // A ticket that failed verification is a real
+                                // signal, not noise: either a forgery or a
+                                // resumed zombie session.
+                                println!("playtime: ticket rejected ({e:?})");
+                            }
+                        }
                         continue; // not an input frame
                     }
                     let replies = {
