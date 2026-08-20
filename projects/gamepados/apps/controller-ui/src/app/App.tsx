@@ -1425,7 +1425,19 @@ function ControllerScreen({ onBack, isActive, activeMapping, customPad, controll
   // must keep sending; a 500ms watcher yields/reclaims on transport changes.
   useEffect(() => {
     const bridge = (window as any).AndroidBridge;
-    if (!isActive || !nativeFlag || !bridge || !bridge.setNativeInputGeometry) return;
+    // `!hasSession || outOfTime` closes the actual bug: this effect answers
+    // only to isActive, so with neither check it armed the NATIVE touch layer
+    // -- which reads screen geometry directly and computes gamepad state on
+    // its own -- regardless of whether anyone was allowed to play. Streaming
+    // was already correctly blocked (see the other effect), so no packet
+    // reached the PC, but every full-screen DOM overlay in this component
+    // (SignInWall, PlaytimeLockout) sits ABOVE the pad in z-index only; native
+    // touch capture does not consult DOM z-index at all, so it kept eating
+    // every tap meant for the overlay's own buttons and inputs -- reported as
+    // "I can touch the controller but not the sign-in box". Both overlays
+    // share this one root cause and both are fixed by the same condition.
+    if (!isActive || !nativeFlag || !bridge || !bridge.setNativeInputGeometry
+      || !hasSession || outOfTime) return;
     let cancelled = false;
     let raf1 = 0, raf2 = 0;
     const deactivate = () => {
@@ -1480,7 +1492,7 @@ function ControllerScreen({ onBack, isActive, activeMapping, customPad, controll
       clearInterval(transportPoll);
       deactivate();
     };
-  }, [isActive, nativeFlag, activePad, windowSize]);
+  }, [isActive, nativeFlag, activePad, windowSize, hasSession, outOfTime]);
 
   // ── PHASE 3: keep the native gyro→payload math in sync with the JS settings ─
   useEffect(() => {
