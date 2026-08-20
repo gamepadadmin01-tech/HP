@@ -5,6 +5,7 @@ import { Home, Usb, Activity, Gamepad2, QrCode, X, Settings, Sparkles, User } fr
 import { TuningDialog, QRScanOverlay } from "./components/Dialogs";
 import { PlaytimeLockout } from "./components/PlaytimeLockout";
 import { PlaytimeToast } from "./components/PlaytimeToast";
+import { SignInWall } from "./components/SignInWall";
 import { beginPlay, endPlay, getPlaytimeState, isBlocked, onPlaytimeChange } from "./store/playtime";
 import { onDashboardTabRequest } from "./store/navIntent";
 import { LaunchNotice } from "./components/LaunchNotice";
@@ -943,6 +944,12 @@ function ControllerScreen({ onBack, isActive, activeMapping, customPad, controll
   // pad SVG included -- once a second during play. A boolean flips at most once
   // a session, so React bails out until it actually changes.
   const outOfTime = useSyncExternalStore(onPlaytimeChange, isBlocked, isBlocked);
+  // A fresh install could open this screen and stream real input with no
+  // account at all — playtime was never tracked because nothing checked for
+  // a session before letting the pad go live. `!!getSession()` is a plain
+  // boolean, same reasoning as isBlocked above: flips at most once per
+  // sign-in/out, so this does not re-render the pad on every tick either.
+  const hasSession = useSyncExternalStore(onSessionChange, () => !!getSession(), () => !!getSession());
 
   useEffect(() => {
     if (!isActive) return;
@@ -1350,12 +1357,13 @@ function ControllerScreen({ onBack, isActive, activeMapping, customPad, controll
   // DASHBOARD, pad_writes=1. The wired CONNECTION stays open (standing link);
   // only transmission is gated. Cleanup also fires on unmount.
   useEffect(() => {
-    // `&& !outOfTime` is the actual enforcement on this side. The overlay below
-    // is only what the user sees -- a dialog that can be dismissed, or that
-    // fails to mount, must never be the thing standing between a spent quota
-    // and input reaching the PC. Latching NEUTRAL here also means the pad goes
-    // inert rather than freezing on whatever was last held down.
-    const streaming = isActive && !outOfTime;
+    // `&& !outOfTime && hasSession` is the actual enforcement on this side.
+    // The overlays below are only what the user sees -- a dialog that can be
+    // dismissed, or that fails to mount, must never be the thing standing
+    // between a spent quota (or a missing account) and input reaching the PC.
+    // Latching NEUTRAL here also means the pad goes inert rather than
+    // freezing on whatever was last held down.
+    const streaming = isActive && !outOfTime && hasSession;
     usbWS.setStreaming(streaming);
     // Same gate for the NATIVE engine (Wi-Fi/tether). Its ~30Hz keep-alive
     // otherwise re-broadcasts the last real payload from every screen; when
@@ -2024,6 +2032,15 @@ function ControllerScreen({ onBack, isActive, activeMapping, customPad, controll
             onBack={onBack}
           />
         )}
+      </AnimatePresence>
+
+      {/* Checked ahead of the quota lockout above -- if there is no account at
+          all, quota has not even come up yet. Same "this is the symptom, not
+          the mechanism" rule: the streaming gate already stopped input before
+          this had a chance to render. No dismiss button anywhere in it, on
+          purpose -- see SignInWall.tsx for why. */}
+      <AnimatePresence>
+        {!hasSession && <SignInWall key="signin-wall" />}
       </AnimatePresence>
     </div>
   );
