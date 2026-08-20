@@ -20,6 +20,18 @@
 //   * It closes smoothly and stays closed. Dismissing collapses the whole card
 //     rather than yanking it out of the column, and the choice is remembered
 //     against this notice's id so a LATER announcement is not pre-silenced.
+//
+//   * Its entrance is CHEAP, on purpose. This card lives inside TabHome, which
+//     App.tsx mounts with `{tab === "home" && <TabHome/>}` — a full unmount,
+//     not a display toggle — so this component (and its mount animation)
+//     re-runs every single time the user returns to Home, including every
+//     time they back out of a game. That is far from "once ever", which is
+//     what an earlier version of this file assumed when it used Collapse's
+//     "slide" mode for the outer wrapper. "slide" genuinely animates
+//     grid-template-rows, which reflows on every frame of the transition —
+//     fine for something that fires once, a visible stutter for something
+//     that fires on every Home visit. It now uses the default "reveal" mode
+//     everywhere: one instant layout pass, then a compositor-only fade/slide.
 //   * It never claims the gift is already yours. Nothing here grants anything —
 //     the entitlement is written server-side by grant-launch-bonus.js.
 //
@@ -79,7 +91,7 @@ export function LaunchNotice() {
   }
 
   return (
-    <Collapse open={entered && !closing} durationMs={CLOSE_MS} mode="slide">
+    <Collapse open={entered && !closing} durationMs={CLOSE_MS}>
       <div
         className="w-full rounded-2xl overflow-hidden"
         style={{

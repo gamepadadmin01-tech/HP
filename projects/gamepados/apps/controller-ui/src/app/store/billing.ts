@@ -146,7 +146,17 @@ export function refresh(): Promise<void> {
     return Promise.resolve();
   }
 
-  if (!state.entitlement) set({ status: "loading", message: "" });
+  // Always announce "loading", not just on the first-ever call. Gating this
+  // on `!state.entitlement` was the actual reason the refresh button in
+  // PlanPanel looked broken: after the first successful load, every later tap
+  // fetched fine in the background but never flipped status away from
+  // "ready", so the button's spin icon (bound to status === "loading") never
+  // moved — no feedback that anything happened at all, especially when the
+  // numbers coming back were unchanged. The full-panel loading view is still
+  // guarded elsewhere by `state.status === "loading" && !ent`, so this does
+  // not regress into a blank screen on a manual refresh — it only makes the
+  // small spinner honest.
+  set({ status: "loading", message: "" });
 
   const channel = getAppInfo().channel || "direct";
 

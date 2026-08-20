@@ -70,6 +70,12 @@ export const KEYS = {
   // stop asking for it.
   feedbackSent: "gp_feedback_sent",
 
+  // Which account's data the pad-related keys above currently hold. Compared
+  // on every sign-in so a second account signing in on the same device gets a
+  // clean pull instead of inheriting (and then, on delete, retroactively
+  // wiping) whatever the previous account left behind. See sync.ts.
+  syncOwner: "gp_sync_owner",
+
   // Storage schema
   schemaVersion: "gp_schema_version",
 } as const;

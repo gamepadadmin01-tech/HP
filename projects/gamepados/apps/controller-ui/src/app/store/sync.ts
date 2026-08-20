@@ -8,6 +8,45 @@
 // as tombstones, never as an absence, so signing in on a fresh phone pulls the
 // account's layouts down instead of pushing emptiness up and wiping them.
 //
+// ── Whose data local storage currently holds ──────────────────────────────────
+//
+// custom_pads, gp_deleted_pads, gp_sync_mark and gp_last_sync are plain, single,
+// device-wide keys — nothing in them says which account they belong to. That
+// was a real bug: sign in as A, save a pad, sign out, sign in as B on the same
+// phone, and onSignedInSync() below would push whatever local storage still
+// held — A's pad — up as part of B's sync payload, because it never checked
+// whose it was. B would see it. Delete it as B, and the tombstone for it was
+// STILL sitting in the same global gp_deleted_pads, so the next time A signed
+// back in, that tombstone rode along in A's own sync payload and deleted it
+// there too. Two different people, one shared bucket.
+//
+// The fix is an owner tag. Every successful sync records which account's view
+// local storage now represents. On the next sign-in, if the incoming account
+// does not match, local storage is not this account's to push — it is cleared
+// FIRST, so the sync that follows is a pure pull of that account's own
+// server-side layouts, never a push of someone else's.
+//
+// An unset owner (fresh install, or pads made before ever signing in) is not a
+// mismatch: that local library legitimately belongs to whoever signs in first,
+// and clearing it would just delete a new user's pre-signup work for nothing.
+
+function syncOwner(): string {
+  return readString(KEYS.syncOwner, "");
+}
+
+function setSyncOwner(email: string): void {
+  writeString(KEYS.syncOwner, email.toLowerCase());
+}
+
+/** Drop everything pad-related that local storage holds. Used only when the
+ *  data on disk belongs to a DIFFERENT account than the one signing in now. */
+function discardLocalPadState(): void {
+  replacePads([]);
+  pruneTombstones(new Set());   // keep-set empty = every tombstone is dropped
+  remove(KEYS.syncMark);
+  remove(KEYS.lastSync);
+}
+
 // ── Why the scheduling looks the way it does ──────────────────────────────────
 //
 // A backup that uploads on every state change is a battery and data leak, and
@@ -24,13 +63,22 @@
 
 import { CustomPad } from "../types";
 import { getSession } from "./account";
-import { KEYS, readString, writeString } from "./storage";
+import { API_ORIGIN } from "../api/account";
+import { KEYS, readString, writeString, remove } from "./storage";
 import { autoSyncEnabled } from "./prefs";
 import {
   loadPads, replacePads, loadTombstones, pruneTombstones,
 } from "./pads";
 
-const BASE = "https://supportportal.gamepad.space/api/account";
+// Was a hardcoded production URL, independent of API_ORIGIN — every other
+// module (api/account.ts, api/billing.ts) reads that one setting so a LAN test
+// build can point the whole app at a local backend at once. This file quietly
+// never did, so a LAN build's layout sync always hit production regardless —
+// invisible on the real shipped app (API_ORIGIN defaults to production anyway,
+// so the two happened to agree there), but it meant a local/LAN test build's
+// sync calls were silently talking to the live database the whole time, and
+// made this file impossible to test against a local backend at all.
+const BASE = `${API_ORIGIN}/api/account`;
 
 /** Quiet period after an edit before uploading. Long enough that a burst of
  *  edits is one request, short enough that closing the app right after a change
@@ -226,6 +274,12 @@ export async function syncNow(force = true): Promise<boolean> {
     // replacePads() will call scheduleSync(), find nothing dirty, and stop —
     // this is what breaks the sync→adopt→sync loop.
     markSynced();
+    // And record WHO it was synced for — set here, on every successful sync,
+    // not only the sign-in one. If the sign-in sync happens to fail (offline
+    // at the moment of signing in) and a background retry succeeds later, the
+    // owner still gets recorded — otherwise a later account switch on this
+    // device would see an unset owner and wrongly treat it as a fresh device.
+    setSyncOwner(session.user.email);
 
     const at = body.syncedAt || new Date().toISOString();
     writeString(KEYS.lastSync, at);
@@ -244,8 +298,17 @@ export async function syncNow(force = true): Promise<boolean> {
  *  backup off — restoring what the account already holds is not the same as
  *  uploading, and it is the only way a fresh install gets its pads back. */
 export function onSignedInSync(): void {
-  if (getSession()) {
+  const session = getSession();
+  if (session) {
     failures = 0;
+    const owner = syncOwner();
+    const incoming = session.user.email.toLowerCase();
+    // Only a RECORDED, DIFFERENT owner counts as a switch. An unset owner is a
+    // fresh device or a guest's pre-signup pads — those are meant to sync up,
+    // not be wiped.
+    if (owner && owner !== incoming) {
+      discardLocalPadState();
+    }
     void syncNow(true);
   } else {
     clearTimer();
