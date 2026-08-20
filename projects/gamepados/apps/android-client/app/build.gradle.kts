@@ -210,8 +210,17 @@ android {
         //
         // None of this touches the input path. Findings from the 2026-08-18
         // performance audit; see docs/research/GAMEPADOS_AUDIT_ROUND2.md §7.
+        //
+        // versionName moved to 1.4.0 (code STAYS 54 — never consumed on Play or
+        // registered in the admin portal, so renaming costs nothing). What made
+        // this a minor bump rather than another patch: the billing system
+        // (plans, the daily quota, the in-app purchase flow) and the launch
+        // notice banner, all landed on top of the 1.3.29 base above. Held back
+        // from Register & Activate deliberately — see BILLING_DECISIONS.md and
+        // RELEASE.md — until it has been tested through, on real hardware,
+        // start to finish.
         versionCode = 54
-        versionName = "1.3.29"
+        versionName = "1.4.0"
 
         ndk {
             // Broad device coverage (universal APK for sideload + in-app updater):

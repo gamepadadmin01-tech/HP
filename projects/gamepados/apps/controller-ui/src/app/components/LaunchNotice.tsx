@@ -51,8 +51,10 @@ const MUTED = "#7C8AA0";
 const GOOD = "#5FBF8F";
 
 /** Bumped if the notice is ever reused for a later change, so a previous
- *  dismissal does not silence a new announcement. */
-const NOTICE_ID = "plans-1.3.29";
+ *  dismissal does not silence a new announcement. Bumped here for the 1.4.0
+ *  copy change -- anyone who dismissed the 1.3.29 wording (including on this
+ *  very phone, during tonight's testing) sees the new one fresh. */
+const NOTICE_ID = "plans-1.4.0";
 const CLOSE_MS = 260;
 
 function dismissed(): boolean {
@@ -117,7 +119,7 @@ export function LaunchNotice() {
                 A heads-up, and a thank-you
               </span>
               <span className="block text-xs mt-0.5" style={{ color: MUTED }}>
-                {done ? "You're all set for the 24-hour gift" : "Plans are coming · 24h unlimited for you"}
+                {done ? "You're all set for the free premium gift" : "Boosted latency, live now · free premium for you"}
               </span>
             </span>
 
@@ -144,18 +146,19 @@ export function LaunchNotice() {
         <Collapse open={open}>
           <div className="px-4 pb-4">
             <p className="text-xs leading-relaxed" style={{ color: MUTED }}>
-              We&rsquo;ve rebuilt the input path — this build is the fastest GamepadOS has
-              been. To keep that work going, plans are coming in a future update.
-              They&rsquo;ll be cheap, and <span style={{ color: "#FFFFFF" }}>an hour of play
-              every day stays free, forever</span>.
+              GamepadOS just entered a new level of boosted latency — the input path is
+              faster than ever, with a long list of performance bugs optimized away. To
+              keep that work going, GamepadOS now has plans. They&rsquo;re cheap, and{" "}
+              <span style={{ color: "#FFFFFF" }}>an hour of play every day stays free,
+              forever</span>.
             </p>
 
             <p className="text-xs leading-relaxed mt-2" style={{ color: MUTED }}>
               {done
-                ? "Your 24 hours of unlimited playtime will be waiting on your account when plans arrive."
+                ? "Your free premium — 24 hours of unlimited playtime — is tied to your account and on its way."
                 : hasAccount
-                  ? "Everyone already using GamepadOS gets 24 hours of unlimited playtime when that lands, tied to your account — and yours is ready. Tell us how the app is doing while you're here."
-                  : "Everyone already using GamepadOS gets 24 hours of unlimited playtime when that lands. It's tied to your account, so make one now — and tell us what you think while you're there."}
+                  ? "Everyone already using GamepadOS can claim free premium — 24 hours of unlimited playtime — tied to your account, and yours is ready. Tell us how the app is doing while you're here."
+                  : "Everyone already using GamepadOS can claim free premium — 24 hours of unlimited playtime. It's tied to your account, so create one now — and tell us what you think while you're there."}
             </p>
 
             <div className="flex items-center gap-2 mt-3 flex-wrap">
