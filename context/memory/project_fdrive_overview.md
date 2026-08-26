@@ -62,7 +62,7 @@ widely before being corrected.
 
 | What | Remote |
 |---|---|
-| `D:\AKHIL\HP` (one repo: CLAUDE.md + context/ + projects/gamepados) | **none yet — NOT pushed** |
+| `D:\AKHIL\HP` (one repo: CLAUDE.md + context/ + projects/gamepados) | `gamepadadmin01-tech/HP` — pushed, 0 behind (verified 2026-08-26) |
 | `projects/gamepados/website` | `gamepadadmin01-tech/gamepad` |
 | ~~`projects/gamepados-account`~~ — **deleted 2026-08-14** | `gamepadadmin01-tech/app-with-login` (repo still exists) |
 | `projects/flexsquares` | `gamepadadmin01-tech/flexspace` |

@@ -96,7 +96,7 @@ account system lives in the main tree. Its 3 unpushed commits are preserved as p
 
 | Path | Remote | Risk |
 |---|---|---|
-| `D:\AKHIL\HP` (this repo: `CLAUDE.md`, `context/`, `projects/gamepados/`) | **none yet** | 🔴 **created 2026-08-13, NOT pushed — do this first** |
+| `D:\AKHIL\HP` (this repo: `CLAUDE.md`, `context/`, `projects/gamepados/`) | `gamepadadmin01-tech/HP` | fine — pushed, 0 commits behind. **Uncommitted working-tree changes are still unprotected**, so commit before big edits |
 | ~~`projects/gamepados-account`~~ | `gamepadadmin01-tech/app-with-login` | **deleted 2026-08-14**; 3 unpushed commits saved as patches in `context/archive/` |
 | `projects/flexsquares` | `gamepadadmin01-tech/flexspace` | fine |
 | `projects/gamepados/website` | `gamepadadmin01-tech/gamepad` | fine |

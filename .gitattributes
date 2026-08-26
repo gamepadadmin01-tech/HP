@@ -1,0 +1,38 @@
+# Line endings are load-bearing in this repo, and getting them wrong has broken
+# the build twice with errors that point nowhere near the real cause.
+#
+#   .bat with LF  -> cmd.exe misparses multi-line blocks like `if exist (...)`
+#                    and reports things like `'M' is not recognized` or
+#                    `JAVA_HOME is set to an invalid directory`.
+#   .sh  with CRLF -> bash dies on `$'\r': command not found`. This is exactly
+#                    how tools/regression-check.sh — the safety net the release
+#                    checklist tells us to run — sat dead and unnoticed.
+#
+# Without rules here the result depends on each machine's core.autocrlf AND on
+# whichever editor or script last wrote the file, so a stray PowerShell
+# Set-Content silently flips a file and git shows no diff (it normalises both
+# sides before comparing). Pin the extensions that actually care, explicitly.
+#
+# Deliberately NOT using `* text=auto`: that would renormalise the whole tree in
+# one enormous commit. These rules touch 6 tracked files.
+
+*.bat  text eol=crlf
+*.cmd  text eol=crlf
+*.ps1  text eol=crlf
+*.sh   text eol=lf
+
+# Never let git rewrite bytes inside a binary — a mangled keystore or AAB is
+# unrecoverable and the corruption is invisible until a signing or upload fails.
+*.aab      binary
+*.apk      binary
+*.exe      binary
+*.dll      binary
+*.so       binary
+*.keystore binary
+*.jks      binary
+*.png      binary
+*.jpg      binary
+*.jpeg     binary
+*.ico      binary
+*.zip      binary
+*.pdf      binary

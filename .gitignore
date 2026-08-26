@@ -24,6 +24,10 @@
 
 # ...then re-include only these.
 !/.gitignore
+# .gitattributes MUST be tracked: it is what pins .bat to CRLF and .sh to LF. Left
+# untracked it would not reach a clone, and the line-ending rot it exists to stop
+# would simply come back on the next machine.
+!/.gitattributes
 !/CLAUDE.md
 !/context/
 !/projects/
