@@ -45,3 +45,19 @@ endings and many repeated strings.
 
 As of 2026-08-13, `projects/gamepados/` is under git, so a mistake like this is now recoverable with
 `git checkout`. That was not true when this happened.
+
+---
+
+## Also here: `app-tsx-july-snapshots/`
+
+Seven ordinary working backups of `App.tsx` from **20–22 July 2026**, moved out of the
+source tree on 2026-08-27. They are a *different* thing from the three files above —
+not the corruption, just hand-made snapshots taken while working.
+
+They were kept rather than deleted for one specific reason: they were `.gitignore`d
+where they sat, and **git history for `App.tsx` only begins 2026-08-13**, so nothing
+else in this repository covers that week. See the README inside that folder.
+
+Note the sentence above — "as of 2026-08-13, `projects/gamepados/` is under git, so a
+mistake like this is now recoverable" — is true only for changes made *after* that date.
+Anything from before it is recoverable solely from files like these.
