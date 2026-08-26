@@ -24,13 +24,14 @@ Built 2026-06-22 across the website backend, admin portal, both clients and the 
 
 Prisma needs `prisma db push` on deploy — it runs in `prestart`.
 
-## 🚨 Live bug: the website serves the wrong APK flavour
+## ✅ Wrong-flavour APK bug — FIXED (verified 2026-08-17)
 
-The active release on the site is an **amazonstore** build (`GamepadOS-1.3.21.apk` == the
-amazonstore artifact). Only the `direct` flavour has the in-app updater compiled in — every other
-flavour has it stripped. **So the self-updater is dead for everyone who downloaded from the
-website.** Fix: publish the *direct* APK and Register & Activate it
-([[reference_release_checklist]]).
+Historically the site served an **amazonstore** build (`GamepadOS-1.3.21.apk`), which has the
+in-app updater compiled out, so the self-updater was dead for website users. **This is resolved:**
+`downloads/GamepadOS.apk` (1.3.24) and `GamepadOS-1.3.26.apk` — **1.3.26 / code 50 is the ACTIVE
+release** — both declare `REQUEST_INSTALL_PACKAGES`, i.e. both are genuine `direct` builds. Re-verify with
+`aapt2 dump permissions <apk> | grep INSTALL_PACKAGES` whenever a new APK is published — publishing
+a store flavour to the website silently kills the updater again ([[reference_release_checklist]]).
 
 ## Two things that look like bugs but are not
 

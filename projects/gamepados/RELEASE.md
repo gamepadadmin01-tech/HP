@@ -58,7 +58,7 @@ Admin portal → **📦 Releases** → PC column → the new file shows as **Unr
 
 ---
 
-## Android — 5 flavors, one release
+## Android — 7 flavors, one release
 
 The app has one Gradle product flavor **per distribution channel**, all sharing the
 same `applicationId`, `versionCode`/`versionName`, and UI bundle:
@@ -70,6 +70,16 @@ same `applicationId`, `versionCode`/`versionName`, and UI bundle:
 | `aptoide` | Aptoide | ❌ | `assembleAptoideRelease` | `.apk` |
 | `uptodown` | Uptodown | ❌ | `assembleUptodownRelease` | `.apk` |
 | `amazonstore` | Amazon Appstore | ❌ | `assembleAmazonstoreRelease` | `.apk` |
+| `indusstore` | Indus Appstore | ❌ | `assembleIndusstoreRelease` | `.apk` |
+| `apkpure` | APKPure | ❌ | `assembleApkpureRelease` | `.apk` |
+
+> ⚠️ **This table drifted once already** — `indusstore` and `apkpure` were added to
+> `build.gradle.kts` while this doc still said 5 flavors, so a build that followed the doc
+> shipped two channels short (caught 2026-08-17). **`productFlavors` in
+> `app/build.gradle.kts` is the only trustworthy list** — check it, not this table, every
+> release. Each flavor compiles in its own `DISTRIBUTION_CHANNEL` string, so the APKs are
+> **not interchangeable**: renaming one store's APK for another store makes that store's
+> "Update available" banner open the wrong listing.
 
 DEF:: Only `direct` has the self-updater. On every other flavor, `startApkUpdate` and
 `REQUEST_INSTALL_PACKAGES` are compiled out entirely (see
@@ -103,11 +113,40 @@ robocopy dist ..\android-client\app\src\main\assets\dist /MIR
 
 ```powershell
 # from apps/android-client
-.\gradlew.bat assembleDirectRelease        # -> website
-.\gradlew.bat bundlePlaystoreRelease       # -> Google Play (AAB)
-.\gradlew.bat assembleAptoideRelease       # -> Aptoide
-.\gradlew.bat assembleUptodownRelease      # -> Uptodown
-.\gradlew.bat assembleAmazonstoreRelease   # -> Amazon Appstore
+# NOTE: there is no gradlew wrapper — Gradle 9.6.1 is invoked by absolute path.
+# One invocation builds every channel (~4 min clean):
+$env:JAVA_HOME    = "D:\AKHIL\HP\projects\gamepados\tools\jdk\jdk-17.0.19+10"
+$env:ANDROID_HOME = "D:\AKHIL\HP\toolchain\android-sdk"
+$env:PATH         = "$env:JAVA_HOME\bin;$env:PATH"
+& "D:\AKHIL\HP\projects\gamepados\tools\gradle-9.6.1\bin\gradle.bat" clean `
+    assembleDirectRelease `        # -> website (the ONLY self-updating build)
+    bundlePlaystoreRelease `       # -> Google Play (AAB)
+    assembleAptoideRelease `       # -> Aptoide
+    assembleUptodownRelease `      # -> Uptodown
+    assembleAmazonstoreRelease `   # -> Amazon Appstore
+    assembleIndusstoreRelease `    # -> Indus Appstore
+    assembleApkpureRelease         # -> APKPure
+```
+
+### 3b. Verify the artifacts before publishing anything
+
+A green build does **not** mean it is shippable. Four checks, all cheap:
+
+```powershell
+$sdk = "D:\AKHIL\HP\toolchain\android-sdk\build-tools\36.1.0"
+# 1. version stamped correctly
+& "$sdk\aapt2.exe" dump badging <apk> | Select-Object -First 1
+# 2. THE CRITICAL ONE — signing key must match the previous release, or every
+#    existing user gets "App not installed" on update
+& "$sdk\apksigner.bat" verify --print-certs <new.apk>  | Select-String "SHA-256 digest"
+& "$sdk\apksigner.bat" verify --print-certs <old.apk>  | Select-String "SHA-256 digest"
+# 3. the website APK must be the DIRECT flavor (store flavors have no updater)
+& "$sdk\aapt2.exe" dump permissions <apk> | Select-String INSTALL_PACKAGES
+# 4. after any NDK/AGP/R8 change — the JNI symbols the .so exports must still
+#    match MainActivity's `external fun` names, and R8 must not have renamed them.
+#    Mismatch = UnsatisfiedLinkError the instant input starts, never at build time.
+#    Symbols:  unzip -p <apk> lib/arm64-v8a/libgamepad_engine.so | grep -aoE "Java_com_gamepad[A-Za-z0-9_]+"
+#    Kept:     grep MainActivity app/build/outputs/mapping/directRelease/seeds.txt
 ```
 
 > ⚠️ **The `direct` APK must be signed with the same `release.keystore`** as every

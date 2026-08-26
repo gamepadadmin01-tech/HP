@@ -22,10 +22,17 @@ against `/api/version`; if the numbers don't line up, updates either never fire 
 admin Releases panel auto-detects — get it wrong and the panel shows `?`. **Keep the `AppId` GUID
 in the `.iss` unchanged** — that is what makes it an in-place upgrade rather than a second install.
 
-## Android — 5 flavors, one release
+## Android — 7 flavors, one release
 
 `direct` (own website, **the only one with the in-app updater**), `playstore` (.aab),
-`aptoide`, `uptodown`, `amazonstore`. All share one `applicationId`, version, and UI bundle.
+`aptoide`, `uptodown`, `amazonstore`, `indusstore`, `apkpure`. All share one `applicationId`,
+version, and UI bundle.
+
+⚠️ **`indusstore` and `apkpure` were added after RELEASE.md was written** — that doc still says 5
+and a build that follows it silently ships two channels short. `productFlavors` in
+`app/build.gradle.kts` is the only trustworthy list; check it every release. Each flavor sets its
+own `DISTRIBUTION_CHANNEL`, so they are NOT interchangeable — never rename one store's APK for
+another store, or that store's update banner points at the wrong listing.
 
 On every non-direct flavor `startApkUpdate` and `REQUEST_INSTALL_PACKAGES` are compiled out —
 Play forbids self-updating APKs. Those flavors' banners open the store listing instead, driven by
@@ -44,8 +51,15 @@ Copying an APK/exe into `website/backend/downloads/` **does nothing on its own.*
 > version → enter `RELEASE_KEY`
 
 That is what flips `/api/version` and starts offering the update. Activating deactivates the
-previous version automatically. Only the **owner** role sees the buttons. This has been missed on
-both the app (1.3.26) and the PC server (2.0.1) — check it before assuming a release is live.
+previous version automatically. Only the **owner** role sees the buttons.
+
+**Check the admin portal before claiming a release is or isn't live.** These notes twice asserted
+that 1.3.26 and PC 2.0.1 had been left unactivated; the portal showed both **ACTIVE** on
+2026-08-17. The Releases panel is the source of truth, not memory.
+
+⚠️ **Before building, check Play Console → App bundle explorer for the highest versionCode used.**
+A code is consumed permanently the moment any track sees it — even a draft upload that errored.
+51 was burned this way, so 1.3.27 was never shippable and had to be rebuilt as 1.3.28 / code 52.
 
 Also: use a **unique filename** per version in `downloads/`, or the previous download is
 overwritten.

@@ -20,15 +20,19 @@ crypto implementations were verified byte-identical. Legacy cleartext and GRX co
 
 | | Version |
 |---|---|
-| Live on `/api/version` (verified 2026-08-10) | **1.3.24 / code 48** |
-| Committed to `website/backend/downloads/` but **never activated** | 1.3.26 |
-| Source tree builds as of 2026-08-13 | **1.3.27 / code 51** |
+| **ACTIVE** on the website (admin portal, seen 2026-08-17) | **1.3.26 / code 50** |
+| Consumed on Play Console — do not reuse | codes up to and including **51** (1.3.27) |
+| Source tree builds as of 2026-08-17 | **1.3.28 / code 52** |
 
-**Activation is a separate manual step and is repeatedly forgotten.** Committing an APK to
-`downloads/` does nothing on its own — the admin portal's 📦 Releases → *Register & Activate*
-(needs `RELEASE_KEY`) is what flips `/api/version` and starts offering the update. The same
-omission exists on the PC server: see [[project_rust_server_v2]], where 2.0.1 is built and pushed
-but 2.0.0 is still live.
+**Activation is a separate manual step** — committing an APK to `downloads/` does nothing on its
+own; the admin portal's 📦 Releases → *Register & Activate* (needs `RELEASE_KEY`) is what flips
+`/api/version`. An earlier version of this note claimed 1.3.26 and PC 2.0.1 were built but never
+activated. **That was wrong** — the admin portal showed both ACTIVE on 2026-08-17. Read the portal
+before repeating the claim; see [[project_rust_server_v2]].
+
+**versionCode is burned permanently the instant any Play track sees it**, including a draft that
+errored out. 51 was consumed this way, which is why 1.3.27 never shipped and 1.3.28/52 replaced
+it with byte-equivalent content. Always check App bundle explorer before building a release.
 
 **Do not assert what changed in any build between 1.3.15 and 1.3.27** — only the version numbers
 were ever verified, not the feature content. Read the code or the handoffs first.

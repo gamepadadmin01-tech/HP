@@ -21,6 +21,7 @@ A new laptop gets it with `git clone`.
 |---|---|
 | `INVENTORY.md` | What every folder in HP actually is, its size, its backup status, and its risk |
 | `REBUILD.md` | The exact command to regenerate anything that was deleted as a cache |
+| `PLAY_ACTIVATION.md` | Publishing 1.4.0 to Google Play, and switching Play Billing on (two separate jobs) |
 | `docs/` | All 108 markdown documents found anywhere in HP, copied and flattened, + `INDEX.md` |
 | `docs/_manifest.csv` | Original path, size, and modified date for each of the 108 |
 | `memory/` | Claude's memory, merged from all three namespaces and with paths corrected |

@@ -6,6 +6,10 @@
 > All 108 project docs indexed at `context/docs/INDEX.md` — **read that index rather than
 > loading the large docs.**
 
+## ▶ Start here
+
+- [Pending tasks](project_pending_tasks.md) — 📋 **the open task list as of 2026-08-25**: 1.4.0 Play closed test in flight, launch bonus deferred, wheel mode owed to a customer, and two scripts quietly broken
+
 ## Who / how to work
 
 - [Who Akhil is](user_akhil_identity.md) — solo owner of GamepadOS; **"Aukstea" is his CUSTOMER, not him**; not comfortable with terminals
@@ -38,6 +42,8 @@
 - [Rust server v2](project_rust_server_v2.md) — 🚨 2.0.1 built+pushed but **never activated**; the is_offlan keyless-pairing hole it fixes is still live
 - [iOS/Mac port](project_ios_mac_port.md) — needs a Mac to compile. `GamepadOS-iOS` is the real tree; `ios-client` is superseded
 - [Play production access](project_play_production_access.md) — 🎉 unlocked 2026-08-12; verify which build gets promoted
+- [Play closed test — 1.4.0](project_play_closed_test_140.md) — 📦 the **subscriptions build**; AAB fully verified ready 2026-08-25, **Akhil uploads it**; test account + versionCode 54 are the two traps
+- [Wheel mode 900°](project_wheel_mode_900.md) — customer-requested truck/bus steering: **rotate a mounted phone, don't raise the tilt cap** (that ships a broken feature); build after 1.4.0
 
 ## Website / platform
 

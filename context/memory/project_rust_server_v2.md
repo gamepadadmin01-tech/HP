@@ -8,15 +8,52 @@ metadata:
   modified: 2026-08-10T10:56:58.108Z
 ---
 
-## 🚨 VERSION STATE (verified on disk + live API 2026-08-10)
+## 🆕 2.1.0 BUILT 2026-08-18 — playtime tickets, NOT yet released
 
-**Source + installer = 2.0.1. Live backend = 2.0.0. The activation step was never run.**
+`src/ticket.rs` + `ws.rs`. The server now verifies Ed25519 capability tickets the phone forwards
+over the WebSocket control channel and ends the session when fresh ones stop arriving — the only
+way to enforce playtime against a modified `direct` APK, since this binary is what injects input.
+Issued by `website/backend/billing/ticket.js`; the byte layout is pinned by a cross-language
+conformance test (`tests/ticket_conformance.rs` verifies vectors Node produced).
+
+- **MINOR bump, not patch**: adds a client→server message and raises `ws::MAX_FRAME` 64 → 96
+  (an Ed25519 signature is 64 bytes on its own).
+- **Ed25519 not HMAC on purpose**: this exe sits on the user's machine, so anything it holds is
+  extractable. It holds only the PUBLIC key.
+- **Ships DELIBERATELY INERT.** No `SESSION_TICKET_PUBLIC_KEY` baked in → enforcement off. A gate
+  that never sees a ticket never expires. This is what lets 2.1.0 go out FIRST and spread for
+  weeks before the app requires it — ship them together and every user hits a wall on day one.
+- Cargo.toml version also corrected from the stale `0.1.0` to `2.1.0` (it was a 4th copy adrift).
+- 93 lib tests + 34 integration tests pass. Release exe stamps `2.1.0.0`.
+
+**To actually enable enforcement** (both halves needed, backend first):
+`node -e "console.log(require('./billing/ticket').generateKeyPair())"` → put `privateSeedHex` in
+the backend's `SESSION_TICKET_ED25519_PRIVATE_KEY`, and build the PC server with
+`SESSION_TICKET_PUBLIC_KEY=<publicKeyHex>`.
+
+**mDNS advertising is NOT in 2.1.0** — still an open decision (see BILLING_DECISIONS.md §5).
+
+---
+
+## ✅ VERSION STATE — 2.0.1 IS ACTIVE (admin portal, seen 2026-08-17)
+
+**`GamepadServer-Setup-2.0.1.exe` shows ACTIVE in the Releases panel. The `is_offlan`
+keyless-pairing hole described below is FIXED IN PRODUCTION, not still live.**
+
+Everything in the block below was written on 2026-08-10, when 2.0.0 was still being served. It is
+kept for the engineering detail, but **its "never activated" framing is out of date** — do not
+repeat it without re-reading the portal. Same correction applies to the Android side: 1.3.26 is
+ACTIVE, not parked. See [[project_grx_crypto]].
+
+---
+
+## Historical (2026-08-10): source + installer = 2.0.1, live backend = 2.0.0
 
 - `2.0.1` agrees across all four places the updater contract cares about: `src/http.rs` `app_version!`, `build.rs` File/ProductVersion (`2.0.1.0`), `installer/GamepadServer.iss` AppVersion + VersionInfoVersion, and the built `staging/GamepadServer.exe` (FileVersion 2.0.1.0).
 - Installer built **2026-08-03 18:29**, 8.81 MB. sha256 `668a74874193ffb6f24ccd2a3e313da061fc90f91c6e86be99f2c3ca54e57edb`.
 - `website/backend/downloads/GamepadServer-Setup-2.0.1.exe` is **committed and pushed** (tree clean, no unpushed commits) — so the file is deployed; only the Releases-panel **Register & Activate** for pc 2.0.1 is missing.
 - `GET /api/version` still returns `pc.version 2.0.0` / sha `fbedaf88…`, and the generic fallback `GamepadServer-Setup.exe` in downloads is byte-identical to the 2.0.0 artifact. Every updating user lands on 2.0.0.
-- **This is not a cosmetic patch.** 2.0.1 IS the fix for `net::is_offlan` assuming a /24 instead of reading the interface's real prefix length: on any LAN wider than /24, same-wire peers were classified off-LAN, and the off-LAN branch is the one that accepts auth token 0 → keyless pairing reachable from LAN peers it was never meant to be. That hole is live right now.
+- **This is not a cosmetic patch.** 2.0.1 IS the fix for `net::is_offlan` assuming a /24 instead of reading the interface's real prefix length: on any LAN wider than /24, same-wire peers were classified off-LAN, and the off-LAN branch is the one that accepts auth token 0 → keyless pairing reachable from LAN peers it was never meant to be. ~~That hole is live right now.~~ **Fixed in production — 2.0.1 went active; confirmed 2026-08-17.**
 - Minor drift: `Cargo.toml` still says `version = "0.1.0"`. Harmless — `installer/build-installer.ps1`'s version gate only checks http.rs / iss / build.rs — but it's a 4th copy out of step.
 - Android for comparison (same API call): live **1.3.24 / versionCode 48**; a **1.3.26 APK** is committed to downloads but not activated. See [[project-grx-crypto]] — its version notes are far older than this.
 

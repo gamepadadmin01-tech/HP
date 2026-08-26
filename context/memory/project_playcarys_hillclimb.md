@@ -1,14 +1,40 @@
 ---
 name: project-playcarys-hillclimb
-description: "PlayCarys FFSD project — Hill Climbing game overhaul + match history fixes; what's done and what's pending"
+description: "PlayCarys FFSD project — NEVER commit in this folder; Hill Climbing overhaul, match history and sync fixes; what's done and what's pending"
 metadata: 
   node_type: memory
   type: project
   originSessionId: a5d230f5-f4b2-40b8-98c8-230d89dd0662
-  modified: 2026-08-10T12:16:34.665Z
+  modified: 2026-08-15T13:51:00.558Z
 ---
 
 Project at `D:\AKHIL\ACADEMIC\ALL sub\FFSD\codes\playcarys_updated` (FFSD college project).
+
+## 🚫 NO GIT, AT ALL, IN THIS FOLDER — stated 2026-08-14
+
+**"no commits nothing for this folder."** Do not commit, do not stage, do not offer to.
+This is separate from the HP-wide no-push rule ([[feedback-no-auto-push]]): there, commits are
+prepared and Akhil pushes. Here, nothing goes into git — the working tree is the deliverable.
+
+Consistent with what the folder already looks like: `git status` reports branch `master` with
+**zero commits ever made**, and the tree is live-synced by Google Drive, so Drive is the history.
+Edit files directly and leave them; take a dated `.bak` copy of `live_database.json` before any
+data change instead of relying on version control.
+
+## Session handoff — read `codes/SESSION-HANDOFF.md` first, every time
+
+Written 2026-08-15. Full detail lives there — this is just the pointer plus
+the one rule that matters most: **two folders now exist.**
+`codes/playcarys_updated/` is live and has every fix through 2026-08-15
+(launcher rebuild, password reset, game-sandbox isolation, Carys-randomiser
+kill, session-status unification, server-side sync broadcast, real friends
+relation, payload cut 45%, TOSIOS/Open Agar fully deleted). `codes/playcarys
+with flow corrections/` is an untouched copy made *for* the in-progress Flow
+Corrections rework — Akhil is planning that separately and said **"stop here,
+do nothing, I will plan and let you know"** — do not start it unprompted.
+`codes/Flow corrections.txt` is his own design doc (not mine), substantially
+finished, and ends on an open question about deleting the room_id concept
+platform-wide that he wants answered once he's back with a plan.
 
 ## Review-4 requirements — VERIFIED STATUS (checked 2026-08-10 against `codes/Review–4 Requirements.txt`)
 
