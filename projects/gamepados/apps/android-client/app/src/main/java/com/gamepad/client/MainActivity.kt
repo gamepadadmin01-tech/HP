@@ -147,6 +147,60 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback, android.hardwa
     // motion. One per axis (roll = steering, pitch = 3D look).
     private val rollFilter  = OneEuroFilter(minCutoff = 2.8, beta = 0.5)
     private val pitchFilter = OneEuroFilter(minCutoff = 2.8, beta = 0.5)
+
+    // ── Multi-turn steering (wheel mode, 720°/900°) ───────────────────────────
+    // atan2 gives roll on ±180°, so a phone rotated past half a turn snaps to the
+    // opposite sign — at a steering wheel that is a violent full-lock jerk mid-corner,
+    // not a visible error. unwrapRoll accumulates whole turns so the angle stays
+    // CONTINUOUS across the seam, turning ±180° into true multi-turn travel.
+    //
+    // It runs unconditionally, not only in wheel mode: direct tilt mode has the same
+    // latent flip past ±180°, and removing a discontinuity can only help a mode whose
+    // output is clamped to ±1 well before it. One code path, so the two input paths
+    // (JS pumpGyro and the native engine) cannot drift apart — both read fusedRollDeg,
+    // so unwrapping HERE fixes both at once. That split is exactly what caused 26d5368.
+    //
+    // Sampling cannot alias this: at ~200 Hz you would have to spin the phone faster
+    // than 100 revolutions per second to move more than half a turn between samples.
+    // Set from JS via setWheelMode. Read by setScreenOrientation so entering the
+    // controller screen cannot hand the orientation back to the sensor.
+    @Volatile internal var wheelModeOn = false
+    private var rollPrevRaw = 0.0        // previous raw atan2 reading (deg, ±180)
+    private var rollTurns = 0            // accumulated whole turns
+    private var rollUnwrapInit = false   // false until the first sample seeds rollPrevRaw
+
+    /**
+     * ±180° atan2 → continuous multi-turn angle. Must run BEFORE the smoothing filter.
+     *
+     * The turn count is deliberately NOT capped. An earlier draft clamped it to ±3
+     * turns as a "runaway guard", which was a mistake on both counts: nothing can run
+     * away (rollTurns is an Int, so drifting it would take billions of physical
+     * revolutions), and the clamp REINTRODUCED the exact defect this function exists to
+     * remove — once saturated, raw keeps wrapping while the count stops, so the output
+     * steps by a whole 360°. Rotating back afterwards would then land the wheel centre a
+     * full turn out. Unbounded accumulation is both simpler and correct; the value is
+     * clamped to ±1 downstream anyway, after the zero offset is applied.
+     */
+    private fun unwrapRoll(raw: Double): Double {
+        if (!rollUnwrapInit) { rollPrevRaw = raw; rollUnwrapInit = true; return raw }
+        val d = raw - rollPrevRaw
+        // A jump larger than half a circle is the seam, never real motion: at ~200 Hz
+        // you would have to spin past 100 revolutions per second to move that far.
+        if (d > 180.0) rollTurns -= 1 else if (d < -180.0) rollTurns += 1
+        rollPrevRaw = raw
+        return raw + rollTurns * 360.0
+    }
+
+    /**
+     * Drop the turn count and reseed from the next sample. Called when the wheel is
+     * recentred or the mode changes — otherwise turns banked before a recalibration
+     * would survive it and offset the new centre by whole revolutions.
+     */
+    internal fun resetRollUnwrap() {
+        rollTurns = 0
+        rollUnwrapInit = false
+        rollFilter.reset()
+    }
     private var lastAnalysisTime = 0L
     @Volatile
     private var isEngineRunning = false
@@ -818,12 +872,48 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback, android.hardwa
                     }
                 }
 
+                /**
+                 * Wheel mode (multi-turn steering) on/off.
+                 *
+                 * PINS the screen orientation for the duration, which is functional and
+                 * not cosmetic: the sensor axis remap in onSensorChanged is chosen from
+                 * the CURRENT display rotation, and the activity is SENSOR_LANDSCAPE — so
+                 * rotating a mounted phone past the flip point swaps ROTATION_90 for
+                 * ROTATION_270 and the whole steering frame inverts under the driver
+                 * mid-corner. Pinning to a fixed landscape freezes that choice, which is
+                 * exactly what multi-turn rotation requires.
+                 *
+                 * Also drops the accumulated turn count, so turns banked before the mode
+                 * change cannot offset the new centre by whole revolutions.
+                 */
+                @android.webkit.JavascriptInterface
+                fun setWheelMode(on: Boolean) {
+                    runOnUiThread {
+                        try {
+                            wheelModeOn = on
+                            requestedOrientation = if (on)
+                                android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+                            else
+                                android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+                            resetRollUnwrap()
+                        } catch (e: Exception) {
+                            e.printStackTrace()
+                        }
+                    }
+                }
+
                 @android.webkit.JavascriptInterface
                 fun setScreenOrientation(orientation: String) {
                     runOnUiThread {
                         try {
                             if (orientation == "landscape") {
-                                requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+                                // Wheel mode owns the orientation while it is on — letting
+                                // SENSOR_LANDSCAPE back in here would silently undo the pin
+                                // the moment the controller screen opened.
+                                requestedOrientation = if (wheelModeOn)
+                                    android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+                                else
+                                    android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
                                 hideSystemUI()
                             } else if (orientation == "portrait") {
                                 requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
@@ -1809,7 +1899,11 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback, android.hardwa
         // ROLL = angle of up WITHIN the screen plane = left/right steering. Both legs
         // (ux,uy) stay large in play holds → stable; ratio is preserved as you lean
         // forward/back → decoupled from pitch; no gimbal-lock except screen-flat.
-        val rollDeg  = STEER_SIGN  * Math.toDegrees(Math.atan2(ux.toDouble(), uy.toDouble()))
+        val rollRaw  = STEER_SIGN  * Math.toDegrees(Math.atan2(ux.toDouble(), uy.toDouble()))
+        // Unwrap the ±180° seam into continuous multi-turn travel BEFORE smoothing.
+        // Order is load-bearing: filtering across the discontinuity produces a garbage
+        // spike, which at a steering wheel is a full-lock jerk mid-corner. See unwrapRoll.
+        val rollDeg  = unwrapRoll(rollRaw)
         // PITCH = how far up tips OUT of the screen plane = forward/back lean (3D look Y).
         val pitchDeg = PITCH_SIGN * Math.toDegrees(Math.asin(uz.toDouble()))
         fusedRollDeg  = rollFilter.filter(rollDeg, event.timestamp).toFloat()
@@ -1881,6 +1975,18 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback, android.hardwa
             val xFilt = aX * x + (1 - aX) * xPrev
             xPrev = xFilt
             return xFilt
+        }
+        /**
+         * Forget all history, so the next sample is treated as a fresh start.
+         * Needed when the input jumps deliberately (a wheel recentre, or dropping the
+         * multi-turn count): without it the filter smooths ACROSS the jump and emits a
+         * slew toward the new value instead of simply landing on it.
+         */
+        fun reset() {
+            started = false
+            xPrev = 0.0
+            dxPrev = 0.0
+            tPrevNs = 0L
         }
     }
 

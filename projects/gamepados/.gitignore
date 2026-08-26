@@ -43,10 +43,25 @@ apps/controller-ui/dist/
 !apps/android-client/app/src/main/assets/dist/
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Pinned toolchain — 900 MB of JDK + Gradle. Kept on disk, not in git.
-# Reinstall per context/REBUILD.md. DO NOT DELETE FROM DISK.
+# Pinned toolchain — ~455 MB of JDK + Gradle + platform-tools, plus the installer
+# .exe files. Kept on disk, not in git. Reinstall per context/REBUILD.md.
+# DO NOT DELETE FROM DISK.
+#
+# The hand-written SCRIPTS in here are a different matter and ARE tracked (~44 KB
+# total). `tools/` used to be ignored wholesale, which quietly left
+# regression-check.sh — the safety net the release checklist tells us to run after
+# every significant change — with no backup at all, on a drive that has already
+# been formatted once. build_exact_composite.py and create_stacked_promo.py are in
+# the same boat, and CLAUDE.md names them as files that must be edited by hand
+# whenever a folder moves.
 # ─────────────────────────────────────────────────────────────────────────────
-tools/
+tools/*
+!tools/*.sh
+!tools/*.ps1
+!tools/*.mjs
+!tools/*.js
+!tools/*.py
+!tools/scripts/
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Large binaries — these belong in cloud storage, not git

@@ -29,7 +29,7 @@ import {
 import { scheduleSync, onSignedInSync } from "./store/sync";
 import {
   loadGyroPrefs, saveGyroPrefs, getWiredPref, setWiredPref,
-  nativeInputEnabled, setNativeInputEnabled,
+  nativeInputEnabled, setNativeInputEnabled, clampWheelRange, WHEEL_RANGES,
 } from "./store/prefs";
 import type { WiredPref } from "./store/prefs";
 import { TabAccount } from "./components/TabAccount";
@@ -785,7 +785,11 @@ function useGyro(maxAngle: number = 45, deadzone: number = 0, onGyroChange?: () 
           // would thrash React).
           const nowIdle = !!data.idle;
           if (nowIdle !== idleRef.current) { idleRef.current = nowIdle; setIdle(nowIdle); }
-          // data.nx/ny = RAW tilt ANGLE in degrees (native, +/-90).
+          // data.nx/ny = RAW angle in degrees from the native fusion pipeline.
+          // nx is atan2-derived and UNWRAPPED across the ±180° seam (see
+          // MainActivity.unwrapRoll), so it is continuous multi-turn travel — up to
+          // ±1080°, NOT ±90°. Wheel mode depends on that; anything assuming a ±90
+          // range here will silently clip a truck wheel to a fraction of its lock.
           // sensitivity = full-lock angle (deg): tilt `maxAngle` deg => full ±1.
           // deadzone = ignore tilts below `deadzone` deg; past it the ABSOLUTE
           // angle is read (no re-normalization), e.g. dz=10, tilt 11 => 11/sens.
@@ -3302,6 +3306,12 @@ interface TabSystemProps {
   setGyroOn: (v: boolean) => void;
   gyroMaxAngle: number;
   setGyroMaxAngle: (v: number) => void;
+  /** Wheel mode: mounted phone rotated like a steering wheel (ticket #1959ade3). */
+  gyroWheel: boolean;
+  setGyroWheel: (v: boolean) => void;
+  /** Lock-to-lock travel in degrees while wheel mode is on. */
+  gyroWheelRange: number;
+  setGyroWheelRange: (v: number) => void;
   gyroMode: string;
   setGyroMode: (v: string) => void;
   gyroDeadzone: number;
@@ -3316,7 +3326,7 @@ interface TabSystemProps {
   setRumbleOn: (v: boolean) => void;
 }
 
-function TabSystem({ gyroOn, setGyroOn, gyroMaxAngle, setGyroMaxAngle, gyroMode, setGyroMode, gyroDeadzone, setGyroDeadzone, gyroHaptic, setGyroHaptic, gyroThrottle, setGyroThrottle, gyroIdleDetect, setGyroIdleDetect, rumbleOn, setRumbleOn }: TabSystemProps) {
+function TabSystem({ gyroOn, setGyroOn, gyroMaxAngle, setGyroMaxAngle, gyroWheel, setGyroWheel, gyroWheelRange, setGyroWheelRange, gyroMode, setGyroMode, gyroDeadzone, setGyroDeadzone, gyroHaptic, setGyroHaptic, gyroThrottle, setGyroThrottle, gyroIdleDetect, setGyroIdleDetect, rumbleOn, setRumbleOn }: TabSystemProps) {
   // (Removed a 20Hz setTick interval that re-rendered this tab every 50ms and
   //  caused scroll jank — it only fed unused browser-preview gyro values.)
   const isBridge = typeof window !== "undefined" && !!(window as any).AndroidBridge;
@@ -3368,6 +3378,43 @@ function TabSystem({ gyroOn, setGyroOn, gyroMaxAngle, setGyroMaxAngle, gyroMode,
 
             <p className="text-xs font-semibold text-primary/80 uppercase tracking-wide">Left/right device rotation</p>
 
+            {/* Wheel mode — support ticket #1959ade3: "make 900 and 720 degree gyro
+                for truck or bus sims". Tilt steering caps out at a wrist-flick, so this
+                mode has the phone MOUNTED and physically rotated like a wheel instead.
+                The sensor already measures true in-plane rotation; the native layer
+                unwraps it past the ±180° seam into real multi-turn travel. */}
+            <div>
+              <div className="flex justify-between items-center">
+                <div>
+                  <p className="text-sm font-semibold text-foreground">Wheel mode</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Mount the phone and turn it like a steering wheel. Full multi-turn travel for truck and bus sims.</p>
+                </div>
+                <Toggle on={gyroWheel} onChange={setGyroWheel} />
+              </div>
+              {gyroWheel && (
+                <div className="mt-3">
+                  <p className="text-sm text-foreground mb-2">Lock-to-lock range</p>
+                  <div className="flex gap-2">
+                    {WHEEL_RANGES.map(r => (
+                      <button key={r} onClick={() => setGyroWheelRange(r)}
+                        className="flex-1 px-2 py-2 rounded-lg text-sm font-semibold transition"
+                        style={gyroWheelRange === r
+                          ? { background: "rgba(79,134,198,0.18)", color: "#5D90CB", border: "1px solid rgba(79,134,198,0.5)" }
+                          : { background: "rgba(255,255,255,0.04)", color: "rgba(255,255,255,0.6)", border: "1px solid rgba(255,255,255,0.12)" }}>
+                        {r}°
+                      </button>
+                    ))}
+                  </div>
+                  <div className="mt-2 text-[11px] text-muted-foreground space-y-2">
+                    <p className="font-mono text-foreground">{Math.round(clampWheelRange(gyroWheelRange) / 2)}° each way for full lock</p>
+                    <p className="font-sans leading-relaxed">900° matches a sim truck wheel (2.5 turns); 720° is two turns.</p>
+                    <p className="font-sans leading-relaxed">Mount the phone upright or tilted, never flat — lying flat there is no rotation to measure.</p>
+                    <p className="font-sans leading-relaxed">The screen stays locked while wheel mode is on, so turning the phone cannot flip your steering.</p>
+                  </div>
+                </div>
+              )}
+            </div>
+
             <div>
               <div className="flex justify-between items-center mb-2">
                 <div className="flex items-center gap-2">
@@ -3383,6 +3430,9 @@ function TabSystem({ gyroOn, setGyroOn, gyroMaxAngle, setGyroMaxAngle, gyroMode,
               </div>
               <div className="mt-2 text-[11px] text-muted-foreground font-mono">
                 <p className="text-foreground">{gyroMaxAngle}°</p>
+                {gyroWheel && (
+                  <p className="font-sans leading-relaxed mt-1">Wheel mode is on, so steering follows the lock-to-lock range above and this slider does nothing until you turn wheel mode off.</p>
+                )}
               </div>
             </div>
 
@@ -3895,6 +3945,8 @@ function DashboardScreen({
   posOverrides, onSavePosOverride, onResetPosOverride,
   gyroOn, setGyroOn,
   gyroMaxAngle, setGyroMaxAngle,
+  gyroWheel, setGyroWheel,
+  gyroWheelRange, setGyroWheelRange,
   gyroMode, setGyroMode,
   gyroDeadzone, setGyroDeadzone,
   gyroHaptic, setGyroHaptic,
@@ -3915,6 +3967,8 @@ function DashboardScreen({
   onResetPosOverride: (id: string) => void;
   gyroOn: boolean; setGyroOn: (v: boolean) => void;
   gyroMaxAngle: number; setGyroMaxAngle: (v: number) => void;
+  gyroWheel: boolean; setGyroWheel: (v: boolean) => void;
+  gyroWheelRange: number; setGyroWheelRange: (v: number) => void;
   gyroMode: string; setGyroMode: (v: string) => void;
   gyroDeadzone: number; setGyroDeadzone: (v: number) => void;
   gyroHaptic: boolean; setGyroHaptic: (v: boolean) => void;
@@ -4178,7 +4232,7 @@ function DashboardScreen({
               onNewLayout={openBlueprintDialog}
               pendingEditPad={pendingEditPad}
               onClearPendingEditPad={() => setPendingEditPad(null)} />}
-            {tab === "system" && <TabSystem gyroOn={gyroOn} setGyroOn={setGyroOn} gyroMaxAngle={gyroMaxAngle} setGyroMaxAngle={setGyroMaxAngle} gyroMode={gyroMode} setGyroMode={setGyroMode} gyroDeadzone={gyroDeadzone} setGyroDeadzone={setGyroDeadzone} gyroHaptic={gyroHaptic} setGyroHaptic={setGyroHaptic} gyroThrottle={gyroThrottle} setGyroThrottle={setGyroThrottle} gyroIdleDetect={gyroIdleDetect} setGyroIdleDetect={setGyroIdleDetect} rumbleOn={rumbleOn} setRumbleOn={setRumbleOn} />}
+            {tab === "system" && <TabSystem gyroOn={gyroOn} setGyroOn={setGyroOn} gyroMaxAngle={gyroMaxAngle} setGyroMaxAngle={setGyroMaxAngle} gyroWheel={gyroWheel} setGyroWheel={setGyroWheel} gyroWheelRange={gyroWheelRange} setGyroWheelRange={setGyroWheelRange} gyroMode={gyroMode} setGyroMode={setGyroMode} gyroDeadzone={gyroDeadzone} setGyroDeadzone={setGyroDeadzone} gyroHaptic={gyroHaptic} setGyroHaptic={setGyroHaptic} gyroThrottle={gyroThrottle} setGyroThrottle={setGyroThrottle} gyroIdleDetect={gyroIdleDetect} setGyroIdleDetect={setGyroIdleDetect} rumbleOn={rumbleOn} setRumbleOn={setRumbleOn} />}
             {tab === "account" && (
               <TabAccount
                 customPadsCount={customPads.length}
@@ -4788,6 +4842,11 @@ export default function App() {
   const savedGyro = useRef(loadGyroPrefs()).current;
   const [gyroOn, setGyroOn] = useState(savedGyro.on);
   const [gyroMaxAngle, setGyroMaxAngle] = useState(savedGyro.maxAngle);
+  // Wheel mode (support ticket #1959ade3 — "900 and 720 degree gyro for truck or bus
+  // sims"). The phone is mounted and ROTATED like a wheel rather than tilted in the
+  // hands, so full lock is half the lock-to-lock range away instead of a wrist-flick.
+  const [gyroWheel, setGyroWheel] = useState(savedGyro.wheel);
+  const [gyroWheelRange, setGyroWheelRange] = useState(savedGyro.wheelRange);
   // Gyro mode: "racing" = 2D steering (left stick X, shows the tilt bar) | "3d" = 2-axis
   // look/aim (right stick X+Y, shows only a small "gyro active" chip).
   const [gyroMode, setGyroMode] = useState<string>(savedGyro.mode);
@@ -4810,9 +4869,28 @@ export default function App() {
     saveGyroPrefs({
       on: gyroOn, maxAngle: gyroMaxAngle, mode: gyroMode as "racing" | "3d",
       deadzone: gyroDeadzone, haptic: gyroHaptic, throttle: gyroThrottle,
-      idleDetect: gyroIdleDetect,
+      idleDetect: gyroIdleDetect, wheel: gyroWheel, wheelRange: gyroWheelRange,
     });
-  }, [gyroOn, gyroMaxAngle, gyroDeadzone, gyroHaptic, gyroMode, gyroThrottle, gyroIdleDetect]);
+  }, [gyroOn, gyroMaxAngle, gyroDeadzone, gyroHaptic, gyroMode, gyroThrottle, gyroIdleDetect, gyroWheel, gyroWheelRange]);
+
+  // Wheel mode has to reach the native layer, which PINS the screen orientation for
+  // the duration. That is functional: the sensor axis remap is chosen from the current
+  // display rotation, so an unpinned phone rotated past the flip point inverts the
+  // steering frame mid-corner. Also drops any banked turn count.
+  useEffect(() => {
+    const bridge = (window as any).AndroidBridge;
+    if (!bridge || !bridge.setWheelMode) return;   // older shell, or running in a browser
+    try { bridge.setWheelMode(!!gyroWheel); } catch {}
+  }, [gyroWheel]);
+
+  // The angle that actually reaches the steering maths. In wheel mode full lock is
+  // half the lock-to-lock range away (900° wheel => 450° each way); otherwise it is the
+  // plain tilt sensitivity. Derived ONCE here and handed to the controller screen, so
+  // the JS gyro loop and the native engine cannot disagree about the current mode —
+  // that split is what caused 26d5368 (sign-in enforced in JS but not in native).
+  const gyroEffectiveAngle = gyroWheel
+    ? Math.max(1, Math.round(clampWheelRange(gyroWheelRange) / 2))
+    : gyroMaxAngle;
 
   useEffect(() => {
     if (!savePads(customPads)) {
@@ -5002,6 +5080,8 @@ export default function App() {
               onResetPosOverride={resetPosOverride}
               gyroOn={gyroOn} setGyroOn={setGyroOn}
               gyroMaxAngle={gyroMaxAngle} setGyroMaxAngle={setGyroMaxAngle}
+              gyroWheel={gyroWheel} setGyroWheel={setGyroWheel}
+              gyroWheelRange={gyroWheelRange} setGyroWheelRange={setGyroWheelRange}
               gyroMode={gyroMode} setGyroMode={setGyroMode}
               gyroDeadzone={gyroDeadzone} setGyroDeadzone={setGyroDeadzone}
               gyroHaptic={gyroHaptic} setGyroHaptic={setGyroHaptic}
@@ -5030,7 +5110,7 @@ export default function App() {
               controllerLayout={activeCustomPad ? "standard" : controllerLayout}
               posOverride={posOverrides[selectedPresetId]}
               gyroOn={gyroOn} setGyroOn={setGyroOn}
-              gyroMaxAngle={gyroMaxAngle}
+              gyroMaxAngle={gyroEffectiveAngle}
               gyroMode={gyroMode}
               gyroDeadzone={gyroDeadzone}
               gyroHaptic={gyroHaptic}

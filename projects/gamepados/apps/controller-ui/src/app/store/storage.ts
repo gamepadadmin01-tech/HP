@@ -36,6 +36,8 @@ export const KEYS = {
   gyroHaptic: "gyro_haptic",
   gyroThrottle: "gyro_throttle",
   gyroIdleDetect: "gyro_idle_detect",
+  gyroWheel: "gyro_wheel",
+  gyroWheelRange: "gyro_wheel_range",
 
   // Transport
   nativeInput: "gp_native_input",

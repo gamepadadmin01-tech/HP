@@ -29,6 +29,17 @@ export type GyroPrefs = {
   throttle: boolean;
   /** Suppress gyro after a period with no touch, so a phone set down goes quiet. */
   idleDetect: boolean;
+  /**
+   * Wheel mode: the phone sits in a wheel mount and is physically ROTATED like a
+   * steering wheel, instead of being tilted in the hands. Off by default, so no
+   * existing setup changes.
+   */
+  wheel: boolean;
+  /**
+   * Wheel mode only: total lock-to-lock travel in degrees (900 = a sim truck wheel's
+   * 2.5 turns, 720 = 2 turns). Half of this is the angle to full lock either way.
+   */
+  wheelRange: number;
 };
 
 export const GYRO_DEFAULTS: GyroPrefs = {
@@ -39,7 +50,16 @@ export const GYRO_DEFAULTS: GyroPrefs = {
   haptic: true,
   throttle: false,
   idleDetect: true,
+  wheel: false,
+  wheelRange: 900,
 };
+
+/** Lock-to-lock ranges offered in the UI. 900° and 720° are what the ticket asked for. */
+export const WHEEL_RANGES = [360, 540, 720, 900] as const;
+/** Clamp a stored/incoming range into something the steering maths can use. */
+export function clampWheelRange(v: number): number {
+  return Number.isFinite(v) ? Math.min(1080, Math.max(180, Math.round(v))) : GYRO_DEFAULTS.wheelRange;
+}
 
 export function loadGyroPrefs(): GyroPrefs {
   const mode = readString(KEYS.gyroMode, GYRO_DEFAULTS.mode);
@@ -52,6 +72,10 @@ export function loadGyroPrefs(): GyroPrefs {
     haptic: readBool(KEYS.gyroHaptic, GYRO_DEFAULTS.haptic),
     throttle: readBool(KEYS.gyroThrottle, GYRO_DEFAULTS.throttle),
     idleDetect: readBool(KEYS.gyroIdleDetect, GYRO_DEFAULTS.idleDetect),
+    wheel: readBool(KEYS.gyroWheel, GYRO_DEFAULTS.wheel),
+    // Clamped on the way in: a corrupt or hand-edited value must not reach the
+    // steering maths, where half of it becomes the angle to full lock.
+    wheelRange: clampWheelRange(readNumber(KEYS.gyroWheelRange, GYRO_DEFAULTS.wheelRange)),
   };
 }
 
@@ -63,6 +87,8 @@ export function saveGyroPrefs(p: GyroPrefs): void {
   writeBool(KEYS.gyroHaptic, p.haptic);
   writeBool(KEYS.gyroThrottle, p.throttle);
   writeBool(KEYS.gyroIdleDetect, p.idleDetect);
+  writeBool(KEYS.gyroWheel, p.wheel);
+  writeNumber(KEYS.gyroWheelRange, clampWheelRange(p.wheelRange));
 }
 
 // ─── Transport ────────────────────────────────────────────────────────────────
