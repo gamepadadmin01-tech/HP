@@ -3,7 +3,6 @@ import React, { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, QrCode } from "lucide-react";
-import { PollingHz } from "../types";
 
 export const DIALOG_DUR  = 260;
 
@@ -54,67 +53,6 @@ export function DialogShell({ open, onClickOutside, children, zIndex = 30 }: {
         {children}
       </div>
     </div>
-  );
-}
-
-// ─── Advanced Tuning Dialog ───────────────────────────────────────────────────
-export function TuningDialog({ open, pollingHz, setPollingHz, kernelBypass, setKernelBypass, gyroOn, setGyroOn, onDismiss }: {
-  open: boolean;
-  pollingHz: PollingHz; setPollingHz: (v: PollingHz) => void;
-  kernelBypass: boolean; setKernelBypass: (v: boolean) => void;
-  gyroOn: boolean; setGyroOn: (v: boolean) => void;
-  onDismiss: () => void;
-}) {
-  return (
-    <DialogShell open={open} onClickOutside={onDismiss}>
-      <div className="rounded-2xl border p-5"
-        style={{ background: "rgba(10,14,24,0.98)", borderColor: "rgba(79,134,198,0.15)", boxShadow: "0 0 48px rgba(0,0,0,0.9)" }}>
-        <div className="flex items-center justify-between mb-5">
-          <div>
-            <h3 className="text-base font-bold text-primary tracking-widest" style={{ fontFamily: "'Space Grotesk',sans-serif" }}>ADVANCED TUNING</h3>
-            <p className="text-xs text-muted-foreground font-mono mt-0.5">System performance controls</p>
-          </div>
-          <button onClick={onDismiss} className="w-8 h-8 flex items-center justify-center rounded-full text-muted-foreground"
-            style={{ background: "rgba(255,255,255,0.05)" }}><X size={14} /></button>
-        </div>
-        <div className="space-y-3">
-          {[
-            { label: "Kernel Charge Bypass", sub: "Shizuku · Prevents USB heat", val: kernelBypass, set: setKernelBypass },
-            { label: "Zero-Lag Gyro Direct Mount", sub: "Shared memory IPC bypass", val: gyroOn, set: setGyroOn },
-          ].map(({ label, sub, val, set }) => (
-            <div key={label} className="flex items-center justify-between p-3.5 rounded-xl border"
-              style={{ background: "rgba(255,255,255,0.02)", borderColor: "rgba(255,255,255,0.06)" }}>
-              <div><p className="text-sm font-mono font-semibold text-foreground">{label}</p>
-                <p className="text-xs text-muted-foreground mt-0.5">{sub}</p></div>
-              <button onClick={() => set(!val)}
-                className={`relative w-12 h-6 rounded-full transition-colors duration-200 flex-shrink-0 ${val ? "bg-primary" : "bg-muted"}`}>
-                <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform duration-200 ${val ? "translate-x-6" : ""}`} />
-              </button>
-            </div>
-          ))}
-          <div className="p-3.5 rounded-xl border" style={{ background: "rgba(255,255,255,0.02)", borderColor: "rgba(255,255,255,0.06)" }}>
-            <p className="text-sm font-mono font-semibold text-foreground mb-3">Telemetry Polling Rate</p>
-            <div className="grid grid-cols-4 gap-2">
-              {([60, 120, 500, 1000] as PollingHz[]).map((hz) => (
-                <button key={hz} onClick={() => setPollingHz(hz)}
-                  className={`py-2.5 rounded-lg text-xs font-mono font-bold border transition-all duration-200 ${pollingHz === hz
-                    ? "bg-[#441111] text-[#dd4444] border-[#661111]"
-                    : "bg-muted/20 text-muted-foreground border-border"}`}>
-                  {hz >= 1000 ? "1kHz" : `${hz}Hz`}
-                </button>
-              ))}
-            </div>
-            <p className="text-xs text-muted-foreground mt-2 text-center font-mono">
-              {pollingHz}Hz · {(1000 / pollingHz).toFixed(2)}ms/packet
-            </p>
-          </div>
-        </div>
-        <button onClick={onDismiss} className="mt-4 w-full py-3 rounded-xl font-mono text-sm font-bold tracking-widest"
-          style={{ background: "rgba(90,16,16,0.2)", border: "1px solid rgba(90,16,16,0.4)", color: "#cc4444" }}>
-          DISMISS
-        </button>
-      </div>
-    </DialogShell>
   );
 }
 

@@ -1,8 +1,8 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo, useSyncExternalStore } from "react";
 // @ts-ignore - Ignore missing declaration file error
 import { createPortal } from "react-dom";
-import { Home, Usb, Activity, Gamepad2, QrCode, X, Settings, Sparkles, User } from "lucide-react";
-import { TuningDialog, QRScanOverlay } from "./components/Dialogs";
+import { Home, Usb, Activity, Gamepad2, X, Settings, User } from "lucide-react";
+import { QRScanOverlay } from "./components/Dialogs";
 import { PlaytimeLockout } from "./components/PlaytimeLockout";
 import { PlaytimeToast } from "./components/PlaytimeToast";
 import { SignInWall } from "./components/SignInWall";
@@ -12,7 +12,7 @@ import { LaunchNotice } from "./components/LaunchNotice";
 import { motion, AnimatePresence } from "framer-motion";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-import { View, BtnId, DashTab, PollingHz, GamepadPreset, CustomPad, CustomBtnDef, WidgetType, WidgetShape, WidgetAnchor, BtnPosOverride, PosOverrideMap } from "./types";
+import { View, BtnId, DashTab, GamepadPreset, CustomPad, CustomBtnDef, WidgetType, WidgetShape, WidgetAnchor, BtnPosOverride, PosOverrideMap } from "./types";
 import { CustomPadEditor } from "./components/CustomPadEditor";
 import { FeatureIntroOverlay, recordIntroNav, introRated } from "./FeatureIntroOverlay";
 import { FEEDBACK_URL, initFeedbackSync, markFeedbackSent } from "./feedback";
@@ -184,10 +184,6 @@ function makeDefaultPad(padId: string, templateKey: string = "standard", name?: 
     buttons: buttonsList
   };
 }
-
-// ─── Transition constants ─────────────────────────────────────────────────────
-const SCREEN_EASE = "cubic-bezier(0.4,0,0.2,1)";
-const SCREEN_DUR  = "380ms";
 
 // ─── Dialog animation hook ────────────────────────────────────────────────────
 // Keeps dialog mounted for exit animation, then unmounts.
@@ -384,26 +380,7 @@ function useStick(maxR: number, svgRef: React.RefObject<SVGSVGElement | null>, o
   return { posRef, onDown, onMove, onUp, knobRef };
 }
 
-// Returns real round-trip latency (ms) from the native bridge, or null when
-// there's no bridge (desktop browser) — callers render "—" instead of a fake
-// number. Previously this emitted random 2–12ms which was misleading.
-function useLatency(): number | null {
-  const [ms, setMs] = useState<number | null>(null);
-  useEffect(() => {
-    const bridge = (window as any).AndroidBridge;
-    if (!bridge || !bridge.getNetworkTelemetryJson) return;
-    const id = setInterval(() => {
-      try {
-        const stats = JSON.parse(bridge.getNetworkTelemetryJson());
-        if (typeof stats.latency === "number") setMs(stats.latency);
-      } catch (e) {}
-    }, 500);
-    return () => clearInterval(id);
-  }, []);
-  return ms;
-}
-
-import { Btn, Dpad, RightStick, TriggerPill, RED_NORM, RED_HELD, FACE_COLORS, ACCENT_RGB } from "./components/Widgets";
+import { Btn, Dpad, RightStick, TriggerPill, RED_NORM, RED_HELD, ACCENT_RGB } from "./components/Widgets";
 
 // ─── Gyro indicator material ─────────────────────────────────────────────────
 // SMOKED GLASS, matching the pad buttons. The bar used to be a solid #2CAABA
@@ -1381,13 +1358,6 @@ function ControllerScreen({ onBack, isActive, activeMapping, customPad, controll
     };
   }, [isActive, outOfTime]);
 
-  // Layout — scaled up to fill the 1264×570 canvas
-  // Helper to apply position override for a named button
-  function p(key: string, defaults: BtnPosOverride): BtnPosOverride {
-    const ov = posOverride?.[key];
-    return ov ? { ...defaults, ...ov } : defaults;
-  }
-
   // Measure screen dynamically for physical edge-anchoring bounds
   const [windowSize, setWindowSize] = useState({
     width: window.innerWidth,
@@ -1559,27 +1529,6 @@ function ControllerScreen({ onBack, isActive, activeMapping, customPad, controll
     ? { transform: `rotate(90deg) translateY(-100%)`, transformOrigin: "top left", width: `${windowSize.height}px`, height: `${windowSize.width}px` } 
     : {};
 
-  const LB  = p("LB",  { cx: 90,  cy: 110,  r: 52 });
-  const RB  = p("RB",  { cx: 252, cy: 110,  r: 52 });
-  const FY  = p("Y",   { cx: 160, cy: 250, r: 56 });
-  const FX  = p("X",   { cx: 60,  cy: 350, r: 56 });
-  const FB  = p("B",   { cx: 260, cy: 350, r: 56 });
-  const FA  = p("A",   { cx: 160, cy: 450, r: 56 });
-  
-  // Center-aligned:
-  const LS  = p("lstick", { cx: 410 + offsetCenter, cy: 528, r: 40 });
-  const _DP = p("dpad", { cx: 580 + offsetCenter, cy: 348, r: 138 });
-  const _RS = p("rstick", { cx: 648 + offsetCenter, cy: 528, r: 138 });
-
-  const DP  = { ..._DP };
-  const RSL = p("rstick_btn", { cx: 758 + offsetCenter, cy: 528, r: 40 });
-  
-  const _LST = p("lstick", { cx: 284, cy: 308, r: 120 });
-  const LST = { cx: _LST.cx, cy: _LST.cy, outerR: _LST.r, innerR: Math.round(_LST.r * 0.483) };
-
-  // Right-aligned:
-  const _RST = p("rstick", { cx: 926 + offsetRight, cy: 308, r: 120 });
-  const RST = { cx: _RST.cx, cy: _RST.cy, outerR: _RST.r, innerR: Math.round(_RST.r * 0.483) };
   const LT  = { x: 1062 + offsetRight, y: 16, w: 92, h: 538, rx: 46 };
   const RT  = { x: 1166 + offsetRight, y: 16, w: 92, h: 538, rx: 46 };
 
@@ -2412,11 +2361,6 @@ function ScannerScreen({ onDashboard }: { onDashboard: () => void }) {
 function Card({ children, className = "", style }: { children: React.ReactNode; className?: string; style?: React.CSSProperties }) {
   return <div className={`bg-card border border-border rounded-xl ${className}`} style={style}>{children}</div>;
 }
-function SLabel({ children }: { children: React.ReactNode }) {
-  // Sans, not mono: these headings sit next to the Account panels and a second
-  // typeface made the two read as different apps.
-  return <p className="text-[10px] font-bold uppercase tracking-widest mb-3" style={{ color: "#7C8AA0" }}>{children}</p>;
-}
 function SectionDivider({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex items-center gap-3 mt-2 mb-3">
@@ -2424,13 +2368,6 @@ function SectionDivider({ children }: { children: React.ReactNode }) {
       <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-[0.18em]">{children}</span>
       <div className="flex-1 h-px bg-border" />
     </div>
-  );
-}
-function Badge({ ok, label }: { ok: boolean; label: string }) {
-  return (
-    <span className={`inline-flex items-center gap-1 text-xs font-mono px-2 py-0.5 rounded border ${ok ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" : "bg-red-500/10 text-red-400 border-red-500/20"}`}>
-      {ok ? "✓" : "✕"} {label}
-    </span>
   );
 }
 function Toggle({ on, onChange }: { on: boolean; onChange: (v: boolean) => void }) {
@@ -3083,25 +3020,6 @@ function CustomPadSlot({ pad, active, onPlay, onEdit, onDelete, onDuplicate, onS
 
 // ─── Custom pad builder (full-screen drag-and-drop canvas) ────────────────────
 
-const PRESET_TEMPLATES: Record<string, { name: string; icon: string; buttons: () => CustomBtnDef[] }> = {
-  standard: {
-    name: "Standard Console",
-    icon: "🎮",
-    buttons: () => getTrueStandardLayout()
-  }
-};
-
-// ──────────────────────────────────────────────────────────────────────────────
-// Widget Registry Pattern
-// ──────────────────────────────────────────────────────────────────────────────
-
-interface WidgetProps {
-  btn: CustomBtnDef;
-  sel: boolean;
-  padColor: string;
-}
-
-const noop = () => {};
 
 // (WidgetDispatcher removed — the controller renders every pad through the
 //  single data-driven loop in ControllerScreen; this was dead duplicate code.)
