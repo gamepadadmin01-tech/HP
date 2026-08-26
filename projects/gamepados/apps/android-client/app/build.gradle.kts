@@ -219,8 +219,21 @@ android {
         // from Register & Activate deliberately — see BILLING_DECISIONS.md and
         // RELEASE.md — until it has been tested through, on real hardware,
         // start to finish.
-        versionCode = 54
-        versionName = "1.4.0"
+        //
+        // 1.4.1 / code 55 — MANDATORY COMPLIANCE BUILD, not a feature release.
+        // 54 was uploaded to the Play closed track on 2026-08-25 and is now
+        // burned, so this is 55. Play flagged the app the same day: every update
+        // from 2026-08-31 is REJECTED unless it ships Play Billing Library 8.0.0
+        // or later, and we were on 7.1.1. Bumped straight to 9.1.0 (the current
+        // stable, and what Google recommends) rather than 8.x, so the next
+        // deadline is not three months away.
+        //
+        // Done deliberately while billing is still DARK — no service-account
+        // JSON on Railway means nothing is purchasable, so a regression in the
+        // purchase flow cannot reach a paying customer. That will not be true
+        // once billing is switched on, which is exactly why this was not left.
+        versionCode = 55
+        versionName = "1.4.1"
 
         ndk {
             // Broad device coverage (universal APK for sideload + in-app updater):
@@ -419,7 +432,20 @@ dependencies {
     // (src/playstore/java, src/direct/java) and src/store/java has neither.
     //
     // Google Play Billing — playstore flavor only.
-    add("playstoreImplementation", "com.android.billingclient:billing-ktx:7.1.1")
+    // 9.1.0, NOT 7.x. Play rejects every update from 2026-08-31 that ships a
+    // Billing Library below 8.0.0. Went to 9.1.0 (current stable) rather than
+    // the 8.0.0 floor so this is not due again in a few months; its two extra
+    // requirements are already met here (targetSdk >= 35, androidx.core >= 1.9
+    // — we are on 36 and 1.13.1).
+    //
+    // The one source change 8.0.0 forced: queryProductDetailsAsync's callback
+    // now hands back a QueryProductDetailsResult, not a bare List<ProductDetails>
+    // — see BillingBridge.queryAndLaunch. Everything else in BillingBridge was
+    // already on the post-8.0 API (PendingPurchasesParams, QueryPurchasesParams),
+    // and none of the APIs 8.0.0 deleted (queryPurchaseHistory,
+    // querySkuDetailsAsync, the no-arg enablePendingPurchases, the skuType
+    // queryPurchasesAsync overload) were ever used here.
+    add("playstoreImplementation", "com.android.billingclient:billing-ktx:9.1.0")
     // Razorpay Checkout — direct flavor only (our own site's build, no store cut).
     // 1.6.38, NOT 1.6.40. From 1.6.40 the SDK is split into
     // com.razorpay:checkout + com.razorpay:core, and both artifacts declare the

@@ -159,8 +159,15 @@ open class BillingBridge(activity: MainActivity) : UpdaterBridge(activity) {
             )
             .build()
 
-        client.queryProductDetailsAsync(params) { result, details ->
-            val product = details.firstOrNull()
+        // PBL 8.0.0 changed this callback: the second argument is a
+        // QueryProductDetailsResult, not a bare List<ProductDetails>. The list
+        // now carries ONLY the products Play could fetch; anything it could not
+        // is reported separately in unfetchedProductList with a reason, where
+        // before it was silently omitted. We ask for exactly one product, so
+        // "not in productDetailsList" still means "not purchasable", and the
+        // existing null branch below is the right answer for it either way.
+        client.queryProductDetailsAsync(params) { result, queryResult ->
+            val product = queryResult.productDetailsList.firstOrNull()
             if (result.responseCode != BillingClient.BillingResponseCode.OK || product == null) {
                 if (onMissing != null) onMissing()
                 else PurchaseRelay.post(
