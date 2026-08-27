@@ -896,7 +896,7 @@ function useGyro(maxAngle: number = 45, deadzone: number = 0, onGyroChange?: () 
 }
 
 // ─── Controller Screen ────────────────────────────────────────────────────────
-function ControllerScreen({ onBack, isActive, activeMapping, customPad, controllerLayout, posOverride, gyroOn, setGyroOn, gyroMaxAngle, gyroMode, gyroDeadzone, gyroHaptic, gyroThrottle, gyroIdleDetect, rumbleOn }: {
+function ControllerScreen({ onBack, isActive, activeMapping, customPad, controllerLayout, posOverride, gyroOn, setGyroOn, gyroMaxAngle, gyroWheel, gyroMode, gyroDeadzone, gyroHaptic, gyroThrottle, gyroIdleDetect, rumbleOn }: {
   onBack: () => void; isActive: boolean;
   activeMapping: Partial<Record<BtnId, string>>;
   customPad?: CustomPad;
@@ -905,6 +905,8 @@ function ControllerScreen({ onBack, isActive, activeMapping, customPad, controll
   gyroOn: boolean;
   setGyroOn: (v: boolean) => void;
   gyroMaxAngle: number;
+  /** Wheel mode on — orientation is pinned, so the driver needs a manual rotate. */
+  gyroWheel: boolean;
   gyroMode: string;          // "racing" = 1-axis steering | "3d" = 2-axis look
   gyroDeadzone: number;
   gyroHaptic: boolean;
@@ -1682,6 +1684,30 @@ function ControllerScreen({ onBack, isActive, activeMapping, customPad, controll
                 pointerEvents: "auto",
               }}>
               CALIBRATE
+            </button>
+          )}
+          {/* ROTATE — only while wheel mode is on. Wheel mode pins the screen so a
+              mounted phone being turned cannot flip the steering frame mid-corner, but
+              that also takes away the driver’s normal way of choosing which way round
+              to sit in the mount. This hands that choice back explicitly. Native side
+              flips between the two landscape directions and resets the turn count, since
+              re-framing the sensor invalidates any turns banked in the old frame. */}
+          {gyroWheel && (
+            <button data-nx="1"
+              onPointerDown={(e) => {
+                e.stopPropagation();
+                try { (window as any).AndroidBridge?.rotateControllerScreen?.(); } catch {}
+                triggerHaptic(15);
+              }}
+              className="pointer-events-auto flex items-center gap-1 px-2 py-0.5 rounded-full text-[8px] font-bold tracking-wider uppercase active:scale-90 transition-transform"
+              style={{
+                color: "rgba(255,255,255,0.72)",
+                background: "transparent",
+                border: "1px solid rgba(255,255,255,0.14)",
+                touchAction: "manipulation",
+                pointerEvents: "auto",
+              }}>
+              ROTATE
             </button>
           )}
           {/* Center: active pad name (tuning/timer/credits removed for v1.0) */}
@@ -3333,6 +3359,10 @@ function TabSystem({ gyroOn, setGyroOn, gyroMaxAngle, setGyroMaxAngle, gyroWheel
               )}
             </div>
 
+            {/* Tilt sensitivity is meaningless once wheel mode is on — steering then
+                follows the lock-to-lock range instead. Hidden rather than disabled, so
+                there is no dead control sitting there inviting a change that does nothing. */}
+            {!gyroWheel && (
             <div>
               <div className="flex justify-between items-center mb-2">
                 <div className="flex items-center gap-2">
@@ -3348,11 +3378,9 @@ function TabSystem({ gyroOn, setGyroOn, gyroMaxAngle, setGyroMaxAngle, gyroWheel
               </div>
               <div className="mt-2 text-[11px] text-muted-foreground font-mono">
                 <p className="text-foreground">{gyroMaxAngle}°</p>
-                {gyroWheel && (
-                  <p className="font-sans leading-relaxed mt-1">Wheel mode is on, so steering follows the lock-to-lock range above and this slider does nothing until you turn wheel mode off.</p>
-                )}
               </div>
             </div>
+            )}
 
             <div>
               <div className="flex justify-between items-center mb-2">
@@ -4692,7 +4720,7 @@ export default function App() {
         const bridge = (window as any).AndroidBridge;
         if (bridge && bridge.setScreenOrientation) {
           try {
-            bridge.setScreenOrientation(target === "controller" ? "landscape" : "portrait");
+            bridge.setScreenOrientation(target === "controller" ? "landscape-locked" : "portrait");
           } catch (e) { console.error(e); }
         }
         setView(target);
@@ -4707,7 +4735,7 @@ export default function App() {
       const bridge = (window as any).AndroidBridge;
       if (bridge && bridge.setScreenOrientation) {
         try {
-          bridge.setScreenOrientation(target === "controller" ? "landscape" : "portrait");
+          bridge.setScreenOrientation(target === "controller" ? "landscape-locked" : "portrait");
         } catch (e) {}
       }
     }
@@ -4734,7 +4762,7 @@ export default function App() {
   function closeEditor() {
     runCurtainSequence(() => {
       const bridge = (window as any).AndroidBridge;
-      try { bridge?.setScreenOrientation?.(viewRef.current === "controller" ? "landscape" : "portrait"); } catch (e) {}
+      try { bridge?.setScreenOrientation?.(viewRef.current === "controller" ? "landscape-locked" : "portrait"); } catch (e) {}
       setEditingPad(null);
     });
   }
@@ -4791,14 +4819,23 @@ export default function App() {
     });
   }, [gyroOn, gyroMaxAngle, gyroDeadzone, gyroHaptic, gyroMode, gyroThrottle, gyroIdleDetect, gyroWheel, gyroWheelRange]);
 
-  // Wheel mode has to reach the native layer, which PINS the screen orientation for
-  // the duration. That is functional: the sensor axis remap is chosen from the current
-  // display rotation, so an unpinned phone rotated past the flip point inverts the
-  // steering frame mid-corner. Also drops any banked turn count.
+  // Tell the native layer whether wheel mode is on. This pushes a FLAG ONLY — it must
+  // never change the screen orientation, because this effect runs on mount and on every
+  // toggle, from whatever screen happens to be showing. An earlier version rotated the
+  // screen from here, so simply having wheel mode saved threw the whole app into
+  // landscape at startup, menus included.
+  //
+  // Orientation is owned by the navigation effect below, which knows which screen is up.
+  // The only thing needed here is to RE-APPLY it when the flag changes while the
+  // controller is already open, so turning wheel mode on pins the screen immediately
+  // instead of on the next navigation.
   useEffect(() => {
     const bridge = (window as any).AndroidBridge;
     if (!bridge || !bridge.setWheelMode) return;   // older shell, or running in a browser
-    try { bridge.setWheelMode(!!gyroWheel); } catch {}
+    try {
+      bridge.setWheelMode(!!gyroWheel);
+      if (viewRef.current === "controller") bridge.setScreenOrientation?.("landscape-locked");
+    } catch {}
   }, [gyroWheel]);
 
   // The angle that actually reaches the steering maths. In wheel mode full lock is
@@ -5029,6 +5066,7 @@ export default function App() {
               posOverride={posOverrides[selectedPresetId]}
               gyroOn={gyroOn} setGyroOn={setGyroOn}
               gyroMaxAngle={gyroEffectiveAngle}
+              gyroWheel={gyroWheel}
               gyroMode={gyroMode}
               gyroDeadzone={gyroDeadzone}
               gyroHaptic={gyroHaptic}

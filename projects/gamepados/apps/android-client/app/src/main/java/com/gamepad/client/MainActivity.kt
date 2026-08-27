@@ -165,6 +165,9 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback, android.hardwa
     // Set from JS via setWheelMode. Read by setScreenOrientation so entering the
     // controller screen cannot hand the orientation back to the sensor.
     @Volatile internal var wheelModeOn = false
+    // Which way round the driver last turned the controller with the rotate control.
+    // Remembered so leaving and re-entering the controller keeps their mount orientation.
+    @Volatile internal var wheelLandscapeReverse = false
     private var rollPrevRaw = 0.0        // previous raw atan2 reading (deg, ±180)
     private var rollTurns = 0            // accumulated whole turns
     private var rollUnwrapInit = false   // false until the first sample seeds rollPrevRaw
@@ -875,27 +878,52 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback, android.hardwa
                 /**
                  * Wheel mode (multi-turn steering) on/off.
                  *
-                 * PINS the screen orientation for the duration, which is functional and
-                 * not cosmetic: the sensor axis remap in onSensorChanged is chosen from
-                 * the CURRENT display rotation, and the activity is SENSOR_LANDSCAPE — so
-                 * rotating a mounted phone past the flip point swaps ROTATION_90 for
-                 * ROTATION_270 and the whole steering frame inverts under the driver
-                 * mid-corner. Pinning to a fixed landscape freezes that choice, which is
-                 * exactly what multi-turn rotation requires.
+                 * Records the flag and drops the accumulated turn count — turns banked
+                 * before a mode change must not offset the new centre by whole revolutions.
                  *
-                 * Also drops the accumulated turn count, so turns banked before the mode
-                 * change cannot offset the new centre by whole revolutions.
+                 * Deliberately does NOT touch requestedOrientation. An earlier version set
+                 * it here, which meant merely *having* wheel mode saved forced the whole
+                 * app landscape the instant it started — menus and settings included —
+                 * because the JS side pushes this flag on mount, not on entering the
+                 * controller. Orientation belongs to setScreenOrientation alone, which
+                 * knows which screen is showing; it reads wheelModeOn to decide between a
+                 * pinned and a sensor-following landscape.
                  */
                 @android.webkit.JavascriptInterface
                 fun setWheelMode(on: Boolean) {
                     runOnUiThread {
                         try {
                             wheelModeOn = on
-                            requestedOrientation = if (on)
-                                android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
-                            else
-                                android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
                             resetRollUnwrap()
+                        } catch (e: Exception) {
+                            e.printStackTrace()
+                        }
+                    }
+                }
+
+                /**
+                 * Flip between the two landscape directions, for the rotate control inside
+                 * the controller.
+                 *
+                 * Wheel mode pins the orientation, which removes the driver's ability to
+                 * simply turn the phone to whichever way round suits their mount — so the
+                 * choice has to come back as an explicit control.
+                 *
+                 * Resets the unwrap: the sensor axis remap is picked from the display
+                 * rotation, so flipping it re-frames steering, and any turn count banked
+                 * in the old frame is meaningless in the new one.
+                 */
+                @android.webkit.JavascriptInterface
+                fun rotateControllerScreen() {
+                    runOnUiThread {
+                        try {
+                            wheelLandscapeReverse = !wheelLandscapeReverse
+                            requestedOrientation = if (wheelLandscapeReverse)
+                                android.content.pm.ActivityInfo.SCREEN_ORIENTATION_REVERSE_LANDSCAPE
+                            else
+                                android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+                            resetRollUnwrap()
+                            hideSystemUI()
                         } catch (e: Exception) {
                             e.printStackTrace()
                         }
@@ -906,14 +934,31 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback, android.hardwa
                 fun setScreenOrientation(orientation: String) {
                     runOnUiThread {
                         try {
-                            if (orientation == "landscape") {
-                                // Wheel mode owns the orientation while it is on — letting
-                                // SENSOR_LANDSCAPE back in here would silently undo the pin
-                                // the moment the controller screen opened.
-                                requestedOrientation = if (wheelModeOn)
-                                    android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
-                                else
+                            if (orientation == "landscape-locked") {
+                                // The CONTROLLER asks for this one. Wheel mode pins the
+                                // orientation here and only here: the sensor axis remap is
+                                // chosen from the display rotation, so a mounted phone being
+                                // turned would otherwise invert the steering frame under the
+                                // driver mid-corner. Direction is whichever they last picked
+                                // with the rotate control, so leaving the controller and
+                                // coming back keeps their mount orientation.
+                                //
+                                // With wheel mode OFF this behaves exactly like "landscape",
+                                // so nothing changes for anyone not using it.
+                                requestedOrientation = if (wheelModeOn) {
+                                    if (wheelLandscapeReverse)
+                                        android.content.pm.ActivityInfo.SCREEN_ORIENTATION_REVERSE_LANDSCAPE
+                                    else
+                                        android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+                                } else {
                                     android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+                                }
+                                hideSystemUI()
+                            } else if (orientation == "landscape") {
+                                // Everything else that wants landscape — the layout editor,
+                                // the preset editor. These are NOT the controller, so wheel
+                                // mode must not pin them; the phone should still turn freely.
+                                requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
                                 hideSystemUI()
                             } else if (orientation == "portrait") {
                                 requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED

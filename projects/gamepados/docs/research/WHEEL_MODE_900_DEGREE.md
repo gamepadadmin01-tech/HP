@@ -254,3 +254,59 @@ same version as the staged AAB, which does NOT contain wheel mode. **Upload
 `releases/store/1.4.1/GamepadOS-1.4.1-playstore.aab` as-is; do not rebuild 1.4.1 from
 this tree.** Bump to 1.4.2 / code 56 before building the wheel-mode release. (Play's
 versionCode uniqueness is a backstop — once 55 is consumed, a rebuild is refused.)
+
+---
+
+## Device-test round 1 — 2026-08-27
+
+First install on real hardware. Four things came back, one a real bug of mine.
+
+### The bug: the whole app went landscape at startup
+
+`setWheelMode` was changing `requestedOrientation` directly. The JS side pushes that
+flag **on mount**, not on entering the controller — so merely having wheel mode saved
+threw the entire app into landscape the instant it launched, menus and settings
+included. Toggling a range preset re-triggered it too.
+
+Fixed at the root: `setWheelMode` now records the flag and resets the turn count, and
+touches orientation **never**. Orientation belongs solely to `setScreenOrientation`,
+which is the only code that knows which screen is showing.
+
+### User-mandated: the lock applies to the CONTROLLER only
+
+> "the app orientation should be locked inside the controller only not outside"
+
+`setScreenOrientation` gained a distinct `"landscape-locked"` mode, which the controller
+asks for and nothing else does. The layout editor and preset editor keep plain
+`"landscape"` and stay free-rotating, because they are not the controller. With wheel
+mode off, `"landscape-locked"` behaves identically to `"landscape"`, so nothing changes
+for anyone not using the feature.
+
+### User-mandated: a rotate control inside the controller
+
+> "we will provide one option called rotate screen option to rotate the screen inside
+> the controller because we will fix the controller screen orientation"
+
+Pinning the orientation takes away the driver's normal way of choosing which way round
+to sit in the mount, so that choice comes back as an explicit **ROTATE** button in the
+controller HUD, beside CALIBRATE, shown only while wheel mode is on.
+`rotateControllerScreen()` flips between the two landscape directions, remembers the
+choice in `wheelLandscapeReverse` so re-entering the controller keeps it, and resets the
+unwrap — flipping the display re-frames the sensor axes, so turns banked in the old
+frame are meaningless in the new one.
+
+### User-mandated: hide sensitivity in wheel mode
+
+> "we will not show the sensitivity options after turning on the wheel mode"
+
+The tilt-sensitivity slider is not rendered at all while wheel mode is on. It was
+briefly shown with a note saying it did nothing, which is worse — a dead control still
+invites a change. Steering follows the lock-to-lock range instead.
+
+### Still open after this round
+
+- Throttle and brake with the phone as the wheel. Unchanged, still unmade.
+- The deadzone control is still labelled **"Steering range"**, which now reads
+  ambiguously next to wheel mode's **"Lock-to-lock range"**. Renaming it was not asked
+  for, so it has been left alone — worth a decision.
+- Feel in ETS2 on real hardware.

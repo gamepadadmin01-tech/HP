@@ -72,3 +72,26 @@ the wheel angle. Gravity-derived so **drift-free and absolute**, unlike an integ
 
 Difficulty overall: **medium, not hard** — the maths is easy, the risk is all in the discontinuities.
 The genuine work is tuning the feel in ETS2 on real hardware.
+
+## USER-MANDATED behaviour (device test, 2026-08-27)
+
+Three rules from the first on-device test. Treat these like
+[[feedback_gyro_indicator_design]] — they were asked for explicitly.
+
+1. **The orientation lock applies INSIDE THE CONTROLLER ONLY.** Never app-wide.
+   `setScreenOrientation` has a distinct `"landscape-locked"` mode that only the
+   controller requests; the layout and preset editors keep plain `"landscape"` and stay
+   free-rotating. **`setWheelMode` must NEVER touch `requestedOrientation`** — it did,
+   and because JS pushes that flag on mount, merely having wheel mode saved threw the
+   whole app landscape at startup, menus included. That was the bug he reported.
+2. **A ROTATE control lives in the controller HUD**, beside CALIBRATE, shown only while
+   wheel mode is on. Pinning the screen removes the driver's normal way of choosing
+   which way round to sit in the mount, so the choice must come back explicitly. It
+   flips the two landscape directions, remembers the choice (`wheelLandscapeReverse`),
+   and resets the unwrap — flipping the display re-frames the sensor axes.
+3. **The tilt-sensitivity slider is HIDDEN while wheel mode is on**, not disabled and
+   not annotated. Steering follows the lock-to-lock range instead; a dead control still
+   invites a change.
+
+Open: the deadzone slider is still labelled "Steering range", which reads ambiguously
+next to wheel mode's "Lock-to-lock range". Not renamed — not asked for.
