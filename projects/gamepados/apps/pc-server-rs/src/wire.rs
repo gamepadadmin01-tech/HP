@@ -78,10 +78,18 @@ impl Packet {
     }
 }
 
-/// Centre-deadzone snap: `|v - 128| <= 4` collapses to exact centre.
-/// Python: `_SNAP_LUT = bytes(128 if abs(v - 128) <= 4 else v for v in range(256))`
+/// Centre-deadzone snap: `|v - 128| <= 1` collapses to exact centre.
+/// Python: `_SNAP_LUT = bytes(128 if abs(v - 128) <= 1 else v for v in range(256))`
+///
+/// Was `<= 4`. That was a second, undocumented deadzone applied server-side on top
+/// of whatever the phone had already done. It did nothing for the sticks — a touch
+/// stick releases to exactly 128, and its own 8% deadzone is applied on the phone —
+/// so the only thing it actually gated was the gyro, whose axes ride the same stick
+/// bytes. The app exposes a gyro deadzone to the user (0-30 degrees, default 0) and
+/// this silently overrode it: a user asking for none still got roughly 4/127 ~= 3%.
+/// `<= 1` still absorbs single-count dither without overriding the user's setting.
 pub fn snap(v: u8) -> u8 {
-    if (v as i16 - 128).abs() <= 4 { 128 } else { v }
+    if (v as i16 - 128).abs() <= 1 { 128 } else { v }
 }
 
 /// Byte → XInput float axis. `f64` deliberately: Python floats are doubles, and

@@ -973,9 +973,18 @@ def _force_pad_reset(sess):
 # apply_inputs — and crucially _snap ran BEFORE the "report unchanged" early-out,
 # so it cost on every single inbound packet, not just on input changes. Both are
 # pure functions of one byte, so a 256-entry table removes the call entirely.
-#   _SNAP_LUT : centre-deadzone snap (|v-128| <= 4 → 128)
+#   _SNAP_LUT : centre-deadzone snap (|v-128| <= 1 → 128)
 #   _AXIS_LUT : byte → XInput float axis (-1.0 .. 1.0, centre 128)
-_SNAP_LUT = bytes(128 if abs(v - 128) <= 4 else v for v in range(256))
+#
+# Was <= 4: a second, undocumented deadzone applied here on top of the phone's own.
+# It did nothing for the sticks (a touch stick releases to exactly 128, and its 8%
+# deadzone is applied on the phone), so the only thing it gated was the gyro, whose
+# axes ride the same stick bytes — silently overriding the user's own gyro deadzone
+# setting (0-30 deg, default 0) with roughly 4/127 ~= 3%. <= 1 still absorbs
+# single-count dither. Keep in lockstep with pc-server-rs/src/wire.rs::snap and
+# regenerate pc-server-rs/tests/golden_vectors.json (tools/gen_golden.py) — this
+# table is the source of truth those vectors are derived from.
+_SNAP_LUT = bytes(128 if abs(v - 128) <= 1 else v for v in range(256))
 _AXIS_LUT = tuple(max(-1.0, min(1.0, (b - 128) / 127.0)) for b in range(256))
 
 
