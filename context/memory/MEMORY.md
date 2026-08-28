@@ -34,6 +34,7 @@
 - [Release checklist](reference_release_checklist.md) — every version touchpoint, the 5 flavours, and the Register & Activate step that keeps getting missed
 - [GRX crypto](project_grx_crypto.md) — encrypted input layer, LIVE. Live = 1.3.24/code 48; 1.3.26 committed but never activated; source builds 1.3.27/code 51
 - [Realtime latency](project_realtime_latency_stack.md) — measured breakdown; Phase 3 native input **3.7× faster, device-verified**; gameplay-feel verdict still the release gate
+- [Wi-Fi latency research verdict](project_wifi_latency_research_verdict.md) — 2026-08-28: the app is **already at 10–18 ms**; L4S/MPTCP/LTE-dual-path/Reed-Solomon/ML all **decided against**; the real gap is **no field telemetry**
 - [Controller UI widgets](project_controller_ui_widgets.md) — live pad widgets in `Widgets.tsx` (`GamepadWidgets.tsx` is DEAD)
 - [Gyro indicator design](feedback_gyro_indicator_design.md) — USER-MANDATED: top edge, 6.5px thick, no glow, behind buttons
 - [Gyro idle gate](feedback_gyro_idle_gate.md) — USER-MANDATED: suppress after 1s of no touch; wakes on button/touch, never on gyro itself
