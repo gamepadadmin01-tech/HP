@@ -320,12 +320,23 @@ void* txThreadLoop(void* arg) {
         const void* outBuf = &networkPayload;
         size_t outLen = sizeof(GamepadPayload);
         uint8_t grxBuf[64];
+        // Hoisted above the seal (it used to be declared just before the send below):
+        // sealing without a transport is pure waste, and on AOA the sealed frame is
+        // thrown away outright — the write below sends &networkPayload, the raw 20-byte
+        // struct, because USB is point-to-point and the server's AOA path isn't GRX.
+        bool haveTransport = accessoryMode ? (accessoryFd != -1) : (udpSocket != -1);
         // Only seal when we're actually transmitting this tick. The seal is a JNI
         // up-call into Kotlin AES-GCM plus heap allocations; gating it on grxReady
         // ALONE (the old code) ran it on every idle 2ms poll — ~500 seals/sec whose
         // output was discarded because the send below is gated on doSend. Gating on
         // doSend cuts that to only the frames we send (change + redundancy + keep-alive).
-        if (doSend && grxReady.load() && g_mid_seal && g_activity) {
+        //
+        // haveTransport + !accessoryMode close the remaining hole: grxReady is a latch
+        // that Kotlin only ever sets true, so after any Wi-Fi GRX session it stayed set
+        // for the process lifetime. Attaching USB then left every frame sealing into a
+        // buffer the AOA branch ignores — full AES-GCM plus 7 JNI ops per packet, on the
+        // lowest-latency transport, for output nothing reads.
+        if (doSend && haveTransport && !accessoryMode && grxReady.load() && g_mid_seal && g_activity) {
             JNIEnv* e = grxEnv();
             if (e) {
                 jbyteArray in = e->NewByteArray((jsize)sizeof(GamepadPayload));
@@ -347,7 +358,7 @@ void* txThreadLoop(void* arg) {
         }
 
         // Fire & Forget (Zero Blocking) — only when there's something to send.
-        bool haveTransport = accessoryMode ? (accessoryFd != -1) : (udpSocket != -1);
+        // (haveTransport is computed above, before the GRX seal.)
         if (haveTransport && doSend) {
             ssize_t sent;
             if (accessoryMode) {
@@ -806,6 +817,14 @@ Java_com_gamepad_client_MainActivity_stopNetworkNative(JNIEnv* env, jobject thiz
     // FIX 2: clear connected-socket state so the next init starts fresh.
     socketConnected = false;
     connectedPeer.s_addr = 0;
+    // Clear the GRX latch with the rest of the session state. Kotlin only ever calls
+    // nativeSetGrxReady(true) — there is no false call site — so without this the flag
+    // survived for the whole process once any GRX session had established. A later
+    // reconnect to a non-GRX server, or a USB attach, then sealed every frame into a
+    // buffer nothing reads. The next session sets it true again when it establishes.
+    // Re-init requires a stop first (both init entry points enforce it), so resetting
+    // here covers every transport transition.
+    grxReady.store(false);
     LOGI("Native Engine Stopped.");
 }
 
@@ -824,6 +843,10 @@ Java_com_gamepad_client_MainActivity_initAccessoryNative(JNIEnv* env, jobject th
         return;
     }
     accessoryFd = (int)fd;
+    // Belt-and-braces with the reset in stopNetworkNative: the AOA transport is never
+    // GRX (the server's AOA path speaks raw 20-byte frames), and Kotlin drops its GrxClient
+    // on USB attach, so the latch must not arrive here still set from a prior Wi-Fi session.
+    grxReady.store(false);
     // Non-blocking so the TX thread's RX drain never blocks on read().
     int aflags = fcntl(accessoryFd, F_GETFL, 0);
     if (aflags != -1) fcntl(accessoryFd, F_SETFL, aflags | O_NONBLOCK);
