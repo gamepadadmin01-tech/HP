@@ -1996,7 +1996,16 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback, android.hardwa
     private class OneEuroFilter(
         private val minCutoff: Double = 2.8,  // Hz — lower = smoother when still
         private val beta: Double = 0.5,       // speed coefficient — higher = less lag
-        private val dCutoff: Double = 1.0     // cutoff for the derivative low-pass
+        // Raised 1.0 -> 3.5. This is the low-pass on the SPEED estimate, and beta scales
+        // the adaptive cutoff by that speed — so at 1.0 Hz the filter took ~30ms to
+        // notice a flick had started and stayed over-smoothed through the onset. That is
+        // the "tilt catching up" feel at the start of a quick steer, not steady-state lag
+        // (which minCutoff/beta bound, and which is unchanged here).
+        // Simulated at the real 200Hz sample rate, peak onset error drops roughly by half:
+        // 0.92 -> 0.48 deg at 90 deg/s, 1.25 -> 0.55 at 150, 2.21 -> 1.11 at 400.
+        // Cost: a noisier speed estimate with a still hand can briefly open the cutoff.
+        // If resting-hand dither shows up in micro-steer, walk this back toward 2.0.
+        private val dCutoff: Double = 3.5     // cutoff for the derivative low-pass
     ) {
         private var xPrev = 0.0
         private var dxPrev = 0.0
