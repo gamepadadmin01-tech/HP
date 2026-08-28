@@ -125,13 +125,24 @@ class NativeInputEngine(private val activity: MainActivity) {
 
     // ── Visual feedback → JS, coalesced to one evaluateJavascript per frame ──
     private var visScheduled = false
-    private var lastVisJson = ""
     private val visHeldCustom = LinkedHashSet<String>()
     private val visHeldStd = LinkedHashSet<String>()
     private val visCallback = Choreographer.FrameCallback {
         visScheduled = false
         pushVisuals()
     }
+    // pushVisuals scratch + last-pushed state. Only ever touched from visCallback
+    // (the Choreographer frame callback, UI thread), so these need no lock of their
+    // own — `lock` is now taken ONLY for the snapshot copy, never for the JSON build.
+    private val curHeldCustom = LinkedHashSet<String>()
+    private val curHeldStd = LinkedHashSet<String>()
+    private val lastHeldCustom = LinkedHashSet<String>()
+    private val lastHeldStd = LinkedHashSet<String>()
+    // NaN so the very first frame always compares unequal and pushes.
+    private var lastLt = Float.NaN; private var lastRt = Float.NaN
+    private var lastLx = Float.NaN; private var lastLy = Float.NaN
+    private var lastRx = Float.NaN; private var lastRy = Float.NaN
+    private var lastMode = ' '
 
     /** Invisible full-screen touch layer. Sits above the WebView in gameContainer. */
     val overlay: View = @SuppressLint("ViewConstructor") object : View(activity) {
@@ -616,20 +627,47 @@ class NativeInputEngine(private val activity: MainActivity) {
 
     private fun pushVisuals() {
         if (!active) return
-        val o = JSONObject()
+        // LATENCY: the JSON build used to sit INSIDE this synchronized block, so once
+        // per frame the UI thread held the SAME `lock` that the touch handlers and the
+        // ~200Hz gyro inject need — for as long as it took to allocate a JSONObject,
+        // two JSONArrays, two list copies, six boxed Doubles and a String. A busy UI
+        // thread therefore blocked input on a lock held by view-layer work, which is
+        // the mechanism behind the "p95 spike when the UI thread is busy" symptom.
+        // The lock now covers only a snapshot: nine field reads and two small set
+        // copies (held buttons, typically 0-4 entries).
+        val lt: Float; val rt: Float; val lx: Float; val ly: Float
+        val rx: Float; val ry: Float; val mode: Char
         synchronized(lock) {
-            o.put("h", JSONArray(visHeldCustom.toList()))
-            o.put("s", JSONArray(visHeldStd.toList()))
-            o.put("lt", ltFill.toDouble())
-            o.put("rt", rtFill.toDouble())
-            o.put("lx", lsX.toDouble()); o.put("ly", lsY.toDouble())
-            o.put("rx", rsX.toDouble()); o.put("ry", rsY.toDouble())
-            o.put("m", stickMode.toString())
+            curHeldCustom.clear(); curHeldCustom.addAll(visHeldCustom)
+            curHeldStd.clear();    curHeldStd.addAll(visHeldStd)
+            lt = ltFill; rt = rtFill
+            lx = lsX; ly = lsY; rx = rsX; ry = rsY
+            mode = stickMode
         }
-        val json = o.toString()
-        if (json == lastVisJson) return
-        lastVisJson = json
-        activity.evalJs("if(window.__nvis)window.__nvis($json);")
+        // Dedup BEFORE building anything. The old code serialized the whole object and
+        // then discarded the string on a match, paying every allocation on every frame
+        // even when nothing had changed — which is the common case while a pad is held
+        // steady. Comparing the raw values costs no allocation at all.
+        if (mode == lastMode && lt == lastLt && rt == lastRt &&
+            lx == lastLx && ly == lastLy && rx == lastRx && ry == lastRy &&
+            curHeldCustom == lastHeldCustom && curHeldStd == lastHeldStd) return
+
+        lastLt = lt; lastRt = rt; lastLx = lx; lastLy = ly
+        lastRx = rx; lastRy = ry; lastMode = mode
+        lastHeldCustom.clear(); lastHeldCustom.addAll(curHeldCustom)
+        lastHeldStd.clear();    lastHeldStd.addAll(curHeldStd)
+
+        // Built OUTSIDE the lock. JSONObject/JSONArray are deliberately kept rather
+        // than hand-rolling a StringBuilder: widget `vis` ids come from JS-supplied
+        // config, so they must keep proper JSON string escaping.
+        val o = JSONObject()
+        o.put("h", JSONArray(curHeldCustom.toList()))
+        o.put("s", JSONArray(curHeldStd.toList()))
+        o.put("lt", lt.toDouble()); o.put("rt", rt.toDouble())
+        o.put("lx", lx.toDouble()); o.put("ly", ly.toDouble())
+        o.put("rx", rx.toDouble()); o.put("ry", ry.toDouble())
+        o.put("m", mode.toString())
+        activity.evalJs("if(window.__nvis)window.__nvis($o);")
     }
 
     // ═══════════════════════════ Forward-tap synthesis ═══════════════════════════
