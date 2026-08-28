@@ -527,7 +527,16 @@ void* txThreadLoop(void* arg) {
                                 }
                             }
                         }
-                        break; // Successfully handled the ACK, exit the loop
+                        // Keep draining. This used to `break` after ONE ACK, so under
+                        // sustained input the receive queue never emptied: each pass
+                        // consumed a single ACK while more kept arriving. A backlog of
+                        // N inflates the reported RTT by ~N x the 2ms poll and lags
+                        // lastAckMonoNs (getMsSinceLastAck) by the same, which is the
+                        // staleness the CONNECTED state and the transport coordinator's
+                        // fallback both feed on. The loop still terminates correctly on
+                        // `rec <= 0` above, and the lock-on/connect() work above is
+                        // idempotent, so draining to the freshest ACK is safe.
+                        continue;
                     }
                 }
             }
