@@ -35,7 +35,7 @@ mod imp {
         fn GetCurrentProcess() -> isize;
         fn SetPriorityClass(hProcess: isize, dwPriorityClass: u32) -> i32;
     }
-    const HIGH_PRIORITY_CLASS: u32 = 0x0000_0080;
+    const ABOVE_NORMAL_PRIORITY_CLASS: u32 = 0x0000_8000;
 
     // ── ws2_32: socket options ──────────────────────────────────────────────
     #[link(name = "ws2_32")]
@@ -48,16 +48,27 @@ mod imp {
     const IPPROTO_IP: i32 = 0;
     const IP_TOS: i32 = 3;
 
-    /// Run at HIGH priority.
+    /// Run at ABOVE_NORMAL priority.
     ///
-    /// JUSTIFICATION (not latency): this is a soft-realtime input path. Under
-    /// heavy background load a normal-priority receive loop can be preempted
-    /// mid-burst, which drops datagrams rather than merely delaying them. The
-    /// Python server does the same. Cheap, process-local, no global side effect.
+    /// JUSTIFICATION (not latency): this is a soft-realtime input path. Under heavy
+    /// background load a normal-priority receive loop can be preempted mid-burst,
+    /// which drops datagrams rather than merely delaying them.
+    ///
+    /// WAS HIGH_PRIORITY_CLASS, and that was too aggressive. HIGH sits ABOVE a
+    /// foreground game — games generally run at NORMAL, and Windows' foreground boost
+    /// does not close a whole priority class — so a background input server was
+    /// outranking the very game it exists to feed. Users reported the server
+    /// interfering with the PC while gaming, and that is the mechanism.
+    ///
+    /// It was never load-bearing anyway: the call site in main.rs records that this
+    /// did NOT fix the RTT jitter it was written for (drain-to-newest did) and is kept
+    /// "for robustness, not for latency". ABOVE_NORMAL still keeps the receive loop
+    /// ahead of ordinary background work, which is all the justification above asks
+    /// for, without competing with the foreground.
     pub fn set_high_priority() -> bool {
-        let ok = unsafe { SetPriorityClass(GetCurrentProcess(), HIGH_PRIORITY_CLASS) } != 0;
+        let ok = unsafe { SetPriorityClass(GetCurrentProcess(), ABOVE_NORMAL_PRIORITY_CLASS) } != 0;
         if !ok {
-            eprintln!("warn: SetPriorityClass(HIGH) failed; expect RTT jitter under load");
+            eprintln!("warn: SetPriorityClass(ABOVE_NORMAL) failed; expect RTT jitter under load");
         }
         ok
     }
