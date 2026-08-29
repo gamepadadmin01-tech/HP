@@ -2007,6 +2007,26 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback, android.hardwa
         // If resting-hand dither shows up in micro-steer, walk this back toward 2.0.
         private val dCutoff: Double = 3.5     // cutoff for the derivative low-pass
     ) {
+        /**
+         * Full-lock travel in degrees for the axis being smoothed — i.e. the tilt that
+         * maps to a full ±1 output. Defaults to the angle this filter was tuned at.
+         *
+         * This exists because `beta` multiplies a speed in ABSOLUTE deg/s, so the same
+         * tune behaves completely differently once wheel mode widens the range. Steering
+         * through full lock in one second is 90 deg/s at the ±45° default, but 900 deg/s
+         * at a 900° wheel — which drives the cutoff to `2.8 + 0.5*900` ≈ 453 Hz. Against
+         * a 200 Hz sample rate that makes alpha ≈ 1, so the filter degenerates into a
+         * pass-through and wheel mode ran with NO smoothing at all. That is what made
+         * multi-turn steering feel notchy: the raw 8-bit axis steps (3.5° each at 900°
+         * travel, vs 0.35° at ±45°) arrived unsmoothed.
+         *
+         * Scaling the speed term by REF_LOCK/fullLock makes the response proportional, so
+         * a given fraction-of-lock per second yields the same cutoff at any range. At the
+         * ±45° default the factor is exactly 1.0, so normal tilt mode is bit-identical.
+         */
+        @Volatile var fullLockDeg: Double = REF_LOCK_DEG
+            set(v) { field = if (v.isFinite() && v >= 1.0) v else REF_LOCK_DEG }
+
         private var xPrev = 0.0
         private var dxPrev = 0.0
         private var tPrevNs = 0L
@@ -2024,7 +2044,9 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback, android.hardwa
             val aD = alpha(dCutoff, dt)
             val edx = aD * dx + (1 - aD) * dxPrev
             dxPrev = edx
-            val cutoff = minCutoff + beta * Math.abs(edx)
+            // Speed term normalised to the axis range — see fullLockDeg. Factor is 1.0
+            // at the ±45° reference, so the default tune is unchanged.
+            val cutoff = minCutoff + beta * (REF_LOCK_DEG / fullLockDeg) * Math.abs(edx)
             val aX = alpha(cutoff, dt)
             val xFilt = aX * x + (1 - aX) * xPrev
             xPrev = xFilt
@@ -2042,6 +2064,27 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback, android.hardwa
             dxPrev = 0.0
             tPrevNs = 0L
         }
+
+        companion object {
+            /** The full-lock angle this filter's minCutoff/beta/dCutoff were tuned at. */
+            const val REF_LOCK_DEG = 45.0
+        }
+    }
+
+    /**
+     * Tell the fusion filters the current full-lock travel (the gyro "sensitivity", and
+     * in wheel mode the lock-to-lock range) so their speed term stays proportional to the
+     * axis range instead of raw degrees. Both axes get it: the JS path divides nx AND ny
+     * by the same sensDeg, so both are widened together by wheel mode.
+     *
+     * Deliberately routed through the Activity rather than read in NativeInputEngine: the
+     * filters run here in onSensorChanged and feed BOTH input paths (JS pumpGyro and the
+     * native engine), so fixing it here fixes both at once and they cannot drift — the
+     * same reasoning as unwrapRoll above, and the drift that caused 26d5368.
+     */
+    internal fun setGyroFullLock(deg: Double) {
+        rollFilter.fullLockDeg = deg
+        pitchFilter.fullLockDeg = deg
     }
 
     // ── AOA direct-USB transport (Plan B): ~1-2 ms wired latency ──────────────

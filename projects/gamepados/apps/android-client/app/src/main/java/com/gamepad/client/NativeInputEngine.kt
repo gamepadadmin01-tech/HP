@@ -254,6 +254,11 @@ class NativeInputEngine(private val activity: MainActivity) {
             gyroOn = o.optBoolean("on", false)
             gyroMode3d = o.optString("mode") == "3d"
             gyroSensDeg = max(1.0, o.optDouble("sens", 45.0)).toFloat()
+            // Keep the fusion filters' speed term proportional to this range. Without it
+            // wheel mode (900deg lock-to-lock vs the 45deg default) drove the adaptive
+            // cutoff to ~453Hz against a 200Hz sample rate, turning the One Euro filter
+            // into a pass-through — which is what made multi-turn steering feel notchy.
+            activity.setGyroFullLock(gyroSensDeg.toDouble())
             gyroDzDeg = max(0.0, o.optDouble("dz", 0.0)).toFloat()
             gyroThrottle = o.optBoolean("throttle", false)
             gyroHaptic = o.optBoolean("haptic", false)
