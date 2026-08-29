@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 04fa20ba-c801-4536-9b63-6783224ac0d6
-  modified: 2026-08-13T18:51:10.325Z
+  modified: 2026-08-29T11:14:14.681Z
 ---
 
 The realtime product in `projects/gamepados/apps/` — separate from the website/ticketing platform
@@ -17,11 +17,11 @@ The realtime product in `projects/gamepados/apps/` — separate from the website
 - **Phone native** — `android-client/app/src/main/cpp/gamepad-engine.cpp`, C++ NDK UDP engine
   (2 ms poll, send-on-change + ~30 Hz keep-alive). **Not 1000 Hz / SCHED_FIFO despite what
   `ARCHITECTURE.md` says.**
-- **PC server** — `pc-server/server.py` (Python + vgamepad/ViGEm) → `dist/GamepadServer.exe`.
-  **A source change is not shipped until the exe is rebuilt** (`python -m PyInstaller
-  GamepadServer.spec --noconfirm`).
-
-⚠️ **The Rust server (`pc-server-rs`) is NOT the shipped one.** See [[project_rust_server_v2]].
+- **PC server** — 🚨 **`pc-server-rs` (Rust) IS the shipped server as of 2.1.0, verified live
+  2026-08-29.** `pc-server/server.py` (Python, APP_VERSION 1.1.17) is **LEGACY** — it still reads
+  as current and cost a whole wasted analysis pass on 2026-08-29. Check `GET /api/version` before
+  optimising anything PC-side. The two are still kept bit-identical for the conformance vectors,
+  so protocol changes go in BOTH. See [[project_rust_server_v2]].
 
 ## Measured latency — the WebView was the bottleneck
 

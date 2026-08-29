@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: eb2b2a35-7693-446e-bd41-bc64719d5afb
-  modified: 2026-08-28T08:36:35.271Z
+  modified: 2026-08-29T11:14:32.048Z
 ---
 
 A research brief (`AGENT_PROMPT_Claude_Opus_WiFi_Latency_Research.md`, AI-generated, from Downloads)
@@ -48,6 +48,28 @@ harness is `adb logcat` only, so it only ever runs on Akhil's own desk/phone/Wi-
 the brief could assert 80–400 ms unchallenged.** Fix: ring buffer of raw RTT samples → p50/p95/p99
 → a "Network Health" panel. Label it **link latency, never input latency** — RTT excludes the
 digitizer and the game's tick, which are the two largest terms.
+
+## APPLIED 2026-08-29 (committed, NOT pushed, NOT device-tested)
+
+Seven fixes landed as separate commits on `main`:
+1. `__nvis` no longer holds the input lock through JSON serialization — **the p95 mechanism**.
+   `pushVisuals` built a JSONObject + 2 JSONArrays + 6 boxed Doubles inside `synchronized(lock)`,
+   the same lock touch and the 200Hz gyro inject take, once per frame. Dedup also moved ahead of
+   the build (it used to serialize then discard). Found by direct reading, not by any agent.
+2. ACK drain `break` → `continue` — it handled ONE ack per pass, inflating displayed RTT.
+3. GRX seal gated on `haveTransport && !accessoryMode` + `grxReady` latch reset — on USB the seal
+   ran and the AOA branch discarded its output.
+4. Gyro `dCutoff` 1.0 → 3.5 (onset lag).
+5. Server centre snap ±4 → ±1 in BOTH servers. ⚠️ **`gen_golden.py` must be re-run before this
+   ships** — no Python on this machine, so `tests/golden_vectors.json` is stale and conformance
+   will fail. Deliberately did not hand-edit it (Python banker's rounding).
+6+7. Stick origin now follows the thumb (default ON — the fixed origin reported ~27% deflection on
+   a 20-unit landing offset), plus an optional radial response curve (default 1.0 = linear =
+   unchanged). New `controller-ui/src/app/stickFeel.ts`, mirrored exactly in `NativeInputEngine`.
+   Clamp is `min(w.r, STICK_MAX_R*0.5)` — **NOT** `w.r - STICK_MAX_R`, which collapses to 0 on the
+   default lstick (r=56 vs STICK_MAX_R=60) and would silently disable it there.
+   Verified: vite build clean; `tsc -p tsconfig.check.json` = 13 errors both with and without the
+   change (all pre-existing key-prop/narrowing), so zero new type errors.
 
 ## Ranked actions
 
