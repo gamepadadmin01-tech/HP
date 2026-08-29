@@ -16,6 +16,7 @@ import { View, BtnId, DashTab, GamepadPreset, CustomPad, CustomBtnDef, WidgetTyp
 import { CustomPadEditor } from "./components/CustomPadEditor";
 import { FeatureIntroOverlay, recordIntroNav, introRated } from "./FeatureIntroOverlay";
 import { FEEDBACK_URL, initFeedbackSync, markFeedbackSent } from "./feedback";
+import { stickFeel, stickMaxOffset, applyStickCurve, installStickFeelToggle } from "./stickFeel";
 // Connection state is a 4-way classification, not a boolean — a link that is
 // transmitting but never answered is NOT the same as one that is off. See
 // linkState.ts for why that distinction had to exist.
@@ -325,11 +326,26 @@ function useStick(maxR: number, svgRef: React.RefObject<SVGSVGElement | null>, o
     return pt.matrixTransform(m.inverse());
   };
 
-  const onDown = useCallback((e: React.PointerEvent, cx: number, cy: number) => {
+  const onDown = useCallback((e: React.PointerEvent, cx: number, cy: number, maxOff: number = 0) => {
     if (pid.current !== null) return;   // already owned by another finger — ignore
     pid.current = e.pointerId;
     active.current = true;
-    centerRef.current = { x: cx, y: cy };
+    // Anchor the stick to where the thumb actually landed. Pinned to the widget
+    // centre, the first move event reported a deflection the user never made:
+    // landing 20 design units off centre gives (20 - 4.8) / 55.2 ~= 27%.
+    // maxOff 0 (the default, and what stickMaxOffset returns when follow is off)
+    // restores the previous fixed-centre behaviour exactly.
+    // MUST stay in step with NativeInputEngine.pressLocked.
+    if (maxOff > 0) {
+      const p = toSVG(e.clientX, e.clientY);
+      const odx = p.x - cx, ody = p.y - cy;
+      const od = Math.sqrt(odx * odx + ody * ody);
+      centerRef.current = (od > maxOff && od > 0)
+        ? { x: cx + (odx / od) * maxOff, y: cy + (ody / od) * maxOff }
+        : { x: p.x, y: p.y };
+    } else {
+      centerRef.current = { x: cx, y: cy };
+    }
     try { (e.currentTarget as Element).setPointerCapture(e.pointerId); } catch (err) {}
     if (knobRef.current) {
       const circle = knobRef.current.firstElementChild as SVGGraphicsElement;
@@ -1223,7 +1239,10 @@ function ControllerScreen({ onBack, isActive, activeMapping, customPad, controll
       const distance = Math.sqrt(x * x + y * y);
       const deadzoneRadius = (8 / 100) * 60; // 8% default deadzone
       if (distance >= deadzoneRadius && distance > 0) {
-        const factor = (distance - deadzoneRadius) / (60 - deadzoneRadius);
+        // applyStickCurve is the identity at exp 1 (the default), so this is
+        // byte-identical to the previous linear map unless the user opts in.
+        // Mirror of NativeInputEngine.radialDeadzone.
+        const factor = applyStickCurve((distance - deadzoneRadius) / (60 - deadzoneRadius));
         return {
           x: (x / distance) * factor * 60,
           y: (y / distance) * factor * 60
@@ -1394,6 +1413,13 @@ function ControllerScreen({ onBack, isActive, activeMapping, customPad, controll
     return () => { delete (window as any).__setNativeInput; };
   }, []);
 
+  // ── Stick feel toggle: window.__setStickFeel(follow, curve) ─────────────────
+  // Bumping the nonce re-runs the geometry effect below, which republishes
+  // stickFollow/curveExp to the native engine. Without that the JS path would
+  // pick the new values up and the native path would keep the old ones.
+  const [stickFeelNonce, setStickFeelNonce] = useState(0);
+  useEffect(() => installStickFeelToggle(() => setStickFeelNonce((n) => n + 1)), []);
+
   // ── PHASE 3: publish geometry + hand touch ownership to the native overlay ──
   // Runs when the controller becomes active and re-runs on pad switch / resize
   // (the svg's screen matrix changes). Never activates while the USB-debugging
@@ -1446,6 +1472,12 @@ function ControllerScreen({ onBack, isActive, activeMapping, customPad, controll
           exclusions,
           widgets: buildNativeGeometry(activePad),
           stickMode: stickModeRef.current,
+          // Stick feel — the native engine applies these itself, so both paths
+          // agree. Omitting them would leave the native path on its own defaults
+          // while the JS path used the user's, which is exactly the drift that
+          // caused 26d5368.
+          stickFollow: stickFeel.follow,
+          curveExp: stickFeel.curveExp,
           hapticsEnabled: (window as any).hapticsEnabled !== false,
         }));
         // Visual override starts EMPTY so any stale JS held-state can't linger.
@@ -1468,7 +1500,7 @@ function ControllerScreen({ onBack, isActive, activeMapping, customPad, controll
       clearInterval(transportPoll);
       deactivate();
     };
-  }, [isActive, nativeFlag, activePad, windowSize, hasSession, outOfTime]);
+  }, [isActive, nativeFlag, activePad, windowSize, hasSession, outOfTime, stickFeelNonce]);
 
   // ── PHASE 3: keep the native gyro→payload math in sync with the JS settings ─
   useEffect(() => {

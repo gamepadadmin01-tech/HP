@@ -1,11 +1,12 @@
 import React, { useRef } from "react";
 import { BtnId } from "../types";
+import { stickMaxOffset } from "../stickFeel";
 
 // Stick API shape — matches the object returned by useStick() in App.tsx.
 // Declared here so RightStick stays a pure component (no hook import).
 export type StickApi = {
   posRef: React.MutableRefObject<{ x: number; y: number }>;
-  onDown: (e: React.PointerEvent, cx: number, cy: number) => void;
+  onDown: (e: React.PointerEvent, cx: number, cy: number, maxOff?: number) => void;
   onMove: (e: React.PointerEvent) => void;
   onUp: (pointerId?: number) => void;
   knobRef: React.RefObject<SVGGElement | null>;
@@ -532,7 +533,10 @@ function RightStickBase({ cx, cy, outerR, innerR, stick, id, held, dn, up }: {
         } catch (err) {
           console.warn("RightStick: Pointer capture failed", err);
         }
-        stick.onDown(e, cx, cy);
+        // stickMaxOffset returns 0 when follow is off, which makes onDown fall back
+        // to the widget centre — the previous behaviour, exactly. outerR is the same
+        // radius the native engine receives as the stick widget's `r`.
+        stick.onDown(e, cx, cy, stickMaxOffset(outerR));
       }}
       onPointerMove={stick.onMove}
       onPointerUp={(e) => {

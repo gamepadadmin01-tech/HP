@@ -10,6 +10,7 @@ import org.json.JSONObject
 import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.pow
 import kotlin.math.roundToInt
 
 /**
@@ -80,6 +81,10 @@ class NativeInputEngine(private val activity: MainActivity) {
         // never strand the previous side deflected.
         var stickLeft = true
         var inert = false                    // duplicate finger on a stick/dpad — JS ignores it too
+        // Stick origin captured at PRESS, in design units. With stickFollow on this is
+        // the touch-down point (clamped toward the widget centre); with it off it is the
+        // widget centre, i.e. the original fixed-origin behaviour, bit-for-bit.
+        var ox = 0f; var oy = 0f
         // forward-tap candidates (merged pointer that hit nothing):
         var fwdCssX = 0f; var fwdCssY = 0f; var fwdDownMs = 0L; var fwdMoved = false
     }
@@ -103,6 +108,14 @@ class NativeInputEngine(private val activity: MainActivity) {
     private var lsX = 0f; private var lsY = 0f           // design units, ±60
     private var rsX = 0f; private var rsY = 0f
     private var stickMode = 'L'
+    // Stick feel. Pushed from JS through setGeometry rather than read from prefs here,
+    // so the native engine and the JS packet builder cannot drift apart — that drift is
+    // what caused 26d5368. Defaults chosen so an old JS bundle that sends neither key
+    // keeps working: curveExp 1.0 is the exact previous linear map; stickFollow true is
+    // the deliberate behaviour change (the fixed origin reported deflection the user
+    // never made — see pressLocked).
+    private var stickFollow = true
+    private var curveExp = 1f
 
     // Gyro config (pushed from JS; zero captured natively on calibrate)
     @Volatile private var gyroOn = false
@@ -210,6 +223,10 @@ class NativeInputEngine(private val activity: MainActivity) {
                 haveMatrix = true
             } else haveMatrix = false
             stickMode = (o.optString("stickMode", stickMode.toString()).firstOrNull() ?: 'L')
+            stickFollow = o.optBoolean("stickFollow", stickFollow)
+            // Clamped: below 1 would amplify near-centre movement (twitchier than
+            // linear, never what anyone wants here); above 3 is unusable.
+            curveExp = o.optDouble("curveExp", curveExp.toDouble()).toFloat().coerceIn(1f, 3f)
             hapticsEnabled = o.optBoolean("hapticsEnabled", hapticsEnabled)
             clearAllInputLocked()
         }
@@ -402,9 +419,33 @@ class NativeInputEngine(private val activity: MainActivity) {
                 applyDpadLocked(b, px, py)   // fires the per-direction haptic itself
             }
             K_STICK -> {
-                // useStick.onDown: centre = widget centre, pos stays neutral until
-                // the first move (the down alone must not deflect the stick).
+                // useStick.onDown: pos stays neutral until the first move (the down
+                // alone must not deflect the stick).
                 b.stickLeft = if (w.which == 'H') stickMode == 'L' else w.which == 'L'
+                // Anchor the stick to where the thumb actually landed. With the origin
+                // pinned to the widget centre, the first move event reported a real
+                // deflection the user never made: landing 20 design units off centre
+                // gives (20 - 4.8) / 55.2 ~= 27%, and even ~1.2mm gives ~9%. In a
+                // driving game that reads as the car twitching the instant you touch
+                // the stick.
+                // Clamp: half the knob travel (30 units, ~3.7mm), and never more than
+                // the widget's own radius. That comfortably covers a real thumb-landing
+                // offset while keeping the knob rendered near its base ring. NOTE it is
+                // deliberately NOT (w.r - STICK_MAX_R): the default lstick has r=56
+                // against STICK_MAX_R=60, so that formula collapses to 0 and silently
+                // disables this on the most-used stick. MUST match Widgets.tsx.
+                if (stickFollow) {
+                    val maxOff = min(w.r, STICK_MAX_R * 0.5f)
+                    val odx = px - w.x; val ody = py - w.y
+                    val od = hypot(odx.toDouble(), ody.toDouble()).toFloat()
+                    if (od > maxOff && od > 0f) {
+                        b.ox = w.x + odx / od * maxOff; b.oy = w.y + ody / od * maxOff
+                    } else {
+                        b.ox = px; b.oy = py
+                    }
+                } else {
+                    b.ox = w.x; b.oy = w.y
+                }
                 if (w.vis.isNotEmpty()) visHeldCustom.add(w.vis)
                 haptic(w.hap)
             }
@@ -427,7 +468,9 @@ class NativeInputEngine(private val activity: MainActivity) {
         when (w.kind) {
             K_DPAD -> return applyDpadLocked(b, px, py)
             K_STICK -> {
-                val dx = px - w.x; val dy = py - w.y
+                // Origin captured at press: the widget centre when stickFollow is off,
+                // the (clamped) touch-down point when it is on. Was w.x/w.y outright.
+                val dx = px - b.ox; val dy = py - b.oy
                 val dist = hypot(dx.toDouble(), dy.toDouble()).toFloat()
                 val r = min(dist, STICK_MAX_R)
                 val nx = if (dist > 0f) dx / dist * r else 0f
@@ -594,7 +637,16 @@ class NativeInputEngine(private val activity: MainActivity) {
     private fun radialDeadzone(x: Float, y: Float): Pair<Float, Float> {
         val dist = hypot(x.toDouble(), y.toDouble()).toFloat()
         if (dist < STICK_DEADZONE || dist <= 0f) return 0f to 0f
-        val factor = (dist - STICK_DEADZONE) / (STICK_MAX_R - STICK_DEADZONE)
+        var factor = (dist - STICK_DEADZONE) / (STICK_MAX_R - STICK_DEADZONE)
+        // Radial response curve. Applied to MAGNITUDE only, so direction is untouched
+        // and the circular deadzone keeps its shape (a per-axis curve would reintroduce
+        // the diagonal drift the circular deadzone exists to prevent).
+        // curveExp 1.0 is the identity and reproduces the previous linear map exactly.
+        // Above 1.0 trades top-end travel — where a touch stick is already saturated —
+        // for near-centre resolution: at 1.6, 10% output needs ~1.9mm of thumb travel
+        // instead of ~0.66mm, roughly 3x the fine-aim precision.
+        // dist is clamped to STICK_MAX_R by the caller, so factor is always in [0,1].
+        if (curveExp != 1f) factor = factor.toDouble().pow(curveExp.toDouble()).toFloat()
         return (x / dist * factor) to (y / dist * factor)
     }
 
