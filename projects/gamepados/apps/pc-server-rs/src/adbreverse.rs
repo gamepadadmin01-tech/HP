@@ -90,6 +90,20 @@ pub fn start_adb_reverse_watcher(port: u16) {
 
     std::thread::spawn(move || {
         let mut announced: Vec<String> = Vec::new();
+        // Back-off when nothing is attached. This loop used to spawn `adb devices`
+        // every 10s for the whole session even for a user who never plugs a cable in
+        // — i.e. every Wi-Fi user, which is most of them. Over a two-hour session that
+        // is ~720 process spawns, each with its own disk I/O and adb-daemon chatter,
+        // competing with the game the server exists to feed. Users reported the server
+        // interfering with the PC while gaming; this is one concrete mechanism.
+        //
+        // A phone that IS attached still polls at the original 5s. The cost of backing
+        // off is only how long a FRESH plug-in takes to be noticed (<= IDLE_POLL_MAX),
+        // and the USB-debugging transport is a power-user path that is not
+        // latency-critical to establish.
+        const IDLE_POLL_MIN: u64 = 10;
+        const IDLE_POLL_MAX: u64 = 30;
+        let mut idle_secs = IDLE_POLL_MIN;
         loop {
             let mut serials: Vec<String> = Vec::new();
             if let Ok(out) = new_command(&adb).arg("devices").output() {
@@ -108,12 +122,17 @@ pub fn start_adb_reverse_watcher(port: u16) {
                 }
                 announced = serials.clone();
             }
-            // Only poll often when a phone is actually there.
-            std::thread::sleep(if serials.is_empty() {
-                Duration::from_secs(10)
+            // Only poll often when a phone is actually there; otherwise ease off so an
+            // all-Wi-Fi session isn't paying a process spawn every 10s indefinitely.
+            let wait = if serials.is_empty() {
+                let w = idle_secs;
+                idle_secs = (idle_secs * 2).min(IDLE_POLL_MAX);
+                w
             } else {
-                Duration::from_secs(5)
-            });
+                idle_secs = IDLE_POLL_MIN; // a cable appeared — be responsive again
+                5
+            };
+            std::thread::sleep(Duration::from_secs(wait));
         }
     });
 }
