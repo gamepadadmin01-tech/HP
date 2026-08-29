@@ -672,6 +672,30 @@ usbWS.start(); // creates the worker only; does NOT open the WS until connect() 
 // coordinator, the USB auto-pair handler, and the Wired tab UI.
 // WiredPref, getWiredPref and setWiredPref live in store/prefs.ts.
 
+// ── Persisted gyro calibration ───────────────────────────────────────────────
+// The zero the user set with CALIBRATE, remembered across launches. See the long
+// note at zeroRef below for why this is a bug fix and not auto-calibration.
+// Mirrored into the native engine through the setNativeGyroConfig payload (zx/zy).
+const GYRO_ZERO_KEY = "gp_gyro_zero";
+
+function readGyroZero(): { x: number; y: number } {
+  try {
+    const raw = localStorage.getItem(GYRO_ZERO_KEY);
+    if (!raw) return { x: 0, y: 0 };
+    const v = JSON.parse(raw);
+    // Reject anything that isn't a sane tilt: a corrupt value here would deflect the
+    // stick permanently with no obvious cause, which is worse than not restoring.
+    const ok = (n: unknown) => typeof n === "number" && Number.isFinite(n) && Math.abs(n) <= 180;
+    return ok(v?.x) && ok(v?.y) ? { x: v.x as number, y: v.y as number } : { x: 0, y: 0 };
+  } catch {
+    return { x: 0, y: 0 };
+  }
+}
+
+function writeGyroZero(z: { x: number; y: number }) {
+  try { localStorage.setItem(GYRO_ZERO_KEY, JSON.stringify(z)); } catch {}
+}
+
 function useGyro(maxAngle: number = 45, deadzone: number = 0, onGyroChange?: () => void, enabled: boolean = true, active: boolean = true) {
   // `enabled` = the user's gyro toggle. When off the loop still runs, so the
   //             bars glide to rest instead of freezing mid-tilt.
@@ -702,8 +726,22 @@ function useGyro(maxAngle: number = 45, deadzone: number = 0, onGyroChange?: () 
   // (This existed up to 1.3.7 and was lost in the 2026-07-14 App.tsx corruption
   // + reconstruction — restored here, same behaviour as the original.)
   const rawRef = useRef({ x: 0, y: 0 });
-  const zeroRef = useRef({ x: 0, y: 0 });
-  const calibrate = useCallback(() => { zeroRef.current = { ...rawRef.current }; }, []);
+  // The zero PERSISTS across launches. It used to reset to {0,0} on every app start,
+  // and {0,0} means "centre == phone perfectly flat" — so opening the controller while
+  // holding the phone at any natural angle put the stick straight into a deflection
+  // (at 45deg sensitivity, a 20deg holding angle is ~44% off-centre before you touch
+  // anything). That is the "controller locks to one side when opening" report, and it
+  // meant re-pressing CALIBRATE after every single launch.
+  //
+  // This is NOT auto-calibration. Nothing is ever zeroed on the user's behalf; we only
+  // remember the zero they set themselves with the CALIBRATE button. It suits a mounted
+  // phone especially well, where the mount angle is stable across sessions and having
+  // the app silently re-zero to the current pose would be actively wrong.
+  const zeroRef = useRef(readGyroZero());
+  const calibrate = useCallback(() => {
+    zeroRef.current = { ...rawRef.current };
+    writeGyroZero(zeroRef.current);
+  }, []);
 
   const onGyroChangeRef = useRef(onGyroChange);
   useEffect(() => {
@@ -1507,9 +1545,16 @@ function ControllerScreen({ onBack, isActive, activeMapping, customPad, controll
     const bridge = (window as any).AndroidBridge;
     if (!bridge || !bridge.setNativeGyroConfig) return;
     try {
+      // zx/zy: the persisted CALIBRATE zero, so the native engine starts from the same
+      // zero the JS path restored instead of from flat. Read straight from storage
+      // rather than threaded out of useGyro — both read the one key, so they cannot
+      // disagree. Pressing CALIBRATE still snapshots the native side directly via
+      // nativeGyroCalibrate(), so the two stay in step after a manual re-zero.
+      const gz = readGyroZero();
       bridge.setNativeGyroConfig(JSON.stringify({
         on: gyroOn, mode: gyroMode, sens: Math.max(1, gyroMaxAngle), dz: Math.max(0, gyroDeadzone),
         throttle: gyroThrottle, haptic: gyroHaptic, idleDetect: gyroIdleDetect,
+        zx: gz.x, zy: gz.y,
         hapticsEnabled: (window as any).hapticsEnabled !== false,
       }));
     } catch {}

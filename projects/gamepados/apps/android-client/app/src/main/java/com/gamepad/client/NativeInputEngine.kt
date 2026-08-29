@@ -260,6 +260,14 @@ class NativeInputEngine(private val activity: MainActivity) {
             // into a pass-through — which is what made multi-turn steering feel notchy.
             activity.setGyroFullLock(gyroSensDeg.toDouble())
             gyroDzDeg = max(0.0, o.optDouble("dz", 0.0)).toFloat()
+            // Restored CALIBRATE zero (App.tsx readGyroZero). Without this the native
+            // zero stayed at 0,0 = "phone perfectly flat" on every launch, so opening
+            // the controller at any natural holding angle deflected the stick before
+            // the user touched anything. Guarded on has(): an older JS bundle that
+            // doesn't send these must leave the current zero alone rather than
+            // silently re-zeroing to flat.
+            if (o.has("zx")) gyroZeroX = o.optDouble("zx", 0.0).toFloat()
+            if (o.has("zy")) gyroZeroY = o.optDouble("zy", 0.0).toFloat()
             gyroThrottle = o.optBoolean("throttle", false)
             gyroHaptic = o.optBoolean("haptic", false)
             hapticsEnabled = o.optBoolean("hapticsEnabled", true)
