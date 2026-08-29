@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: eb2b2a35-7693-446e-bd41-bc64719d5afb
-  modified: 2026-08-29T11:14:32.048Z
+  modified: 2026-08-29T18:02:13.721Z
 ---
 
 A research brief (`AGENT_PROMPT_Claude_Opus_WiFi_Latency_Research.md`, AI-generated, from Downloads)
@@ -70,6 +70,38 @@ Seven fixes landed as separate commits on `main`:
    default lstick (r=56 vs STICK_MAX_R=60) and would silently disable it there.
    Verified: vite build clean; `tsc -p tsconfig.check.json` = 13 errors both with and without the
    change (all pre-existing key-prop/narrowing), so zero new type errors.
+
+## Round 2, 2026-08-29 — user-reported bugs
+
+- **"Controller locks to one side when opening" — ROOT CAUSE FOUND, FIXED.** The CALIBRATE
+  zero lived only in memory (JS `useRef`, native plain field), so every launch reset it to
+  `{0,0}` = "phone perfectly flat". Opening while holding the phone at any natural angle
+  deflected the stick immediately (~44% at a 20° hold with 45° sensitivity). Now persisted in
+  localStorage `gp_gyro_zero` and pushed to native via `setNativeGyroConfig` as `zx`/`zy`.
+  ⚠️ **Auto-calibrate was explicitly VETOED by Akhil** — correctly, since a mounted wheel must
+  keep the mount's deliberate neutral. Persisting the user's own zero is not auto-calibration;
+  do not "improve" this into one.
+- **Wheel mode roughness — the One Euro filter's speed term was in ABSOLUTE deg/s**, so a 900°
+  range drove the cutoff ~6× higher and most smoothing was lost. Now normalised by range.
+  Verified numerically by `apps/android-client/tools/euro_sim.js` (there are NO Android unit
+  tests in this project): wheel roughness 0.653 → 0.333 LSB, matching normal mode exactly;
+  cost is peak lag 2.65° → 4.05°, the same %-of-lock as normal mode.
+- **Two overstatements corrected by that sim** — I claimed ~453 Hz cutoff / full pass-through
+  (real: 196 Hz median, alpha 0.86) and dCutoff gains of ~50% (real: 37–46%). Direction right,
+  magnitude inflated both times. **Simulate before quoting numbers in commit messages.**
+- **"Server interferes while gaming"** — two real mechanisms, both fixed in source but
+  **UNBUILT**: `HIGH_PRIORITY_CLASS` put the server above the foreground game (its own comment
+  admitted it "did NOT fix the RTT jitter it was written for"), and the adb-reverse watcher
+  spawned `adb devices` every 10s forever even for Wi-Fi-only users (~720 spawns in 2 hours).
+- **"Server killed my Wi-Fi" — NO mechanism found.** `netdetect.rs` is read-only
+  (`GetAdaptersAddresses`); nothing in the server modifies network state. Unreproduced.
+- 🚫 **BLOCKED: `golden_vectors.json` regen for the ±4→±1 snap.** Needs Python (`tools/gen_golden.py`);
+  only the Microsoft Store stub is on this machine. Do NOT hand-edit or reimplement in JS — the
+  file header forbids it, it contains `-0.0` (JS serialises as `0`), and the test packets
+  deliberately straddle the ±4 boundary (123/124/126/127/129/130/132/133), so 10 `snapped` +
+  `pad_axes` values change. `cargo test` will fail until the real generator is run.
+- 🚫 **BLOCKED: no MSVC linker** — `cargo check` passes but `cargo build` cannot link, so no
+  PC-server fix can ship. Needs VS Build Tools with the C++ workload.
 
 ## Ranked actions
 
