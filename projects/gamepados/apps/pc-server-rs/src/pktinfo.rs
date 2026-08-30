@@ -272,10 +272,37 @@ mod imp {
                 && hdr.cmsg_len >= cmsg_len_pktinfo()
             {
                 let pi = unsafe { &*(ptr.add(off + cmsg_data_offset()) as *const InPktinfo) };
-                return Some(LocalAddr {
-                    addr: Ipv4Addr::from(pi.ipi_addr),
-                    ifindex: pi.ipi_ifindex,
-                });
+                let arrived_on = Ipv4Addr::from(pi.ipi_addr);
+                // `ipi_addr` is the datagram's DESTINATION as it appeared on the wire,
+                // not necessarily a local unicast address. For a BROADCAST datagram it
+                // is the broadcast address itself (e.g. 10.95.102.255), and a broadcast
+                // address is not a legal source. Pinning the reply to it makes
+                // WSASendMsg fail — and the call sites discard the error — so the ACK
+                // was silently never sent.
+                //
+                // That is exactly the USB-tethering failure: the tether path connects
+                // to a broadcast address, so EVERY reply on it was dropped at the send
+                // syscall while the server happily counted the inbound frames. The
+                // phone saw NO REPLY forever. Wi-Fi pairing was unaffected because the
+                // QR carries a unicast IP, where ipi_addr is the real interface address.
+                //
+                // Keep the INTERFACE (which is the whole point of the fix — it stops a
+                // VPN's route lookup choosing the wrong adapter) and let the kernel pick
+                // a valid source on it. An unspecified addr means exactly that, and
+                // send_to writes it through as 0.0.0.0.
+                // is_broadcast() only matches the LIMITED broadcast 255.255.255.255; a
+                // directed one (10.95.102.255) cannot be identified without the subnet
+                // mask. Use the trailing-.255 heuristic, which is exactly what the phone
+                // already uses to classify its own destination in gamepad-engine.cpp
+                // (`(dst & 0xFF) == 0xFF`) — keeping both ends on the same rule matters
+                // more here than being theoretically exact about /31s.
+                let is_bcast = arrived_on.is_broadcast() || arrived_on.octets()[3] == 255;
+                let addr = if is_bcast || arrived_on.is_multicast() {
+                    Ipv4Addr::UNSPECIFIED
+                } else {
+                    arrived_on
+                };
+                return Some(LocalAddr { addr, ifindex: pi.ipi_ifindex });
             }
             let step = cmsg_align(hdr.cmsg_len);
             // Defensive: a zero step would spin forever on a malformed buffer.
