@@ -4782,8 +4782,27 @@ export default function App() {
         // "native path exists" = the engine is running (covers the ACK-gap window)
         // or a tether adapter is present — NOT linkAlive, which misses a running-but-
         // unACKed engine and would let the WS open a second pad.
-        if (engineRunning || tetherAvail) { w.disconnect(); }
-        else { w.connect(); }
+        if (engineRunning || tetherAvail) {
+          w.disconnect();
+          // Closing the WS is only half the job, and this branch used to stop there.
+          // On the DEFAULT pref ("auto"), enabling USB tethering made tetherAvail go
+          // true, which tore down the WORKING WebSocket transport and then started
+          // nothing in its place — the tether connect is only initiated by the
+          // explicit `tether` branch above. The user was left with no transport at
+          // all until they went and picked "tether" in the Wired tab by hand, which
+          // reads exactly as "USB tethering doesn't work" and as the PC not seeing
+          // the controller when it is plugged in.
+          //
+          // !engineRunning is what keeps this honest: a live Wi-Fi link already
+          // owns the native engine, and must never be dragged onto tether just
+          // because a cable happens to be plugged in for charging. Same 4s rate
+          // limit as the explicit branch, so a failing connect cannot spin.
+          const onTether = nativeLink && ctype === "wired";
+          if (!engineRunning && !onTether && tetherAvail && now - lastConnectAttempt > 4000) {
+            lastConnectAttempt = now;
+            try { bridge?.connectToPC?.(usbBcast, 7777, "usb"); } catch {}
+          }
+        } else { w.connect(); }
       }
     };
     const id = setInterval(reconcile, 1500);
