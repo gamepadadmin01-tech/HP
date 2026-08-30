@@ -76,6 +76,16 @@ int udpSocket = -1;
 int accessoryFd = -1;
 std::atomic<bool> accessoryMode(false);
 struct sockaddr_in serverAddr;
+
+// ── Peer recovery ────────────────────────────────────────────────────────────
+// Start of the current "have we heard anything?" window, CLOCK_MONOTONIC ns. Set
+// when the engine starts and again on every re-discovery, so each attempt gets a
+// full window rather than re-firing immediately.
+std::atomic<uint64_t> discoveryEpochNs(0);
+// How long to keep unicasting into silence before falling back to broadcast.
+// linkAlive is defined as an ACK within 2.5s, so this must be comfortably longer
+// than that or a transient gap would drop a perfectly good lock.
+static const uint64_t PEER_SILENT_NS = 6000000000ULL; // 6s
 uint32_t expectedHash = 0;
 pthread_t txThread;
 std::atomic<uint64_t> packetCount(0);
@@ -406,6 +416,54 @@ void* txThreadLoop(void* arg) {
                     socketConnected = false;            // socket gone → must reconnect
                     connectedPeer.s_addr = 0;
                 }
+            }
+        }
+
+        // ── Peer recovery: re-discover when the locked server goes silent ──────
+        // socketConnected / connectedPeer were only ever cleared on a socket error
+        // or on stop — never on silence. So once the phone locked onto a server IP
+        // it unicast there forever, and when the PC's DHCP lease moved that address
+        // was simply dead. The app sat in NO REPLY with no way back short of
+        // re-pairing, which is what an ordinary home router produces every time it
+        // hands out a different lease.
+        //
+        // After PEER_SILENT_NS of transmitting into silence, fall back to broadcast
+        // so the existing lock-on path above (the curIsBroadcast branch) can find
+        // the server again at whatever address it now has.
+        //
+        // The window is measured from max(lastAck, discoveryEpoch), which covers
+        // BOTH failure shapes: a link that worked and went quiet, and one that never
+        // answered at all — the latter being exactly what a stale QR code gives you.
+        //
+        // Only for UDP: AOA is point-to-point and has no addressing to recover.
+        if (!accessoryMode && udpSocket != -1) {
+            uint32_t dest = ntohl(serverAddr.sin_addr.s_addr);
+            bool destIsBroadcast = (dest == INADDR_BROADCAST) || ((dest & 0xFF) == 0xFF);
+            uint64_t lastAck = lastAckMonoNs.load(std::memory_order_relaxed);
+            uint64_t epoch   = discoveryEpochNs.load(std::memory_order_relaxed);
+            uint64_t since   = (lastAck > epoch) ? lastAck : epoch;
+            if (!destIsBroadcast && since != 0 && rawTimestamp > since &&
+                (rawTimestamp - since) > PEER_SILENT_NS) {
+                char oldIp[INET_ADDRSTRLEN];
+                inet_ntop(AF_INET, &serverAddr.sin_addr, oldIp, sizeof(oldIp));
+                // The socket is connect()ed to the dead peer, so sendto() to a new
+                // destination would fail with EISCONN. Dissolve the association the
+                // POSIX way — connect() with AF_UNSPEC — before going back to
+                // broadcast.
+                if (socketConnected) {
+                    struct sockaddr_in un;
+                    memset(&un, 0, sizeof(un));
+                    un.sin_family = AF_UNSPEC;
+                    connect(udpSocket, (struct sockaddr*)&un, sizeof(un));
+                }
+                socketConnected = false;
+                connectedPeer.s_addr = 0;
+                serverAddr.sin_addr.s_addr = htonl(INADDR_BROADCAST);
+                // Re-open the window, so a server that stays missing is retried on a
+                // steady 6s cadence instead of this firing on every 2ms tick.
+                discoveryEpochNs.store(rawTimestamp, std::memory_order_relaxed);
+                LOGI("No reply from %s for %llums — falling back to broadcast discovery.",
+                     oldIp, (unsigned long long)(PEER_SILENT_NS / 1000000ULL));
             }
         }
 
@@ -782,6 +840,13 @@ Java_com_gamepad_client_MainActivity_initNetworkNative(JNIEnv* env, jobject thiz
     // Start Tx Thread
     packetCount = 0;
     lastAckMonoNs.store(0, std::memory_order_relaxed);   // reset link-alive state
+    {
+        // Open the first peer-recovery window (see PEER_SILENT_NS).
+        struct timespec ts;
+        clock_gettime(CLOCK_MONOTONIC, &ts);
+        discoveryEpochNs.store((uint64_t)ts.tv_sec * 1000000000ULL + ts.tv_nsec,
+                               std::memory_order_relaxed);
+    }
     latencyMsAtomic.store(0.0f, std::memory_order_relaxed);
     rumbleLeft.store(0, std::memory_order_relaxed);       // clear stale motor state
     rumbleRight.store(0, std::memory_order_relaxed);      // (seq stays monotonic)
