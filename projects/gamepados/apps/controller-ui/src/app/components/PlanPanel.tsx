@@ -48,6 +48,23 @@ const PLAN_LABEL: Record<PlanCode, string> = {
   LIFETIME: "Lifetime",
 };
 
+/**
+ * Ordering of the plans, worst to best. Only used to decide what counts as an
+ * UPGRADE — see `offers` below. Anything at or below the user's current rank is
+ * never offered, so a Lifetime holder is shown no purchase rail at all.
+ *
+ * Keep this in step with PlanCode. A new code missing from here falls back to
+ * rank 0, which means it is treated as the lowest tier and simply never shown as
+ * an upgrade — the safe direction to fail, since the alternative is offering an
+ * existing customer a downgrade.
+ */
+const PLAN_RANK: Record<PlanCode, number> = {
+  FREE: 0,
+  THREE_DAY: 1,
+  QUARTERLY: 2,
+  LIFETIME: 3,
+};
+
 /** What each plan actually gives, in the terms the buyer is deciding in. */
 function planBullets(p: CataloguePlan): string[] {
   const out: string[] = [];
@@ -129,11 +146,26 @@ export function PlanPanel() {
     : (catalogue?.plans.find((p) => p.code === ent.plan)?.displayName
         || PLAN_LABEL[ent.plan] || ent.plan);
 
-  // The upgrade rail is offered only for plans that are actually a step up from
+  // The upgrade rail is offered only for plans that are actually a step UP from
   // where the user already is, so a Lifetime holder is never shown a way to buy
   // something worse.
-  const offers = (catalogue?.purchasable ? catalogue.plans : [])
-    .filter((p) => p.code !== "FREE" && p.purchasable && p.code !== ent.plan);
+  //
+  // That was the stated intent, but the filter only excluded the user's CURRENT
+  // plan — so someone on Lifetime was still shown Three-Day and Quarterly, i.e.
+  // invited to pay again for strictly less than they already own. Ranking the
+  // codes is what actually implements the comment: Lifetime outranks everything,
+  // so `offers` comes back empty and the whole disclosure below is hidden.
+  //
+  // `unlimited` covers the gift/promo path (source PROMO or MANUAL), where the
+  // plan code can still be a lower tier while the entitlement is effectively
+  // uncapped — those users must not be sold a "limit" they do not have either.
+  const offers = (catalogue?.purchasable && !ent.unlimited ? catalogue.plans : [])
+    .filter(
+      (p) =>
+        p.code !== "FREE" &&
+        p.purchasable &&
+        (PLAN_RANK[p.code] ?? 0) > (PLAN_RANK[ent.plan] ?? 0)
+    );
 
   return (
     <>
