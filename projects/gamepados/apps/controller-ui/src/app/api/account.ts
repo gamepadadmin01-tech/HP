@@ -34,8 +34,22 @@ export class ApiError extends Error {
   }
 }
 
+/** See the matching note in api/billing.ts — a hung fetch never rejects, so
+ *  without a deadline the "never a silent failure" promise below only held for
+ *  requests that failed outright, not for ones that simply never answered.
+ *  That is what made the app slower on Wi-Fi than with no network at all:
+ *  no route fails instantly, a route to nowhere black-holes. */
+const REQUEST_TIMEOUT_MS = 10_000;
+
+function deadline(ms: number) {
+  const c = new AbortController();
+  const t = setTimeout(() => c.abort(), ms);
+  return { signal: c.signal, clear: () => clearTimeout(t) };
+}
+
 async function request<T>(path: string, body?: unknown, token?: string): Promise<T> {
   let res: Response;
+  const d = deadline(REQUEST_TIMEOUT_MS);
   try {
     res = await fetch(`${BASE}${path}`, {
       method: body === undefined ? "GET" : "POST",
@@ -45,10 +59,18 @@ async function request<T>(path: string, body?: unknown, token?: string): Promise
       },
       body: body === undefined ? undefined : JSON.stringify(body),
       cache: "no-store",
+      signal: d.signal,
     });
-  } catch {
-    // Offline, DNS, TLS — never a silent failure.
-    throw new ApiError("Couldn't reach GamepadOS. Check your connection.", "network");
+  } catch (e) {
+    // Offline, DNS, TLS, or a server that never answered — never a silent failure.
+    throw new ApiError(
+      (e as { name?: string } | null)?.name === "AbortError"
+        ? "GamepadOS took too long to respond. Try again in a moment."
+        : "Couldn't reach GamepadOS. Check your connection.",
+      "network"
+    );
+  } finally {
+    d.clear();
   }
 
   let payload: any = null;

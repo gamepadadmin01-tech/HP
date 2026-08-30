@@ -101,8 +101,34 @@ export type Heartbeat = {
 
 type Req = { method?: "GET" | "POST"; body?: unknown; token?: string };
 
+/**
+ * Hard deadline for every call.
+ *
+ * There was none, and a hung fetch NEVER rejects — so the catch below, and the
+ * friendly "couldn't reach GamepadOS" it throws, could only fire when the
+ * request failed outright. A request that merely hung left the caller awaiting
+ * forever, and the screens that make these calls on mount just stayed blank.
+ *
+ * That is why the app felt slower ON Wi-Fi than off it: with no network the
+ * connection is refused immediately and the UI moves on, while a Wi-Fi link that
+ * routes nowhere (a captive portal, a dead DHCP lease, an unreachable backend)
+ * black-holes the packets and nothing ever comes back. Counter-intuitive from
+ * the outside, entirely mechanical once you see there is no timeout.
+ *
+ * AbortController rather than AbortSignal.timeout: this ships inside an Android
+ * WebView whose version tracks the device, and the older ones predate it.
+ */
+const REQUEST_TIMEOUT_MS = 10_000;
+
+function deadline(ms: number) {
+  const c = new AbortController();
+  const t = setTimeout(() => c.abort(), ms);
+  return { signal: c.signal, clear: () => clearTimeout(t) };
+}
+
 async function request<T>(path: string, { method, body, token }: Req = {}): Promise<T> {
   let res: Response;
+  const d = deadline(REQUEST_TIMEOUT_MS);
   try {
     res = await fetch(`${API_ORIGIN}${path}`, {
       method: method || (body === undefined ? "GET" : "POST"),
@@ -112,9 +138,19 @@ async function request<T>(path: string, { method, body, token }: Req = {}): Prom
       },
       body: body === undefined ? undefined : JSON.stringify(body),
       cache: "no-store",
+      signal: d.signal,
     });
-  } catch {
-    throw new ApiError("Couldn't reach GamepadOS. Check your connection.", "network");
+  } catch (e) {
+    // Name the timeout separately: "check your connection" is misleading advice
+    // when the connection is up and the server simply never answered.
+    throw new ApiError(
+      (e as { name?: string } | null)?.name === "AbortError"
+        ? "GamepadOS took too long to respond. Try again in a moment."
+        : "Couldn't reach GamepadOS. Check your connection.",
+      "network"
+    );
+  } finally {
+    d.clear();
   }
 
   let payload: any = null;
