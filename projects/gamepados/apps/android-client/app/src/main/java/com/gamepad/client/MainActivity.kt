@@ -782,6 +782,21 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback, android.hardwa
                                 // GRX: socket is up now → start the handshake (sends CLIENT_HELLO
                                 // via nativeGrxSendRaw). Null-safe → no-op unless GRX_ENABLED.
                                 try { grx?.start() } catch (e: Exception) {}
+                                // Re-assert the native seal flag against the CURRENT session state.
+                                //
+                                // stopNetworkNative() clears grxReady along with the rest of the
+                                // session state, but nativeSetGrxReady(true) is only ever called
+                                // from onGrxControl — i.e. on a handshake control frame. If this
+                                // session is ALREADY established, the server has no reason to send
+                                // another one, so without this line the flag would stay false for
+                                // the rest of the process and every frame would go out in cleartext.
+                                // The server still accepts legacy cleartext, so that failure is
+                                // completely silent: input keeps working, encryption just stops.
+                                // Kotlin holds the truth (grxSeal returns null unless established),
+                                // so re-assert from it rather than trusting a one-way latch.
+                                try {
+                                    if (grx?.established == true) nativeSetGrxReady(true)
+                                } catch (e: Exception) {}
 
                                 hideSystemUI()
                                 // SUCCESS: isTransitioning stays true — it acts as the connected
