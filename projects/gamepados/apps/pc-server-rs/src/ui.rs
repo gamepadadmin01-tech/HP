@@ -652,6 +652,12 @@ pub fn run(
             // something. Measured against the real window, not guessed.
             .with_inner_size([380.0, 420.0])
             .with_resizable(false)
+            // with_resizable(false) alone does NOT grey out the maximize button on
+            // Windows -- the caption button stays lit and clickable, and clicking it
+            // snaps the frame to the full screen around a fixed-size 380x420 layout,
+            // leaving the QR marooned in a large empty window. Disable the button
+            // itself so the affordance matches what the window can actually do.
+            .with_maximize_button(false)
             .with_title("Gamepad Server")
             .with_icon(load_window_icon()),
         ..Default::default()
