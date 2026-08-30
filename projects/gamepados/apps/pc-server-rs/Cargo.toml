@@ -3,7 +3,7 @@ name = "pc-server-rs"
 # Kept in step with http.rs app_version!, build.rs and installer/GamepadServer.iss.
 # It sat at 0.1.0 through 2.0.x — harmless, since build-installer.ps1 gates on the
 # other three, but it was a fourth copy of the number quietly disagreeing.
-version = "2.1.0"
+version = "2.1.1"
 edition = "2024"
 
 [dependencies]

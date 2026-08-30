@@ -51,6 +51,21 @@ use std::time::Duration;
 /// never meant to be. Patch-level because nothing about the wire protocol,
 /// pairing format or UI changed.
 ///
+/// **2.1.1** — the reply-source pinning could not answer a BROADCAST datagram.
+/// `pktinfo::parse_pktinfo` took `ipi_addr` as the address to reply from, but
+/// that is the datagram's destination as seen on the wire — for a broadcast it
+/// is the broadcast address itself, which is not a legal source. WSASendMsg
+/// failed on every such reply and `main.rs` discards the result, so the ACK was
+/// silently never sent. The USB-tether path connects to a broadcast address, so
+/// the server counted every inbound frame while the phone sat in NO REPLY
+/// forever (measured: 16,560 frames in, 0 rejected, 0 ACKs out). Wi-Fi was
+/// unaffected because the QR carries a unicast IP. Also: server priority dropped
+/// from HIGH to ABOVE_NORMAL so it stops outranking the game it feeds, the adb
+/// watcher backs off 10s→30s when no cable is present, the centre snap narrowed
+/// from ±4 to ±1 (it was silently overriding the user's own gyro deadzone), and
+/// the window's maximize button is disabled to match `with_resizable(false)`.
+/// Patch-level: no wire-protocol, pairing-format or message change.
+///
 /// **2.1.0** — playtime capability tickets (`src/ticket.rs`). The server now
 /// understands a signed permission slip forwarded by the phone over the control
 /// channel and ends the session when fresh ones stop arriving, which is what
@@ -80,7 +95,7 @@ use std::time::Duration;
 /// the same number. One definition now feeds both; they cannot drift.
 macro_rules! app_version {
     () => {
-        "2.1.0"
+        "2.1.1"
     };
 }
 
