@@ -4715,6 +4715,20 @@ export default function App() {
   //   auto     → native (Wi-Fi or tether) wins; WS only as a last-resort fallback
   useEffect(() => {
     let lastConnectAttempt = 0;
+    // Backoff for the auto-mode tether attempt below. The tether path has its own
+    // ~6s verify loop (see onUsbTetherChanged) that stops the engine when no ACK
+    // ever arrives. Retrying that on a flat 4s timer produces a permanent
+    // start/fail/stop/restart cycle: the engine is torn down and rebuilt every few
+    // seconds, and because each init resets the link state the UI flaps to NO REPLY
+    // on every pass. Observed on-device as a 6s sawtooth in the engine log while the
+    // server was happily receiving 30Hz of packets.
+    //
+    // So: widen the gap after each attempt that fails to establish a link, and reset
+    // the moment one succeeds. A tether that cannot ACK now costs one attempt every
+    // 30s instead of one every 4s.
+    const TETHER_RETRY_MIN = 4000;
+    const TETHER_RETRY_MAX = 30000;
+    let tetherRetryDelay = TETHER_RETRY_MIN;
     const reconcile = () => {
       const bridge = (window as any).AndroidBridge;
       const w = (window as any).__usbWS;
@@ -4798,8 +4812,11 @@ export default function App() {
           // because a cable happens to be plugged in for charging. Same 4s rate
           // limit as the explicit branch, so a failing connect cannot spin.
           const onTether = nativeLink && ctype === "wired";
-          if (!engineRunning && !onTether && tetherAvail && now - lastConnectAttempt > 4000) {
+          if (onTether) {
+            tetherRetryDelay = TETHER_RETRY_MIN; // link is up — next failure retries promptly
+          } else if (!engineRunning && tetherAvail && now - lastConnectAttempt > tetherRetryDelay) {
             lastConnectAttempt = now;
+            tetherRetryDelay = Math.min(tetherRetryDelay * 2, TETHER_RETRY_MAX);
             try { bridge?.connectToPC?.(usbBcast, 7777, "usb"); } catch {}
           }
         } else { w.connect(); }
