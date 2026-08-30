@@ -83,9 +83,22 @@ struct sockaddr_in serverAddr;
 // full window rather than re-firing immediately.
 std::atomic<uint64_t> discoveryEpochNs(0);
 // How long to keep unicasting into silence before falling back to broadcast.
-// linkAlive is defined as an ACK within 2.5s, so this must be comfortably longer
-// than that or a transient gap would drop a perfectly good lock.
-static const uint64_t PEER_SILENT_NS = 6000000000ULL; // 6s
+//
+// This has to sit inside a window with a hard edge on BOTH sides:
+//
+//   > 2.5s  linkAlive is defined as an ACK within 2.5s, so anything at or below
+//           that would tear down a lock that is merely having a transient gap.
+//   < 6s    App.tsx's tether verify loop gives up at 24 x 250ms and calls
+//           stopEngine(). At the 6s this was originally set to, the two raced and
+//           the teardown won every time -- the engine was stopped before the
+//           fallback could run, so re-discovery NEVER happened and this whole
+//           code path was dead. Confirmed on-device: repeated 6-8s engine
+//           restarts with no "falling back to broadcast discovery" ever logged.
+//
+// 3.5s leaves a full second of margin above linkAlive and ~2.5s below the
+// teardown, so the fallback fires AND has time to re-lock before the app gives up.
+// If either of those numbers moves, this one has to be re-checked against them.
+static const uint64_t PEER_SILENT_NS = 3500000000ULL; // 3.5s
 uint32_t expectedHash = 0;
 pthread_t txThread;
 std::atomic<uint64_t> packetCount(0);
