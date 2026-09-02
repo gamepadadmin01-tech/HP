@@ -126,3 +126,34 @@ Seven fixes landed as separate commits on `main`:
   own p95 data. Frame all remaining work as tail reduction.
 
 Related: [[project_realtime_latency_stack]], [[reference_wire_protocol]], [[project_pending_tasks]].
+
+## 2026-09-03 — re-checked on request, verdict UNCHANGED
+
+Re-researched. **Nothing reopened.** Current literature on Wi-Fi tail latency is all
+MAC/PHY or AP-side and unreachable from an app: 802.11bn coordinated TDMA (~24%,
+needs Wi-Fi 8 silicon both ends), Blade adaptive contention (>4× tail PPDU, driver
+level), 802.11ax uplink OFDMA scheduling (NIST), MU-MIMO pre-arrival contention.
+One ACM paper **confirms the L4S rejection** — its tail mechanism is send-rate vs
+bottleneck-queue mismatch, and 1–10 kbps never builds that queue.
+**There is no app-layer Wi-Fi technique left to adopt.** Don't re-research this.
+
+Ranked actions 4, 5 and 6 are now DONE (commit `ed734d9`):
+
+- **ADPF is BUILT** — hint session on the TX thread, `dlsym` from `libandroid.so` (API
+  33+ vs minSdk 24, so it is a no-op that cannot crash on old devices). Target 2 ms;
+  duration reported only on a real send, because reporting idle cycles teaches the
+  governor it can slow down. Session closed with its thread. Vendor number ~17% less
+  jitter. **NOT device-tested.** CPU affinity stays removed — ADPF is how you get that
+  effect without the heat.
+- **The two false doc claims are gone.** `LOW_LATENCY_GUIDE.md` had promised a "1000 Hz
+  send thread pinned to performance cores" (event-driven; zero affinity code) and
+  `ARCHITECTURE.md` twice claimed `SCHED_FIFO` was achieved (it is refused; falls back
+  to `nice(-19)`).
+- **6 GHz guidance shipped**, plus "band beats generation" and Wi-Fi 7 MLO as buying
+  advice — 2026 CableLabs/Intel trials show 35–48% lower app-layer latency, but NSTR
+  radios give ~a third of that and a clean 6 GHz link gains little.
+
+**Field telemetry is no longer just the ranked gap — it is the BLOCKER.** A change whose
+entire purpose is tail reduction just shipped, and the only field number is an EWMA mean
+that mathematically hides tails. Nothing further should be attempted on latency until
+raw RTT samples → p50/p95/p99 exist off Akhil's own desk.
