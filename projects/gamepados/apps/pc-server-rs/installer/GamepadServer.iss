@@ -83,10 +83,16 @@ Source: "staging\{#ExeName}"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\..\..\tools\platform-tools\adb.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\..\..\tools\platform-tools\AdbWinApi.dll"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\..\..\tools\platform-tools\AdbWinUsbApi.dll"; DestDir: "{app}"; Flags: ignoreversion
-; Driver MSIs — referenced from the Python installer's tree (single source of
-; truth); extracted to temp and removed after install.
-Source: "..\..\pc-server\installer\drivers\ViGEmBusSetup_x64.msi"; DestDir: "{tmp}"; Flags: deleteafterinstall
-Source: "..\..\pc-server\installer\drivers\ViGEmBusSetup_x86.msi"; DestDir: "{tmp}"; Flags: deleteafterinstall
+; ViGEmBus 1.22.0 — the FINAL release (the project was archived 2023-11-02, so
+; there will never be a newer one). One signed package covering x64, x86 AND
+; arm64; it replaces the two 1.17-era MSIs the Python installer shipped.
+;
+; WHY THIS CHANGED: a user reported "The controller driver (ViGEmBus) is not
+; installed" on a current Windows 11 machine after a normal install. 1.17 predates
+; Windows 11 and can fail to install or fail to load on it, and because the old
+; [Run] entry never checked msiexec's result, setup reported complete success and
+; the failure only surfaced later as a server that would not start.
+Source: "drivers\ViGEmBus_1.22.0_x64_x86_arm64.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall
 
 [Icons]
 Name: "{group}\{#AppName}"; Filename: "{app}\{#ExeName}"
@@ -94,15 +100,10 @@ Name: "{group}\Uninstall {#AppName}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#ExeName}"; Tasks: desktopicon
 
 [Run]
-; 1) ViGEmBus driver — silent, no reboot, and actually SKIPPED when the driver
-; service already exists (the Python iss defined VigemInstalled but never
-; wired it into a Check; fixed here so upgrades don't re-run msiexec).
-Filename: "msiexec.exe"; Parameters: "/i ""{tmp}\ViGEmBusSetup_x64.msi"" /qn /norestart"; \
-  StatusMsg: "Installing controller driver (ViGEmBus)..."; Flags: runhidden waituntilterminated; \
-  Check: NeedVigem64
-Filename: "msiexec.exe"; Parameters: "/i ""{tmp}\ViGEmBusSetup_x86.msi"" /qn /norestart"; \
-  StatusMsg: "Installing controller driver (ViGEmBus)..."; Flags: runhidden waituntilterminated; \
-  Check: NeedVigem86
+; 1) ViGEmBus driver — NOT here any more. It now runs from CurStepChanged in
+; [Code], because a [Run] entry cannot see whether the driver installer actually
+; succeeded, and silently shipping a PC with no driver is the exact bug this
+; version fixes. See InstallVigem below.
 ; 2) Firewall: delete stale copies, then add program-scoped allow rules
 ; (UDP+TCP, any profile). Same rule names as 1.1.17 → upgrades stay clean.
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""Gamepad Server (UDP)"""; Flags: runhidden
@@ -121,18 +122,82 @@ Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""Gamepad Server (TCP)"""; Flags: runhidden; RunOnceId: "DelFwTCP"
 
 [Code]
-function VigemInstalled(): Boolean;
+// ── ViGEmBus: install it, then PROVE it is there ────────────────────────────
+// Without the driver there is no virtual gamepad and the server refuses to
+// start, so this is not an optional extra — it is the product working or not.
+//
+// The old version ran msiexec from [Run] and never looked at the result. Any
+// failure — a driver blocked by Windows, a pending reboot, an antivirus holding
+// the temp file — produced a setup that reported complete success and a server
+// that could never start. The user then had no way to tell what went wrong, and
+// the app's own advice ("reinstall to restore the driver") sent them round the
+// same loop. Fixed by installing from code, checking the exit code, and then
+// verifying the service actually exists rather than trusting the exit code.
+
+function VigemPresent(): Boolean;
+var
+  sysDir: String;
 begin
-  // The ViGEmBus driver registers this service once installed.
-  Result := RegKeyExists(HKLM, 'SYSTEM\CurrentControlSet\Services\ViGEmBus');
+  // Two independent checks, because either one alone lies:
+  //   - the service key survives an uninstall on some machines, so a key on its
+  //     own is not proof (and skipping the install on that basis is precisely
+  //     how a PC ends up with no driver);
+  //   - the .sys file can exist while the service is not registered.
+  // Require both.
+  sysDir := ExpandConstant('{sys}');
+  Result := RegKeyExists(HKLM, 'SYSTEM\CurrentControlSet\Services\ViGEmBus')
+            and FileExists(sysDir + '\drivers\ViGEmBus.sys');
 end;
 
-function NeedVigem64(): Boolean;
+// Runs the bundled 1.22.0 package silently. Returns True only when the driver is
+// verifiably present afterwards.
+function InstallVigem(): Boolean;
+var
+  rc: Integer;
 begin
-  Result := Is64BitInstallMode and not VigemInstalled();
+  if VigemPresent() then begin
+    Result := True;   // already there — nothing to do, and re-running is pointless
+    exit;
+  end;
+
+  // /qn = silent, /norestart = never reboot the machine out from under the user.
+  if not Exec(ExpandConstant('{tmp}\ViGEmBus_1.22.0_x64_x86_arm64.exe'),
+              '/qn /norestart', '', SW_HIDE, ewWaitUntilTerminated, rc) then begin
+    Log('ViGEmBus: could not launch the driver installer at all.');
+    Result := False;
+    exit;
+  end;
+  Log('ViGEmBus: installer exit code ' + IntToStr(rc));
+
+  // 3010 = success, reboot required. The driver is staged but will not load until
+  // a restart, so treat it as "not usable yet" and say so rather than pretending.
+  if rc = 3010 then begin
+    MsgBox('The controller driver was installed, but Windows needs to restart' + #13#10 +
+           'before it can be used.' + #13#10 + #13#10 +
+           'Please restart this PC, then start Gamepad Server.',
+           mbInformation, MB_OK);
+    Result := True;
+    exit;
+  end;
+
+  // Trust the verification, not the exit code — some failures still return 0.
+  Result := (rc = 0) and VigemPresent();
 end;
 
-function NeedVigem86(): Boolean;
+procedure CurStepChanged(CurStep: TSetupStep);
 begin
-  Result := (not Is64BitInstallMode) and not VigemInstalled();
+  if CurStep = ssPostInstall then begin
+    if not InstallVigem() then begin
+      // Tell the user NOW, while they are still in setup and can act, instead of
+      // letting them discover it later as a server that will not launch.
+      MsgBox('Setup could not install the controller driver (ViGEmBus).' + #13#10 + #13#10 +
+             'Gamepad Server needs it to create a virtual gamepad, and will not' + #13#10 +
+             'start without it. Everything else has been installed.' + #13#10 + #13#10 +
+             'To fix it: install ViGEmBus 1.22.0 yourself from' + #13#10 +
+             'https://github.com/nefarius/ViGEmBus/releases' + #13#10 +
+             'then start Gamepad Server again.' + #13#10 + #13#10 +
+             'If Windows blocked the driver, restarting the PC first often helps.',
+             mbError, MB_OK);
+    end;
+  end;
 end;

@@ -54,6 +54,27 @@ if ($distinct.Count -ne 1) {
 $AppVersion = $distinct[0]
 Write-Host "  -> all agree on $AppVersion"
 
+# ── Driver payload gate ─────────────────────────────────────────────────────
+# The ViGEmBus package is *.exe, which .gitignore excludes (as it did the old
+# MSIs), so it exists on this disk and in no clone. Without it Inno fails with a
+# missing-source error that says nothing about what to do. Fail here instead,
+# with the URL and the expected hash — the driver is the one component whose
+# absence silently produces an installer that cannot make a gamepad.
+$driver = "$here\drivers\ViGEmBus_1.22.0_x64_x86_arm64.exe"
+if (-not (Test-Path $driver)) {
+  Write-Error ("Driver payload missing: $driver`n" +
+    "Download ViGEmBus_1.22.0_x64_x86_arm64.exe from`n" +
+    "  https://github.com/nefarius/ViGEmBus/releases/tag/v1.22.0`n" +
+    "Expected SHA-256: 89220a7865076b342892f98865f3499fb7c4cfd673159e89d352c360fd014c6a")
+  exit 1
+}
+$dsha = (Get-FileHash $driver -Algorithm SHA256).Hash.ToLower()
+if ($dsha -ne "89220a7865076b342892f98865f3499fb7c4cfd673159e89d352c360fd014c6a") {
+  Write-Error "Driver payload hash mismatch - got $dsha. Refusing to ship an unverified driver."
+  exit 1
+}
+Write-Host "== driver payload ==`n  ViGEmBus 1.22.0 verified (sha256 ok)"
+
 Write-Host "== cargo build --release =="
 Push-Location $root
 cargo build --release
@@ -65,7 +86,24 @@ New-Item -ItemType Directory -Force "$here\staging" | Out-Null
 Copy-Item "$root\target\release\pc-server-rs.exe" "$here\staging\GamepadServer.exe" -Force
 
 Write-Host "== ISCC =="
-& "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "$here\GamepadServer.iss"
+# Do NOT hardcode this path. winget installs Inno Setup PER-USER, under
+# %LOCALAPPDATA%\Programs, so the old hardcoded "C:\Program Files (x86)" path
+# failed on a machine where Inno was genuinely installed — the same class of
+# silent absolute-path breakage CLAUDE.md records twice already. Search the real
+# locations and say something useful when it is missing.
+$isccCandidates = @(
+  "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe",
+  "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
+  "$env:ProgramFiles\Inno Setup 6\ISCC.exe"
+)
+$iscc = $isccCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+if (-not $iscc) {
+  Write-Error ("ISCC.exe not found. Looked in:`n  " + ($isccCandidates -join "`n  ") +
+               "`nInstall it with:  winget install --id JRSoftware.InnoSetup --exact")
+  exit 1
+}
+Write-Host "  using $iscc"
+& $iscc "$here\GamepadServer.iss"
 if ($LASTEXITCODE -ne 0) { Write-Error "ISCC failed"; exit 1 }
 
 $out = "$here\Output\GamepadServer-Setup.exe"

@@ -85,11 +85,94 @@ pub struct ViGEmSink {
     pads: Vec<Option<Pad>>,
 }
 
+/// True when the ViGEmBus driver service is absent, i.e. genuinely not installed.
+///
+/// Separates "no driver" from "driver there but unreachable" so the message the user
+/// reads matches their actual situation. Reads the service key directly rather than
+/// shelling out to `sc`, so it costs nothing and cannot be affected by PATH.
+/// On any doubt it returns false — claiming "not installed" wrongly is what sent a
+/// real user in circles reinstalling something that was already present.
+#[cfg(windows)]
+fn driver_service_missing() -> bool {
+    use std::os::windows::ffi::OsStrExt;
+    // HKLM\SYSTEM\CurrentControlSet\Services\ViGEmBus — created by the driver package.
+    let sub: Vec<u16> = std::ffi::OsStr::new("SYSTEM\\CurrentControlSet\\Services\\ViGEmBus")
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect();
+    let mut hkey: winreg_sys::HKEY = std::ptr::null_mut();
+    let rc = unsafe {
+        winreg_sys::RegOpenKeyExW(
+            winreg_sys::HKEY_LOCAL_MACHINE,
+            sub.as_ptr(),
+            0,
+            winreg_sys::KEY_READ,
+            &mut hkey,
+        )
+    };
+    if rc == 0 {
+        unsafe { winreg_sys::RegCloseKey(hkey) };
+        false // key opened → the service is registered
+    } else {
+        rc == 2 // ERROR_FILE_NOT_FOUND → genuinely absent. Any other error: don't guess.
+    }
+}
+
+#[cfg(not(windows))]
+fn driver_service_missing() -> bool {
+    false
+}
+
+/// Minimal advapi32 registry bindings. The crate already links advapi32 through the
+/// Windows API surface it uses; declaring just these four keeps a whole registry
+/// crate out of the dependency tree for one lookup on the startup path.
+#[cfg(windows)]
+mod winreg_sys {
+    pub type HKEY = *mut core::ffi::c_void;
+    pub const HKEY_LOCAL_MACHINE: HKEY = 0x8000_0002u32 as usize as HKEY;
+    pub const KEY_READ: u32 = 0x2_0019;
+    // `unsafe extern` is required from Rust 2024 onward.
+    #[link(name = "advapi32")]
+    unsafe extern "system" {
+        pub fn RegOpenKeyExW(
+            hKey: HKEY,
+            lpSubKey: *const u16,
+            ulOptions: u32,
+            samDesired: u32,
+            phkResult: *mut HKEY,
+        ) -> i32;
+        pub fn RegCloseKey(hKey: HKEY) -> i32;
+    }
+}
+
 impl ViGEmSink {
-    /// Connect to ViGEmBus. Fails if the driver is not installed/running.
+    /// Connect to ViGEmBus.
+    ///
+    /// Returns the *distinguishable* reason on failure. This used to flatten every
+    /// error into "is it installed?", which was a guess presented to the user as a
+    /// diagnosis — and it is wrong for most of the ways this actually fails
+    /// (driver present but not started, blocked by Windows, version mismatch).
+    /// A user chasing a missing driver that is already installed gets nowhere.
     pub fn connect() -> Result<ViGEmSink, String> {
-        let client = Client::connect()
-            .map_err(|e| format!("cannot reach the ViGEmBus driver ({e:?}). Is it installed?"))?;
+        let client = Client::connect().map_err(|e| {
+            if driver_service_missing() {
+                format!(
+                    "the ViGEmBus controller driver is not installed on this PC.\n\n\
+                     Install ViGEmBus 1.22.0 from\n\
+                     https://github.com/nefarius/ViGEmBus/releases\n\
+                     then start Gamepad Server again.\n\n\
+                     (driver error: {e:?})"
+                )
+            } else {
+                format!(
+                    "the ViGEmBus controller driver is installed but could not be reached.\n\n\
+                     This usually means Windows has not started it yet — restarting this PC\n\
+                     fixes it most of the time. If it persists, reinstall ViGEmBus 1.22.0 from\n\
+                     https://github.com/nefarius/ViGEmBus/releases\n\n\
+                     (driver error: {e:?})"
+                )
+            }
+        })?;
         let mut pads = Vec::with_capacity(MAX_PADS);
         for _ in 0..MAX_PADS {
             pads.push(None);

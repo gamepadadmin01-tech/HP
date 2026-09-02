@@ -445,16 +445,13 @@ fn start_server(
                 Ok(s) => s,
                 Err(e) => {
                     eprintln!("FATAL: {e}");
-                    eprintln!("Install ViGEmBus, or pass --dry-run to test the protocol only.");
-                    // Windowless launch would otherwise just... not open. The
-                    // installer normally installs ViGEmBus, so a user seeing
-                    // this either declined the driver or removed it.
-                    message_box(
-                        "Gamepad Server",
-                        "The controller driver (ViGEmBus) is not installed, so no \
-                         virtual gamepad can be created.\n\nReinstall Gamepad Server \
-                         to restore the driver, then launch again.",
-                    );
+                    // Show the REAL reason, not a guess. This is a windowed build, so
+                    // eprintln goes nowhere a user can see — the dialog is the only
+                    // channel they have, and it previously asserted "not installed"
+                    // for every failure and then told them to check a console that
+                    // does not exist. connect() now distinguishes the cases and
+                    // returns text written to be read by the person stuck with it.
+                    message_box("Gamepad Server", &format!("Cannot start: {e}"));
                     std::process::exit(1);
                 }
             };
