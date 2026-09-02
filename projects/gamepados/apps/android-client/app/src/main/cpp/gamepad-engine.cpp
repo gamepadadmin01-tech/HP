@@ -21,6 +21,7 @@
 #include <cmath>
 #include <sys/resource.h>
 #include <errno.h>
+#include <dlfcn.h>
 
 // Portable little-endian helpers (Android is always LE — these are identity ops)
 static inline uint16_t htole16_safe(uint16_t v) { return v; }
@@ -247,6 +248,75 @@ static const int CHANGED_PACKET_REDUNDANCY = 3;
 static const long RX_POLL_NS = 2000000L; // 2 ms
 
 // ==========================================
+// 2b. ADPF — tell the scheduler this thread has a deadline
+// ==========================================
+// SCHED_FIFO is what this send loop actually wants, and stock Android refuses it
+// (EPERM, no CAP_SYS_NICE) — see the priority block in txThreadLoop. nice(-19) is a
+// weak substitute: it wins CPU when there is contention, but it cannot tell the
+// governor to RAISE CLOCKS or move the thread to a faster core, which is where the
+// tail latency actually comes from.
+//
+// ADPF is the supported way to ask for exactly that. A hint session names the
+// latency-critical thread and a target duration; reporting the real duration each
+// cycle lets the governor ramp up when we are missing the target and drop back down
+// when we are not. Vendor measurements put this at ~17% less frame-time jitter, and
+// jitter — not mean — is this app's remaining problem.
+//
+// Resolved with dlsym rather than the NDK header on purpose: APerformanceHint is
+// API 33+, minSdk here is 24. Missing symbols simply leave every pointer null and
+// the whole thing becomes a no-op, so an old device loses nothing and cannot crash.
+// Deliberately NOT re-adding CPU affinity — that was removed for thermal reasons
+// (see the note in txThreadLoop) and ADPF is the non-thermal way to get the effect.
+namespace adpf {
+    struct ManagerT;
+    struct SessionT;
+    typedef ManagerT* (*GetManagerFn)();
+    typedef SessionT* (*CreateSessionFn)(ManagerT*, const int32_t*, size_t, int64_t);
+    typedef int       (*ReportFn)(SessionT*, int64_t);
+    typedef void      (*CloseFn)(SessionT*);
+
+    static CreateSessionFn pCreate  = nullptr;
+    static ReportFn        pReport  = nullptr;
+    static CloseFn         pClose   = nullptr;
+    static SessionT*       gSession = nullptr;
+
+    // targetNs = how long one wake→send is allowed to take. The loop's own poll
+    // budget is 2 ms, so that is the deadline we are asking the governor to protect.
+    static void start(int32_t tid, int64_t targetNs) {
+        if (gSession) return;
+        void* lib = dlopen("libandroid.so", RTLD_NOW);   // already mapped; this just resolves
+        if (!lib) return;
+        GetManagerFn getMgr = (GetManagerFn)dlsym(lib, "APerformanceHint_getManager");
+        pCreate = (CreateSessionFn)dlsym(lib, "APerformanceHint_createSession");
+        pReport = (ReportFn)dlsym(lib, "APerformanceHint_reportActualWorkDuration");
+        pClose  = (CloseFn)dlsym(lib, "APerformanceHint_closeSession");
+        if (!getMgr || !pCreate || !pReport) {           // pre-API-33 device → stay a no-op
+            pCreate = nullptr; pReport = nullptr; pClose = nullptr;
+            LOGI("ADPF unavailable on this device; TX thread runs on nice() alone.");
+            return;
+        }
+        ManagerT* mgr = getMgr();
+        if (!mgr) { pReport = nullptr; return; }
+        int32_t tids[1] = { tid };
+        gSession = pCreate(mgr, tids, 1, targetNs);
+        if (!gSession) { pReport = nullptr; LOGI("ADPF session refused; continuing without it."); return; }
+        LOGI("ADPF hint session active for TX thread tid=%d, target=%lldns.", tid, (long long)targetNs);
+    }
+
+    // Called once per successful send. Cheap by design — this is the mechanism the
+    // API exists for, so it is safe on the hot path; guarded so a null session or a
+    // pre-33 device costs one predictable branch.
+    static inline void report(int64_t actualNs) {
+        if (gSession && pReport && actualNs > 0) pReport(gSession, actualNs);
+    }
+
+    static void stop() {
+        if (gSession && pClose) pClose(gSession);
+        gSession = nullptr; pReport = nullptr; pCreate = nullptr; pClose = nullptr;
+    }
+}
+
+// ==========================================
 // 2. NETWORK TX THREAD (1000Hz Heartbeat)
 // ==========================================
 void* txThreadLoop(void* arg) {
@@ -285,6 +355,11 @@ void* txThreadLoop(void* arg) {
             LOGI("TX thread elevated to SCHED_FIFO prio %d.", sp.sched_priority);
         }
     }
+
+    // Ask the governor to protect this thread's deadline. Complements the priority
+    // bump above rather than replacing it: nice() decides WHO runs, ADPF influences
+    // HOW FAST the core runs. No-op below API 33. 2 ms = the loop's own poll budget.
+    adpf::start((int32_t)gettid(), 2000000LL);
 
     GamepadPayload networkPayload;
     uint8_t lastSentInput[8];
@@ -403,6 +478,17 @@ void* txThreadLoop(void* arg) {
                 packetCount++;
                 memcpy(lastSentInput, curInput, 8);   // remember what we sent
                 lastSendNs = rawTimestamp;
+                // ADPF: report what this wake→send actually cost. rawTimestamp was
+                // taken before the send decision, so this covers the whole unit of
+                // work the governor can influence. Reported only on a real send —
+                // an idle loop has no deadline to protect and reporting zero-work
+                // cycles would teach the governor it can safely slow down.
+                {
+                    struct timespec doneTs;
+                    clock_gettime(CLOCK_MONOTONIC, &doneTs);
+                    uint64_t doneNs = (uint64_t)doneTs.tv_sec * 1000000000ULL + doneTs.tv_nsec;
+                    if (doneNs > rawTimestamp) adpf::report((int64_t)(doneNs - rawTimestamp));
+                }
                 // FIX 1: (re)arm redundancy on a genuine input change; otherwise
                 // burn down the counter so each armed extra send fires once.
                 if (changed) {
@@ -714,6 +800,9 @@ void* txThreadLoop(void* arg) {
         if (g_vm->GetEnv((void**)&je, JNI_VERSION_1_6) != JNI_EDETACHED)
             g_vm->DetachCurrentThread();
     }
+    // Release the hint session with the thread that owns it. Leaving it open would
+    // keep the governor honouring a deadline for a tid that no longer exists.
+    adpf::stop();
     return nullptr;
 }
 

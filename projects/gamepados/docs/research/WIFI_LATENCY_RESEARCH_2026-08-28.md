@@ -600,3 +600,75 @@ not currently have a latency problem you can demonstrate** — which is itself t
 - `apps/pc-server/server.py`
 - `apps/docs/LOW_LATENCY_GUIDE.md`, `apps/docs/ARCHITECTURE.md`
 - `docs/handoffs/SESSION_HANDOFF_2026-07-20*.md`, `_2026-07-21.md`
+
+---
+
+# Addendum — 2026-09-03 re-check
+
+Re-researched on request. **Nothing here overturns the August verdict.** The new
+material either confirms it or sharpens the user-facing advice. No decision above is
+reopened.
+
+## The academic frontier is all below our layer
+
+Searched for current work on Wi-Fi tail latency for real-time traffic. Everything
+credible sits at MAC/PHY or in the AP, i.e. nowhere an Android app can reach:
+
+| Work | Claim | Why we cannot ship it |
+|---|---|---|
+| IEEE 802.11bn Coordinated TDMA (arXiv 2508.18755) | ~24% better worst-case latency + jitter | Next standard (Wi-Fi 8). Needs AP **and** client silicon. |
+| Blade — adaptive contention control (arXiv 2603.16119) | >4× lower tail PPDU delay | Rewrites MAC contention. Driver/firmware, not app. |
+| 802.11ax OFDMA triggering (NIST) | 1 ms at 99.999% via uplink scheduling | Requires AP-side scheduler control. |
+| MU-MIMO pre-arrival contention (USPTO 11259324) | Bounded worst-case latency | MAC/PHY change. |
+| Consistent Low Latency for Wireless RT (ACM 3544216.3544225) | Tail comes from send-rate vs bottleneck-queue mismatch | **Confirms the L4S rejection** — at 1–10 kbps we never build the queue this describes. |
+
+The honest conclusion: **there is no app-layer Wi-Fi latency technique left to adopt.**
+The remaining wins are on the device (scheduling) and in what we tell users about their
+band. That is exactly where this round's changes went.
+
+## Two things that did sharpen
+
+**Wi-Fi 7 MLO — now has field numbers.** CableLabs/Intel residential trials (Feb 2026,
+WBA) measured ~35–48% lower application-layer latency and up to 40% less MAC-layer
+jitter; a lab figure of 145 ms → 18 ms at the 95th percentile under 70% load. Two
+caveats that matter more than the headline: cheaper **NSTR** radios deliver only ~30% of
+premium MLO, and on an already-clean 6 GHz link the gain is modest — there was no
+congestion left to remove. Still hardware the *user* buys, never something we ship, so
+it belongs in the guide and nowhere else. Added.
+
+**ADPF has a measured number.** ~17% less frame-time jitter (MediaTek/Google, Dimensity
+9400). That was ranked action #4 and is now **built** — see below.
+
+## Applied this round
+
+1. **ADPF hint session on the TX thread** (`gamepad-engine.cpp`). Resolved by `dlsym`
+   from `libandroid.so`, not the NDK header: `APerformanceHint` is API 33+ and minSdk
+   here is 24, so on an older device every pointer stays null and the whole thing is a
+   no-op that cannot crash. Target 2 ms — the loop's own poll budget. Actual duration is
+   reported only on a real send; reporting idle cycles would teach the governor it can
+   slow down. Session is closed with the thread that owns it.
+   This is the *supported* route to what `SCHED_FIFO` is denied, and unlike affinity
+   pinning it carries no thermal cost — pinning stays removed.
+2. **Three false claims deleted from the customer-facing docs.** `LOW_LATENCY_GUIDE.md`
+   promised a "1000 Hz send thread pinned to the phone's performance cores"; the send
+   loop is event-driven and there is **no affinity code at all** (deliberately —
+   removed for heat). `ARCHITECTURE.md` twice described `SCHED_FIFO` as achieved when
+   stock Android refuses it and the code falls back to `nice(-19)`. Users were being
+   told to expect behaviour that does not exist.
+3. **Band guidance rewritten.** Was "5 GHz not 2.4". Now leads with **6 GHz**, explains
+   that band beats generation (Wi-Fi 6 uplink OFDMA is the wrong trade for a controller —
+   the NIST paper above is the reason), and gives the MLO buying advice with its caveats.
+
+Verified: native build clean on all three ABIs, all four `APerformanceHint_*` symbols
+present in the release `.so`, regression `--fast` at 5 passed / 2 failed where both
+failures are the known environment gaps (no `cargo` on this machine, the 13-error TS
+baseline). **Not device-tested** — ADPF's effect is invisible without field telemetry.
+
+## Ranked actions after this round
+
+1. **Field telemetry — now the blocker for everything else.** Still an EWMA mean
+   (`latencyMsAtomic`, α=0.2) that mathematically hides the p95 spikes, with the real
+   p50/p95 harness reachable only over `adb logcat`. We have just shipped a change whose
+   entire purpose is tail reduction and **no way to see whether it worked.**
+2. Settle the Phase 3 gameplay-feel verdict — still the largest built-and-unshipped win.
+3. Thin the `__nvis` per-frame visual mirror further.

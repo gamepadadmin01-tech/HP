@@ -28,7 +28,7 @@ The goal of this project is to turn an Android phone into a full wireless game c
 [Virtual DualShock 4 Controller  →  any game]
 ```
 
-Everything is designed for **ultra-low latency**. The NDK (C++) layer bypasses Java/Kotlin to write and flush the UDP socket in a tight, SCHED_FIFO real-time thread. The React UI fires `sendGamepadTelemetry` at the polling rate (default 60 Hz, up to 1000 Hz).
+Everything is designed for **ultra-low latency**. The NDK (C++) layer bypasses Java/Kotlin to write and flush the UDP socket in a tight, event-driven send thread (it asks for SCHED_FIFO, which stock Android normally refuses, and falls back to the strongest normal priority available). The React UI fires `sendGamepadTelemetry` at the polling rate (default 60 Hz, up to 1000 Hz).
 
 ---
 
@@ -227,7 +227,7 @@ The C++ engine is exposed to JavaScript via a custom `JavascriptInterface`. Two 
 
 This is where the performance-critical work happens:
 
-- **Real-time POSIX thread** (`pthread`) with `SCHED_FIFO` scheduling policy. This gives the UDP send loop the highest possible priority, minimizing jitter.
+- **Priority-boosted POSIX thread** (`pthread`). It requests `SCHED_FIFO` real-time scheduling, but stock Android denies that without `CAP_SYS_NICE`, so in practice it runs at `nice(-19)` — the strongest normal priority available. On Android 13+ it additionally opens an ADPF performance-hint session so the CPU governor knows the send loop's deadline and can raise clocks when a send runs late. There is deliberately **no CPU-affinity pinning**: forcing the big cores kept them spun up and was the main source of heat.
 - **Non-blocking UDP socket** with `sendto()` to the PC's IP address and port (received via QR code scan).
 - **Packet deduplication**: a `last_timestamp` variable ensures out-of-order or replayed packets are silently dropped.
 - **Gyroscope sensor fusion**: The native `SensorManager` feeds tilt data into `nativeGyroRightStickX/Y` which are merged into the payload before each send.
