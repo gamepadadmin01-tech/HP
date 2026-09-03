@@ -392,7 +392,12 @@ impl eframe::App for App {
 
             // ── Live state ───────────────────────────────────────────────────
             ui.vertical_centered(|ui| {
-                if self.status.running() {
+                if let Some(err) = self.status.fatal_error() {
+                    ui.colored_label(
+                        egui::Color32::from_rgb(0xc0, 0x39, 0x2b),
+                        err,
+                    );
+                } else if self.status.running() {
                     let n = self.status.devices();
                     ui.label(
                         egui::RichText::new(format!("Connected devices: {n}"))

@@ -230,6 +230,116 @@ fn message_box(title: &str, text: &str) {
     }
 }
 
+/// Yes/No prompt. Returns true for Yes.
+#[cfg(windows)]
+fn ask_yes_no(title: &str, text: &str) -> bool {
+    #[link(name = "user32")]
+    unsafe extern "system" {
+        fn MessageBoxW(hwnd: isize, text: *const u16, caption: *const u16, utype: u32) -> i32;
+    }
+    const MB_YESNO: u32 = 0x4;
+    const MB_ICONQUESTION: u32 = 0x20;
+    const IDYES: i32 = 6;
+    let wide = |s: &str| -> Vec<u16> { s.encode_utf16().chain(std::iter::once(0)).collect() };
+    let (t, c) = (wide(text), wide(title));
+    // SAFETY: both buffers are valid null-terminated UTF-16 for the call's duration.
+    unsafe { MessageBoxW(0, t.as_ptr(), c.as_ptr(), MB_YESNO | MB_ICONQUESTION) == IDYES }
+}
+
+/// The bundled driver package, installed next to this exe.
+///
+/// The installer keeps it on disk precisely so this exists: without it a driver
+/// problem is a dead end that requires the user to find a GitHub release page.
+#[cfg(windows)]
+fn bundled_driver_path() -> Option<std::path::PathBuf> {
+    let exe = std::env::current_exe().ok()?;
+    let p = exe.parent()?.join("ViGEmBus_1.22.0_x64_x86_arm64.exe");
+    if p.exists() { Some(p) } else { None }
+}
+
+/// Run the bundled driver installer, elevated, and wait for it.
+///
+/// Installing a kernel driver needs administrator rights, and this server runs
+/// non-elevated by design (the installer launches it with `runasoriginaluser`).
+/// So the repair is handed to ShellExecute with the "runas" verb, which raises
+/// the normal Windows consent prompt rather than us trying to hold privileges we
+/// should not have. Returns true only if the installer ran to completion.
+#[cfg(windows)]
+fn repair_driver(installer: &std::path::Path) -> bool {
+    use std::os::windows::ffi::OsStrExt;
+    #[repr(C)]
+    struct ShellExecuteInfoW {
+        cb_size: u32,
+        f_mask: u32,
+        hwnd: isize,
+        lp_verb: *const u16,
+        lp_file: *const u16,
+        lp_parameters: *const u16,
+        lp_directory: *const u16,
+        n_show: i32,
+        h_inst_app: isize,
+        lp_id_list: *mut core::ffi::c_void,
+        lp_class: *const u16,
+        hkey_class: isize,
+        dw_hot_key: u32,
+        h_icon_or_monitor: isize,
+        h_process: isize,
+    }
+    #[link(name = "shell32")]
+    unsafe extern "system" {
+        fn ShellExecuteExW(info: *mut ShellExecuteInfoW) -> i32;
+    }
+    #[link(name = "kernel32")]
+    unsafe extern "system" {
+        fn WaitForSingleObject(h: isize, ms: u32) -> u32;
+        fn CloseHandle(h: isize) -> i32;
+    }
+    const SEE_MASK_NOCLOSEPROCESS: u32 = 0x0000_0040;
+    const SEE_MASK_NOASYNC: u32 = 0x0000_0100;
+    const SW_SHOWNORMAL: i32 = 1;
+
+    let wide = |s: &str| -> Vec<u16> { s.encode_utf16().chain(std::iter::once(0)).collect() };
+    let verb = wide("runas"); // elevate
+    let file: Vec<u16> = installer
+        .as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect();
+    // /qn = silent. /norestart so we never reboot the machine out from under them.
+    let params = wide("/qn /norestart");
+
+    let mut info = ShellExecuteInfoW {
+        cb_size: core::mem::size_of::<ShellExecuteInfoW>() as u32,
+        f_mask: SEE_MASK_NOCLOSEPROCESS | SEE_MASK_NOASYNC,
+        hwnd: 0,
+        lp_verb: verb.as_ptr(),
+        lp_file: file.as_ptr(),
+        lp_parameters: params.as_ptr(),
+        lp_directory: std::ptr::null(),
+        n_show: SW_SHOWNORMAL,
+        h_inst_app: 0,
+        lp_id_list: std::ptr::null_mut(),
+        lp_class: std::ptr::null(),
+        hkey_class: 0,
+        dw_hot_key: 0,
+        h_icon_or_monitor: 0,
+        h_process: 0,
+    };
+    // SAFETY: every pointer field either points at a live null-terminated buffer
+    // that outlives the call, or is null. cb_size matches the struct we declared.
+    let ok = unsafe { ShellExecuteExW(&mut info) } != 0;
+    if !ok || info.h_process == 0 {
+        return false; // user declined the elevation prompt, or launch failed
+    }
+    // 5 minutes is far longer than a driver install needs; it exists so a stuck
+    // installer cannot hang the server forever.
+    unsafe {
+        WaitForSingleObject(info.h_process, 300_000);
+        CloseHandle(info.h_process);
+    }
+    true
+}
+
 #[cfg(not(windows))]
 fn message_box(_title: &str, _text: &str) {}
 
@@ -441,18 +551,56 @@ fn start_server(
     } else {
         #[cfg(windows)]
         {
+            // Try, and if the driver is the problem, FIX IT rather than report it.
+            //
+            // A virtual gamepad on Windows needs a kernel-mode driver — that cannot be
+            // linked into this exe, so the dependency itself is unavoidable. What IS
+            // avoidable is making the user deal with it. The installer now leaves the
+            // driver package next to this exe for exactly this purpose: offer the
+            // repair, run it elevated, retry. The user sees one consent prompt and then
+            // a working server, instead of an error telling them to go and find a
+            // GitHub release page.
             let sink = match pc_server_rs::vigem::ViGEmSink::connect() {
                 Ok(s) => s,
                 Err(e) => {
                     eprintln!("FATAL: {e}");
-                    // Show the REAL reason, not a guess. This is a windowed build, so
-                    // eprintln goes nowhere a user can see — the dialog is the only
-                    // channel they have, and it previously asserted "not installed"
-                    // for every failure and then told them to check a console that
-                    // does not exist. connect() now distinguishes the cases and
-                    // returns text written to be read by the person stuck with it.
-                    message_box("Gamepad Server", &format!("Cannot start: {e}"));
-                    std::process::exit(1);
+                    let repaired = match bundled_driver_path() {
+                        Some(installer) => ask_yes_no(
+                            "Gamepad Server",
+                            "The controller driver needs to be installed or repaired before \
+                             Gamepad Server can create a virtual gamepad.\n\n\
+                             Fix this now? Windows will ask for permission.",
+                        ) && repair_driver(&installer),
+                        None => false,
+                    };
+                    // Retry once. A fresh connect is the only honest test that the
+                    // repair worked — the installer's exit code says nothing about
+                    // whether Windows actually loaded the driver afterwards.
+                    let second = if repaired {
+                        pc_server_rs::vigem::ViGEmSink::connect()
+                    } else {
+                        Err(e)
+                    };
+                    match second {
+                        Ok(s) => s,
+                        Err(e2) => {
+                            eprintln!("FATAL after repair attempt: {e2}");
+                            let msg = format!(
+                                "Cannot start:\n\n{e2}\n\n\
+                                 If the driver was just installed, restarting this PC \
+                                 usually finishes the job."
+                            );
+                            // Headless exits; GUI keeps the window alive so the message
+                            // can be read and the feedback/update buttons still work.
+                            if args.gui {
+                                status.set_fatal_error(msg);
+                                return Err(std::io::Error::other("ViGEmBus failed to connect"));
+                            } else {
+                                message_box("Gamepad Server", &msg);
+                                std::process::exit(1);
+                            }
+                        }
+                    }
                 }
             };
             println!("  ViGEmBus : connected — a virtual Xbox 360 pad appears per phone.");

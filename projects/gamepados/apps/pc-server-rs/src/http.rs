@@ -95,7 +95,7 @@ use std::time::Duration;
 /// the same number. One definition now feeds both; they cannot drift.
 macro_rules! app_version {
     () => {
-        "2.1.1"
+        "2.1.2"
     };
 }
 

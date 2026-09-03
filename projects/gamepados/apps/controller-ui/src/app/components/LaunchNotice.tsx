@@ -155,10 +155,10 @@ export function LaunchNotice() {
 
             <p className="text-xs leading-relaxed mt-2" style={{ color: MUTED }}>
               {done
-                ? "Your free premium — 24 hours of unlimited playtime — is tied to your account and on its way."
+                ? "Your free premium — 3 days of unlimited playtime — is on your account now. Open Account to see it."
                 : hasAccount
-                  ? "Everyone already using GamepadOS can claim free premium — 24 hours of unlimited playtime — tied to your account, and yours is ready. Tell us how the app is doing while you're here."
-                  : "Everyone already using GamepadOS can claim free premium — 24 hours of unlimited playtime. It's tied to your account, so create one now — and tell us what you think while you're there."}
+                  ? "Everyone already using GamepadOS gets free premium — 3 days of unlimited playtime — added to your account automatically. Tell us how the app is doing while you're here."
+                  : "Everyone already using GamepadOS gets free premium — 3 days of unlimited playtime. It goes on your account automatically, so create one now — and tell us what you think while you're there."}
             </p>
 
             <div className="flex items-center gap-2 mt-3 flex-wrap">

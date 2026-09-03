@@ -23,7 +23,7 @@
 #define AppName        "Gamepad Server"
 ; ⚠️ Must equal http.rs APP_VERSION and the backend's pc.version at release —
 ; a skew makes the in-app updater loop forever (install → "update available").
-#define AppVersion      "2.1.1"
+#define AppVersion      "2.1.2"
 #define AppPublisher    "GamepadOS"
 #define AppURL          "https://gamepad.space"
 #define ExeName         "GamepadServer.exe"
@@ -65,7 +65,7 @@ AppMutex=RemoteGamepadServerSingleton
 ; the normal user) — RM-restart + [Run] would launch it twice.
 CloseApplications=force
 RestartApplications=no
-VersionInfoVersion=2.1.1.0
+VersionInfoVersion=2.1.2.0
 VersionInfoCompany={#AppPublisher}
 VersionInfoProductName={#AppName}
 VersionInfoDescription={#AppName} Setup
@@ -92,7 +92,11 @@ Source: "..\..\..\tools\platform-tools\AdbWinUsbApi.dll"; DestDir: "{app}"; Flag
 ; Windows 11 and can fail to install or fail to load on it, and because the old
 ; [Run] entry never checked msiexec's result, setup reported complete success and
 ; the failure only surfaced later as a server that would not start.
-Source: "drivers\ViGEmBus_1.22.0_x64_x86_arm64.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall
+; Installed to {app}, NOT {tmp}. Keeping the driver package on disk lets the
+; server repair its own driver later without downloading anything — the
+; difference between a dead end and a one-click fix when Windows drops or
+; blocks the driver some time after install.
+Source: "drivers\ViGEmBus_1.22.0_x64_x86_arm64.exe"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{group}\{#AppName}"; Filename: "{app}\{#ExeName}"
@@ -134,19 +138,37 @@ Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=
 // same loop. Fixed by installing from code, checking the exit code, and then
 // verifying the service actually exists rather than trusting the exit code.
 
+// ViGEmBus 1.22.0 as a comparable number. GetVersionNumbers packs major/minor
+// into the high word: (major shl 16) or minor. 1.22 -> 65558, 1.17 -> 65553.
+#define MinDriverMS 65558
+
 function VigemPresent(): Boolean;
 var
   sysDir: String;
+  ms, ls: Cardinal;
 begin
-  // Two independent checks, because either one alone lies:
-  //   - the service key survives an uninstall on some machines, so a key on its
-  //     own is not proof (and skipping the install on that basis is precisely
-  //     how a PC ends up with no driver);
-  //   - the .sys file can exist while the service is not registered.
-  // Require both.
+  Result := False;
+
+  // Three checks, because each one alone lies:
+  //   - the service key survives an uninstall on some machines, so a key by
+  //     itself is not proof the driver exists;
+  //   - the .sys file can exist while the service is not registered;
+  //   - and BOTH can be true while the driver is far too OLD to talk to, which
+  //     is the failure this check was added for. A machine running ViGEmBus
+  //     1.17 passed the first two, so setup skipped installing 1.22.0, left the
+  //     old driver in place, and the server then failed with BusNotFound — the
+  //     newer client library cannot reach a 1.17 bus. "Something is installed"
+  //     was never the question; "can our server actually use it" is.
   sysDir := ExpandConstant('{sys}');
-  Result := RegKeyExists(HKLM, 'SYSTEM\CurrentControlSet\Services\ViGEmBus')
-            and FileExists(sysDir + '\drivers\ViGEmBus.sys');
+  if not RegKeyExists(HKLM, 'SYSTEM\CurrentControlSet\Services\ViGEmBus') then exit;
+  if not FileExists(sysDir + '\drivers\ViGEmBus.sys') then exit;
+
+  // Unreadable version info means we cannot prove it is good enough, so treat it
+  // as not present and reinstall. Reinstalling a healthy driver is harmless;
+  // leaving an unusable one in place is exactly the bug being fixed.
+  if not GetVersionNumbers(sysDir + '\drivers\ViGEmBus.sys', ms, ls) then exit;
+
+  Result := (ms >= {#MinDriverMS});
 end;
 
 // Runs the bundled 1.22.0 package silently. Returns True only when the driver is
@@ -161,7 +183,7 @@ begin
   end;
 
   // /qn = silent, /norestart = never reboot the machine out from under the user.
-  if not Exec(ExpandConstant('{tmp}\ViGEmBus_1.22.0_x64_x86_arm64.exe'),
+  if not Exec(ExpandConstant('{app}\ViGEmBus_1.22.0_x64_x86_arm64.exe'),
               '/qn /norestart', '', SW_HIDE, ewWaitUntilTerminated, rc) then begin
     Log('ViGEmBus: could not launch the driver installer at all.');
     Result := False;

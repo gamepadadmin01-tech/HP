@@ -18,7 +18,7 @@
 //! path**.
 
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 #[derive(Debug, Default)]
 pub struct Status {
@@ -29,6 +29,9 @@ pub struct Status {
     /// True once the server loop is actually bound and running, so the GUI can
     /// distinguish "no phone yet" from "the server never came up".
     running: AtomicBool,
+    /// Fatal error encountered on the server thread (e.g. ViGEmBus driver missing),
+    /// to be displayed prominently in the UI.
+    fatal_error: Mutex<Option<String>>,
 }
 
 impl Status {
@@ -46,6 +49,11 @@ impl Status {
     pub fn set_running(&self, v: bool) {
         self.running.store(v, Ordering::Relaxed);
     }
+    pub fn set_fatal_error(&self, e: String) {
+        if let Ok(mut guard) = self.fatal_error.lock() {
+            *guard = Some(e);
+        }
+    }
 
     // ── read by the GUI thread ──────────────────────────────────────────────
     pub fn devices(&self) -> usize {
@@ -56,6 +64,9 @@ impl Status {
     }
     pub fn running(&self) -> bool {
         self.running.load(Ordering::Relaxed)
+    }
+    pub fn fatal_error(&self) -> Option<String> {
+        self.fatal_error.lock().ok().and_then(|guard| guard.clone())
     }
 }
 
