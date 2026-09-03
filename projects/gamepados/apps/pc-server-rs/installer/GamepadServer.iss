@@ -140,26 +140,39 @@ Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=
 
 // ViGEmBus 1.22.0 as a comparable number. GetVersionNumbers packs major/minor
 // into the high word: (major shl 16) or minor. 1.22 -> 65558, 1.17 -> 65553.
-#define MinDriverMS 65558
+// ⚠ The PACKAGE version and the DRIVER BINARY version are NOT the same number.
+// The "ViGEmBus 1.22.0" release installs ViGEmBus.sys reporting **1.21.442.0** —
+// verified by installing it and reading the file. Gating on 1.22 therefore can
+// never be satisfied, which would make this installer reinstall the driver on
+// every run and, worse, report failure after a perfectly good install. The
+// minimum is the driver binary that 1.22.0 actually ships.
+//   MS = (major shl 16) or minor = (1 shl 16) or 21
+//   LS = (build shl 16) or revision = (442 shl 16) or 0
+#define MinDriverMS 65557
+#define MinDriverLS 28966912
 
-// Is there an actual ViGEmBus DEVICE, not just an installed driver package?
+// Is there a live ViGEmBus DEVICE, not just an installed driver package?
 //
-// This is the check that was missing, and its absence is what produced the
-// reported BusNotFound. A machine was found with the driver package installed
-// (oem20.inf, Nefarius), the service registered AND "Running" — and no device
-// node whatsoever. ViGEmBus is a root-enumerated software device; the client
-// opens its device INTERFACE, so with no device there is nothing to open, no
-// matter how healthy the package looks. Every file-and-registry check in the
-// world says "installed" for that machine and every one of them is useless.
+// ViGEmBus is a root-enumerated software device and the client opens its device
+// INTERFACE, so a package can be installed, the service can even read "Running",
+// and there can still be nothing to open. Files and registry keys describe what
+// was installed once; only a device means the server can use it today.
 //
-// pnputil is present on every supported Windows. findstr sets exit code 0 only
-// on a match, so the result is the exit code and nothing has to be parsed.
+// ⚠ MATCH ON "Nefarius Virtual Gamepad", NOT "ViGEm". The device description is
+// "Nefarius Virtual Gamepad Emulation Bus" and contains no "ViGEm" anywhere. An
+// earlier version of this check grepped for "ViGEm" and reported MISSING on a
+// machine whose device was present and healthy (ROOT\SYSTEM\0004, Status OK) —
+// a false negative that would have fired the "could not install the driver"
+// error after every successful install.
+//
+// pnputil ships with every supported Windows. findstr sets exit code 0 only on a
+// match, so the result is the exit code and nothing needs parsing.
 function VigemDeviceNodePresent(): Boolean;
 var
   rc: Integer;
 begin
   Result := Exec(ExpandConstant('{cmd}'),
-                 '/c pnputil /enum-devices | findstr /i "ViGEm" >nul 2>&1',
+                 '/c pnputil /enum-devices | findstr /i /c:"Nefarius Virtual Gamepad" >nul 2>&1',
                  '', SW_HIDE, ewWaitUntilTerminated, rc) and (rc = 0);
 end;
 
@@ -188,7 +201,9 @@ begin
   // as not present and reinstall. Reinstalling a healthy driver is harmless;
   // leaving an unusable one in place is exactly the bug being fixed.
   if not GetVersionNumbers(sysDir + '\drivers\ViGEmBus.sys', ms, ls) then exit;
+  // Compare both halves: a 1.21 build OLDER than .442 is still too old.
   if ms < {#MinDriverMS} then exit;
+  if (ms = {#MinDriverMS}) and (ls < {#MinDriverLS}) then exit;
 
   // Finally: a device must actually exist. Files and registry keys describe what
   // was installed once; only a device node means the server can open it today.
