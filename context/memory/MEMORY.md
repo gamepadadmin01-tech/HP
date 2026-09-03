@@ -46,6 +46,8 @@
 - [Play closed test — 1.4.0](project_play_closed_test_140.md) — 📦 the **subscriptions build**; AAB fully verified ready 2026-08-25, **Akhil uploads it**; test account + versionCode 54 are the two traps
 - [Wheel mode 900°](project_wheel_mode_900.md) — customer-requested truck/bus steering: **rotate a mounted phone, don't raise the tilt cap** (that ships a broken feature); build after 1.4.0
 
+- [Code signing / Smart App Control](feedback_code_signing_sac.md) — 🚨 **Windows 11 SAC BLOCKS the unsigned server outright**; no code fix exists, a certificate is the only answer
+
 ## Website / platform
 
 - [Website backend](project_website_backend.md) — Express+Prisma ticketing platform, auth, webhook, DNS at Namecheap, known gotchas
