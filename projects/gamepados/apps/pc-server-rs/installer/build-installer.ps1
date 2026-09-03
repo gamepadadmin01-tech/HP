@@ -85,6 +85,50 @@ Write-Host "== staging =="
 New-Item -ItemType Directory -Force "$here\staging" | Out-Null
 Copy-Item "$root\target\release\pc-server-rs.exe" "$here\staging\GamepadServer.exe" -Force
 
+# ── Code signing ────────────────────────────────────────────────────────────
+# WHY THIS MATTERS MORE THAN IT LOOKS: Windows 11's Smart App Control refuses to
+# run executables whose publisher it cannot verify. On a machine with SAC enabled
+# an unsigned GamepadServer.exe is not "warned about" — it is BLOCKED outright,
+# with "we could not verify its publisher". Confirmed on a real machine: the exe
+# and the installer both NotSigned, SAC state 1 (enforcing), app blocked. The
+# bundled ViGEmBus installer ran fine on that same machine because Nefarius signs
+# theirs. Signing is the difference between shipping and not shipping.
+#
+# Set GPOS_SIGN_PFX + GPOS_SIGN_PASS (or GPOS_SIGN_THUMBPRINT for a cert already
+# in the store) and both binaries get signed. With neither set the build still
+# succeeds — it just says loudly what it is producing, rather than quietly
+# handing over something a chunk of Windows 11 will not launch.
+function Invoke-Sign([string]$file, [string]$label) {
+  $pfx   = $env:GPOS_SIGN_PFX
+  $thumb = $env:GPOS_SIGN_THUMBPRINT
+  if (-not $pfx -and -not $thumb) { return $false }
+
+  $signtool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin\*\x64\signtool.exe" -ErrorAction SilentlyContinue |
+              Sort-Object FullName -Descending | Select-Object -First 1
+  if (-not $signtool) { Write-Host "  ! signtool.exe not found - install the Windows SDK"; return $false }
+
+  # /tr timestamping is not optional: without it every signature stops validating
+  # the day the certificate expires, including on copies already installed.
+  $args = @('sign','/fd','SHA256','/td','SHA256','/tr','http://timestamp.digicert.com')
+  if ($thumb) { $args += @('/sha1',$thumb) }
+  else {
+    $args += @('/f',$pfx)
+    if ($env:GPOS_SIGN_PASS) { $args += @('/p',$env:GPOS_SIGN_PASS) }
+  }
+  $args += $file
+  & $signtool.FullName @args | Out-Null
+  if ($LASTEXITCODE -ne 0) { Write-Host "  ! signing $label FAILED (exit $LASTEXITCODE)"; return $false }
+  Write-Host "  signed $label"
+  return $true
+}
+
+Write-Host "== signing =="
+$signedExe = Invoke-Sign "$here\staging\GamepadServer.exe" "GamepadServer.exe"
+if (-not $signedExe) {
+  Write-Host "  NOT SIGNED - no GPOS_SIGN_PFX/GPOS_SIGN_THUMBPRINT set."
+  Write-Host "  Windows 11 Smart App Control will BLOCK this build on machines where it is on."
+}
+
 Write-Host "== ISCC =="
 # Do NOT hardcode this path. winget installs Inno Setup PER-USER, under
 # %LOCALAPPDATA%\Programs, so the old hardcoded "C:\Program Files (x86)" path
@@ -107,6 +151,15 @@ Write-Host "  using $iscc"
 if ($LASTEXITCODE -ne 0) { Write-Error "ISCC failed"; exit 1 }
 
 $out = "$here\Output\GamepadServer-Setup.exe"
+
+# Sign the installer too, and do it BEFORE hashing — signing rewrites the file,
+# so a hash taken first would be the hash of something nobody ever downloads,
+# and the Releases panel would reject the upload as tampered.
+$signedSetup = Invoke-Sign $out "GamepadServer-Setup.exe"
+if (-not $signedSetup) {
+  Write-Host "  NOT SIGNED - users on Windows 11 with Smart App Control will be blocked."
+}
+
 $sha = (Get-FileHash $out -Algorithm SHA256).Hash.ToLower()
 $size = [math]::Round((Get-Item $out).Length / 1MB, 1)
 Write-Host ""
