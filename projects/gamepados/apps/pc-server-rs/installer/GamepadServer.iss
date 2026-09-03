@@ -142,6 +142,27 @@ Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=
 // into the high word: (major shl 16) or minor. 1.22 -> 65558, 1.17 -> 65553.
 #define MinDriverMS 65558
 
+// Is there an actual ViGEmBus DEVICE, not just an installed driver package?
+//
+// This is the check that was missing, and its absence is what produced the
+// reported BusNotFound. A machine was found with the driver package installed
+// (oem20.inf, Nefarius), the service registered AND "Running" — and no device
+// node whatsoever. ViGEmBus is a root-enumerated software device; the client
+// opens its device INTERFACE, so with no device there is nothing to open, no
+// matter how healthy the package looks. Every file-and-registry check in the
+// world says "installed" for that machine and every one of them is useless.
+//
+// pnputil is present on every supported Windows. findstr sets exit code 0 only
+// on a match, so the result is the exit code and nothing has to be parsed.
+function VigemDeviceNodePresent(): Boolean;
+var
+  rc: Integer;
+begin
+  Result := Exec(ExpandConstant('{cmd}'),
+                 '/c pnputil /enum-devices | findstr /i "ViGEm" >nul 2>&1',
+                 '', SW_HIDE, ewWaitUntilTerminated, rc) and (rc = 0);
+end;
+
 function VigemPresent(): Boolean;
 var
   sysDir: String;
@@ -167,8 +188,11 @@ begin
   // as not present and reinstall. Reinstalling a healthy driver is harmless;
   // leaving an unusable one in place is exactly the bug being fixed.
   if not GetVersionNumbers(sysDir + '\drivers\ViGEmBus.sys', ms, ls) then exit;
+  if ms < {#MinDriverMS} then exit;
 
-  Result := (ms >= {#MinDriverMS});
+  // Finally: a device must actually exist. Files and registry keys describe what
+  // was installed once; only a device node means the server can open it today.
+  Result := VigemDeviceNodePresent();
 end;
 
 // Runs the bundled 1.22.0 package silently. Returns True only when the driver is
@@ -191,19 +215,37 @@ begin
   end;
   Log('ViGEmBus: installer exit code ' + IntToStr(rc));
 
-  // 3010 = success, reboot required. The driver is staged but will not load until
-  // a restart, so treat it as "not usable yet" and say so rather than pretending.
+  // ONE GO, NO RESTART — as long as a device node actually appeared.
+  //
+  // ViGEmBus is a root-enumerated software device: on a clean machine Windows
+  // creates the device and loads the driver during install, and nothing needs a
+  // reboot. A restart is only genuinely required when Windows cannot replace a
+  // driver that is currently LOADED AND BOUND to a live device — so the honest
+  // test is not the exit code but whether a usable device exists now.
+  //
+  // Deliberately checked even for 3010 ("reboot required"): that code is
+  // advisory, the installer returns it whenever anything was in flux, and on
+  // most machines the device is present and working the moment it exits.
+  // Believing 3010 blindly would send users to reboot for nothing, which is
+  // exactly the friction we are removing.
+  if VigemDeviceNodePresent() then begin
+    Log('ViGEmBus: device node present after install — no restart needed.');
+    Result := True;
+    exit;
+  end;
+
+  // No device node. A reboot is now the honest answer rather than a hedge.
   if rc = 3010 then begin
     MsgBox('The controller driver was installed, but Windows needs to restart' + #13#10 +
-           'before it can be used.' + #13#10 + #13#10 +
+           'before it can finish setting it up.' + #13#10 + #13#10 +
            'Please restart this PC, then start Gamepad Server.',
            mbInformation, MB_OK);
     Result := True;
     exit;
   end;
 
-  // Trust the verification, not the exit code — some failures still return 0.
-  Result := (rc = 0) and VigemPresent();
+  Log('ViGEmBus: installer returned ' + IntToStr(rc) + ' but no device node appeared.');
+  Result := False;
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
