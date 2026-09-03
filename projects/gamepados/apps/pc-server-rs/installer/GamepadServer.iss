@@ -176,6 +176,28 @@ begin
                  '', SW_HIDE, ewWaitUntilTerminated, rc) and (rc = 0);
 end;
 
+// Same check, but give Windows a moment to finish creating the device.
+//
+// The driver installer returns as soon as IT is done; PnP then enumerates the
+// root device asynchronously. Checking once, immediately, can therefore miss a
+// device that appears a second later — and the penalty for looking too early is
+// telling the user setup failed when it did not. Ten seconds is far longer than
+// enumeration takes and costs nothing when the device is already there, because
+// the first pass returns straight away.
+function VigemDeviceNodeAppears(): Boolean;
+var
+  i: Integer;
+begin
+  for i := 0 to 9 do begin
+    if VigemDeviceNodePresent() then begin
+      Result := True;
+      exit;
+    end;
+    Sleep(1000);
+  end;
+  Result := False;
+end;
+
 function VigemPresent(): Boolean;
 var
   sysDir: String;
@@ -243,7 +265,7 @@ begin
   // most machines the device is present and working the moment it exits.
   // Believing 3010 blindly would send users to reboot for nothing, which is
   // exactly the friction we are removing.
-  if VigemDeviceNodePresent() then begin
+  if VigemDeviceNodeAppears() then begin
     Log('ViGEmBus: device node present after install — no restart needed.');
     Result := True;
     exit;
