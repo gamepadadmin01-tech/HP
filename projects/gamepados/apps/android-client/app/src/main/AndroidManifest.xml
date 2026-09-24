@@ -37,9 +37,10 @@
 
         <activity
             android:name=".MainActivity"
+            android:launchMode="singleTask"
             android:exported="true"
             android:screenOrientation="unspecified"
-            android:resizeableActivity="false"
+            android:resizeableActivity="true"
             android:windowSoftInputMode="adjustNothing"
             android:configChanges="orientation|screenSize|keyboardHidden|keyboard|smallestScreenSize">
             <intent-filter>

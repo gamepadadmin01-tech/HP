@@ -232,8 +232,10 @@ android {
         // JSON on Railway means nothing is purchasable, so a regression in the
         // purchase flow cannot reach a paying customer. That will not be true
         // once billing is switched on, which is exactly why this was not left.
-        versionCode = 55
-        versionName = "1.4.1"
+        // 56 = 1.4.2: guest daily trial, plan browsing and gyro lifecycle fixes.
+        // 57 = 1.4.3: show the guest introduction only once per installation.
+        versionCode = 59
+        versionName = "1.4.5"
 
         ndk {
             // Broad device coverage (universal APK for sideload + in-app updater):
@@ -385,6 +387,7 @@ kotlin {
 }
 
 dependencies {
+    testImplementation("junit:junit:4.13.2")
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.appcompat:appcompat:1.7.0")
     // NOTE: com.google.android.material was REMOVED (2026-07-19). It was never

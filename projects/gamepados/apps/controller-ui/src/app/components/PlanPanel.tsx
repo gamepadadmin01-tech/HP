@@ -22,7 +22,7 @@
 
 import React, { useEffect, useState, useSyncExternalStore } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Infinity as InfinityIcon, Clock, Ticket, RefreshCw, Check, ChevronDown } from "lucide-react";
+import { Infinity as InfinityIcon, Clock, Ticket, RefreshCw, Check, ChevronDown, Zap } from "lucide-react";
 import type { CataloguePlan, PlanCode } from "../api/billing";
 import {
   getBillingState, onBillingChange, refresh, redeemPromo,
@@ -32,11 +32,12 @@ import { purchase, restorePurchases, canRestore } from "../store/purchase";
 import { localUsedSeconds } from "../store/playtime";
 import { Collapse } from "./Collapse";
 import { FADE } from "../motion";
+import { getAppInfo } from "../platform/native";
 
-const ACCENT = "#5D90CB";
-const MUTED = "#7C8AA0";
-const DANGER = "#E2645D";
-const GOOD = "#5FBF8F";
+const ACCENT = "var(--calm-accent, #abc8db)";
+const MUTED = "var(--calm-muted, #a6b0b3)";
+const DANGER = "var(--calm-error, #ffaba6)";
+const GOOD = "var(--calm-good, #a7cfb6)";
 
 /** Fallback labels for the plan the user is ON. `/billing/me` answers with a
  *  code, not a name; the catalogue carries the real display name and wins when
@@ -159,7 +160,7 @@ export function PlanPanel() {
   // `unlimited` covers the gift/promo path (source PROMO or MANUAL), where the
   // plan code can still be a lower tier while the entitlement is effectively
   // uncapped — those users must not be sold a "limit" they do not have either.
-  const offers = (catalogue?.purchasable && !ent.unlimited ? catalogue.plans : [])
+  const offers = (getAppInfo().channel !== "playstore" && catalogue?.purchasable && !ent.unlimited ? catalogue.plans : [])
     .filter(
       (p) =>
         p.code !== "FREE" &&
@@ -181,7 +182,7 @@ export function PlanPanel() {
               {ent.unlimited ? <InfinityIcon size={18} /> : <Clock size={18} />}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-bold text-white/90">{name}</p>
+              <p className="text-sm font-bold calm-ink">{name}</p>
               <p className="text-xs mt-0.5" style={{ color: MUTED }}>
                 {ent.unlimited
                   ? (ent.endsAt
@@ -205,7 +206,7 @@ export function PlanPanel() {
               <div className="flex items-baseline justify-between mb-2">
                 <span className="text-xs font-semibold" style={{ color: MUTED }}>Today</span>
                 <span className="text-sm font-bold tabular-nums"
-                  style={{ fontFamily: "'Space Grotesk',sans-serif", color: exhausted ? DANGER : "#FFFFFF" }}>
+                  style={{ fontFamily: "system-ui, sans-serif", color: exhausted ? DANGER : "var(--calm-ink, #f0f2ed)" }}>
                   {formatDuration(remainingSeconds ?? 0)} left
                 </span>
               </div>
@@ -214,7 +215,7 @@ export function PlanPanel() {
                 limit={limitSeconds}
                 exhausted={exhausted}
               />
-              <p className="text-[11px] mt-2" style={{ color: exhausted ? DANGER : MUTED }}>
+              <p className="text-xs mt-2" style={{ color: exhausted ? DANGER : MUTED }}>
                 {exhausted
                   ? "You're out of time — upgrade to play more, or wait for your next quota."
                   : formatResetsAt(ent.resetsAt)}
@@ -236,9 +237,9 @@ export function PlanPanel() {
         />
       )}
 
-      <Section title="Have a code?">
+      {ent.plan !== "LIFETIME" && <Section title="Have a code?">
         <Panel><PromoRow /></Panel>
-      </Section>
+      </Section>}
 
       {/* Play only. A purchase can complete while the app is dead -- Play holds
           it and re-delivers on the next query, which is what this asks for. */}
@@ -274,13 +275,13 @@ function PlansDisclosure({ title, offers }: { title: string; offers: CataloguePl
   return (
     <Section title={title}>
       <div className="rounded-xl overflow-hidden"
-        style={{ background: "rgba(0,0,0,0.20)", border: "1px solid rgba(255,255,255,0.05)" }}>
+        style={{ background: "var(--calm-surface, #202527)", border: "1px solid var(--calm-line, #343c3f)" }}>
         <button
           onClick={() => setOpen((v) => !v)}
           aria-expanded={open}
           className="w-full flex items-center justify-between p-4 text-left">
           <div className="min-w-0">
-            <p className="text-sm font-bold text-white/90">
+            <p className="text-sm font-bold calm-ink">
               {offers.length} plan{offers.length > 1 ? "s" : ""}
             </p>
             <p className="text-xs mt-0.5" style={{ color: MUTED }}>
@@ -308,7 +309,7 @@ function PlansDisclosure({ title, offers }: { title: string; offers: CataloguePl
         <Collapse open={open}>
           <div className="px-3 pb-3 space-y-2.5">
             {offers.map((p) => <PlanCard key={p.code} plan={p} />)}
-            <p className="text-[11px] leading-relaxed px-1" style={{ color: MUTED }}>
+            <p className="text-xs leading-relaxed px-1" style={{ color: MUTED }}>
               Prices include GST. Access starts immediately, so purchases are final
               and non-refundable — try the free hour a day first.
             </p>
@@ -324,7 +325,7 @@ function PlansDisclosure({ title, offers }: { title: string; offers: CataloguePl
 function Meter({ used, limit, exhausted }: { used: number; limit: number; exhausted: boolean }) {
   const pct = limit > 0 ? Math.min(100, (used / limit) * 100) : 0;
   return (
-    <div className="h-1.5 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.08)" }}>
+    <div className="h-1.5 rounded-full overflow-hidden" style={{ background: "var(--calm-soft, #292f31)" }}>
       {/* scaleX, not width. Width is a layout property, so animating it reflows
           the row on every frame; a transform is composited and costs nothing.
           The bar is full-width and scaled down from the left edge, which looks
@@ -343,12 +344,13 @@ function Meter({ used, limit, exhausted }: { used: number; limit: number; exhaus
   );
 }
 
-function PlanCard({ plan }: { plan: CataloguePlan }) {
+export function PlanCard({ plan, onChoose }: { plan: CataloguePlan; onChoose?: (plan: CataloguePlan) => void }) {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const [done, setDone] = useState(false);
 
   async function buy() {
+    if (onChoose) { onChoose(plan); return; }
     setBusy(true);
     setMsg("");
     const out = await purchase(plan);
@@ -363,31 +365,33 @@ function PlanCard({ plan }: { plan: CataloguePlan }) {
   }
 
   return (
-    <div className="rounded-xl p-4"
-      style={{ background: "rgba(0,0,0,0.20)", border: "1px solid rgba(255,255,255,0.05)" }}>
+    <motion.div className="console-plan-card" data-plan={plan.code} data-testid={`plan-${plan.code.toLowerCase()}-card`}
+      initial={{ opacity: 0, y: 12 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: .1 }} transition={{ type: 'spring', stiffness: 320, damping: 28 }}>
+      <div className="console-plan-topline">{plan.code === 'LIFETIME' ? <InfinityIcon size={23} /> : <Zap size={20} />}<span className="console-eyebrow">{plan.code === 'LIFETIME' ? 'ONE TIME. ALL YOURS.' : plan.code === 'THREE_DAY' ? 'MAKE A WEEKEND OF IT' : 'YOUR EVERYDAY COMPANION'}</span></div>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-sm font-bold text-white/90">{plan.displayName}</p>
+          <p className="text-sm font-bold calm-ink">{plan.displayName}</p>
           <ul className="mt-1.5 space-y-0.5">
             {planBullets(plan).map((b) => (
-              <li key={b} className="text-xs" style={{ color: MUTED }}>{b}</li>
+              <li key={b} className="text-xs" style={{ color: MUTED }}><Check size={12} aria-hidden="true" />{b}</li>
             ))}
           </ul>
         </div>
         {/* On Play the price belongs to Play. Showing ours next to a Play SKU
             is a policy violation, so the sheet is the only place it appears. */}
         {!plan.priceFromStore && (
-          <p className="text-xl font-bold shrink-0"
-            style={{ fontFamily: "'Space Grotesk',sans-serif", color: "#FFFFFF" }}>
+          <p className="console-plan-price text-xl font-bold shrink-0"
+            style={{ fontFamily: "system-ui, sans-serif", color: "var(--calm-ink, #f0f2ed)" }}>
             {formatPrice(plan.priceMinor, plan.currency)}
           </p>
         )}
       </div>
 
       <button
+        data-testid={`choose-${plan.code.toLowerCase()}-button`}
         onClick={() => void buy()}
         disabled={busy || done}
-        className="mt-3 w-full py-3 rounded-xl text-sm font-semibold transition-colors disabled:opacity-60"
+        className="console-plan-buy mt-3 w-full py-3 rounded-xl text-sm font-semibold transition-colors disabled:opacity-60"
         style={{
           background: done ? "rgba(95,191,143,0.14)" : "rgba(79,134,198,0.14)",
           border: `1px solid ${done ? "rgba(95,191,143,0.35)" : "rgba(79,134,198,0.35)"}`,
@@ -401,12 +405,12 @@ function PlanCard({ plan }: { plan: CataloguePlan }) {
 
       <AnimatePresence>
         {msg && (
-          <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={FADE} className="text-[11px] mt-2 leading-relaxed" style={{ color: DANGER }}>
+          <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={FADE} className="text-xs mt-2 leading-relaxed" style={{ color: DANGER }}>
             {msg}
           </motion.p>
         )}
       </AnimatePresence>
-    </div>
+    </motion.div>
   );
 }
 
@@ -423,7 +427,7 @@ function RestoreRow() {
       onClick={() => { restorePurchases(); setAsked(true); void refresh(); }}
       className="w-full flex items-center justify-between p-4 text-left">
       <div className="min-w-0">
-        <p className="text-sm font-medium text-white/90">Restore purchases</p>
+        <p className="text-sm font-medium calm-ink">Restore purchases</p>
         <p className="text-xs mt-0.5" style={{ color: MUTED }}>
           {asked
             ? "Asked Google Play — your plan will appear here if it finds one."
@@ -465,18 +469,18 @@ function PromoRow() {
   return (
     <form onSubmit={submit} className="p-4">
       <div className="flex gap-2">
-        <div className="flex-1 flex items-center gap-2 px-3 rounded-lg"
-          style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)" }}>
+        <div className="calm-promo-field flex-1 flex items-center gap-2 px-3 rounded-lg"
+          style={{ background: "var(--calm-soft, #292f31)", border: "1px solid var(--calm-line, #343c3f)" }}>
           <Ticket size={14} style={{ color: MUTED }} />
           <input
             value={code}
             onChange={(e) => setCode(e.target.value.toUpperCase())}
-            placeholder="Enter code"
+            aria-label="Promo code" placeholder="Enter code"
             maxLength={40}
             autoCapitalize="characters"
             autoCorrect="off"
             spellCheck={false}
-            className="flex-1 bg-transparent py-2.5 text-sm text-white/90 outline-none placeholder:text-white/25"
+            className="flex-1 bg-transparent py-2.5 text-sm calm-ink outline-none placeholder:text-white/25"
           />
         </div>
         <button type="submit" disabled={busy || !code.trim()}
@@ -487,7 +491,7 @@ function PromoRow() {
       </div>
       <AnimatePresence>
         {msg && (
-          <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={FADE} className="text-[11px] mt-2" style={{ color: ok ? GOOD : DANGER }}>
+          <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={FADE} className="text-xs mt-2" style={{ color: ok ? GOOD : DANGER }}>
             {msg}
           </motion.p>
         )}
@@ -503,7 +507,7 @@ function PromoRow() {
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section>
-      <h3 className="text-[10px] font-bold tracking-widest uppercase mb-2 px-1" style={{ color: MUTED }}>
+      <h3 className="text-xs font-bold mb-2 px-1" style={{ color: MUTED }}>
         {title}
       </h3>
       {children}
@@ -514,7 +518,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 function Panel({ children }: { children: React.ReactNode }) {
   return (
     <div className="rounded-xl overflow-hidden divide-y divide-white/5"
-      style={{ background: "rgba(0,0,0,0.20)", border: "1px solid rgba(255,255,255,0.05)" }}>
+      style={{ background: "var(--calm-surface, #202527)", border: "1px solid var(--calm-line, #343c3f)" }}>
       {children}
     </div>
   );

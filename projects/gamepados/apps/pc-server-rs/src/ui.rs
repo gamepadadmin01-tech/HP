@@ -51,17 +51,20 @@ const REPAINT_EVERY: Duration = Duration::from_millis(500);
 // growing the type pushed the feedback row off the bottom and the cards off
 // both sides. It compiled perfectly and was only wrong once you opened it.
 // Changing paint cannot change layout; changing metrics can.
-const PAPER: egui::Color32 = egui::Color32::from_rgb(0x07, 0x08, 0x0C);
-const SURFACE: egui::Color32 = egui::Color32::from_rgb(0x13, 0x15, 0x1C);
-const SURFACE_2: egui::Color32 = egui::Color32::from_rgb(0x1B, 0x1E, 0x27);
-const INK: egui::Color32 = egui::Color32::from_rgb(0xF4, 0xF5, 0xF8);
-const TEXT: egui::Color32 = egui::Color32::from_rgb(0xD6, 0xD9, 0xE1);
-const ORANGE: egui::Color32 = egui::Color32::from_rgb(0xFF, 0x5A, 0x14);
-const BORDER: egui::Color32 = egui::Color32::from_rgb(0x24, 0x27, 0x33);
+// Calm companion palette. ORANGE retains its historical identifier locally;
+// its value is now the same quiet blue as the Android shell.
+const PAPER: egui::Color32 = egui::Color32::from_rgb(0x14, 0x17, 0x19);
+const SURFACE: egui::Color32 = egui::Color32::from_rgb(0x20, 0x25, 0x27);
+const SURFACE_2: egui::Color32 = egui::Color32::from_rgb(0x29, 0x2F, 0x31);
+const INK: egui::Color32 = egui::Color32::from_rgb(0xF0, 0xF2, 0xED);
+const TEXT: egui::Color32 = egui::Color32::from_rgb(0xD7, 0xDD, 0xD9);
+const ORANGE: egui::Color32 = egui::Color32::from_rgb(0xAB, 0xC8, 0xDB);
+const BORDER: egui::Color32 = egui::Color32::from_rgb(0x34, 0x3C, 0x3F);
 
 /// Paint egui in the product's colours. Called once at startup.
 fn apply_theme(ctx: &egui::Context) {
-    use egui::{Color32, Stroke};
+    use egui::Stroke;
+    ctx.set_theme(egui::Theme::Dark);
 
     let mut v = egui::Visuals::dark();
     v.panel_fill = PAPER;
@@ -93,12 +96,19 @@ fn apply_theme(ctx: &egui::Context) {
     v.widgets.active.bg_fill = ORANGE;
     v.widgets.active.weak_bg_fill = ORANGE;
     v.widgets.active.bg_stroke = Stroke::new(1.0, ORANGE);
-    v.widgets.active.fg_stroke = Stroke::new(1.0, Color32::WHITE);
+    v.widgets.active.fg_stroke = Stroke::new(1.0, PAPER);
 
     v.selection.bg_fill = ORANGE.gamma_multiply(0.35);
     v.selection.stroke = Stroke::new(1.0, INK);
 
     ctx.set_visuals(v);
+    let mut style = (*ctx.style_of(ctx.theme())).clone();
+    style.spacing.item_spacing = egui::vec2(8.0, 6.0);
+    style.spacing.button_padding = egui::vec2(12.0, 7.0);
+    style.text_styles.insert(egui::TextStyle::Heading, egui::FontId::proportional(21.0));
+    style.text_styles.insert(egui::TextStyle::Body, egui::FontId::proportional(14.0));
+    style.text_styles.insert(egui::TextStyle::Button, egui::FontId::proportional(14.0));
+    ctx.set_style_of(ctx.theme(), style);
 }
 
 /// Messages from worker threads back to the UI.
@@ -339,14 +349,15 @@ impl eframe::App for App {
         self.drain_messages();
         ctx.request_repaint_after(REPAINT_EVERY);
 
-        {
-            let ui = &mut *ui;
-            ui.add_space(6.0);
+        // Scrolling keeps QR, recovery and support reachable at smaller windows
+        // and larger Windows display scales, including long failure messages.
+        egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
+            ui.add_space(10.0);
             ui.vertical_centered(|ui| {
-                ui.heading("Gamepad Server");
+                ui.heading("Ready when you are.");
                 ui.label(
-                    egui::RichText::new("Scan the code using GamepadOS on your phone.")
-                        .size(12.0)
+                    egui::RichText::new("Scan with GamepadOS to connect.")
+                        .size(13.0)
                         .weak(),
                 );
             });
@@ -363,15 +374,15 @@ impl eframe::App for App {
                     // build_qr_texture), so extra white here adds nothing a
                     // scanner uses. It only makes the code smaller for a given
                     // window, which is the opposite of what helps a phone camera.
-                    const QR: f32 = 190.0;
-                    const PAD: f32 = 10.0;
+                    const QR: f32 = 180.0;
+                    const PAD: f32 = 6.0;
                     let side = QR + PAD * 2.0;
                     // Allocate exactly the card's footprint so the Frame cannot
                     // expand to fill the centred layout's full width.
                     ui.allocate_ui(egui::vec2(side, side), |ui| {
                         egui::Frame::new()
                             .fill(egui::Color32::WHITE)
-                            .corner_radius(6.0)
+                            .corner_radius(12.0)
                             .inner_margin(PAD)
                             .show(ui, |ui| {
                                 ui.add(
@@ -388,7 +399,7 @@ impl eframe::App for App {
                 }
             });
 
-            ui.add_space(10.0);
+            ui.add_space(4.0);
 
             // ── Live state ───────────────────────────────────────────────────
             ui.vertical_centered(|ui| {
@@ -400,8 +411,9 @@ impl eframe::App for App {
                 } else if self.status.running() {
                     let n = self.status.devices();
                     ui.label(
-                        egui::RichText::new(format!("Connected devices: {n}"))
+                        egui::RichText::new(if n == 0 { "Waiting for your phone".to_owned() } else { format!("{n} device{} connected", if n == 1 { "" } else { "s" }) })
                             .size(14.0)
+                            .color(if n == 0 { TEXT } else { ORANGE })
                             .strong(),
                     );
                 } else {
@@ -411,31 +423,39 @@ impl eframe::App for App {
                     );
                 }
                 ui.label(
-                    egui::RichText::new(format!("{}  ·  key {}", self.lan_ip, self.pairing_key))
-                        .size(11.0)
+                    egui::RichText::new(format!("IP {} · Port {} · Key {}", self.lan_ip,
+                        self.qr_payload.split(',').nth(1).unwrap_or("7777"), self.pairing_key))
+                        .size(12.0)
                         .weak(),
                 );
             });
 
-            ui.add_space(10.0);
+            ui.add_space(4.0);
             ui.separator();
 
             // ── Updates ──────────────────────────────────────────────────────
             ui.horizontal(|ui| {
+                let button_size = egui::vec2((ui.available_width() - 8.0) / 2.0, 32.0);
                 let checking = self.update_state == UpdateState::Checking;
                 let downloading = self.update_state == UpdateState::Downloading;
 
                 if self.update_state == UpdateState::Available {
-                    if ui.button("Install update").clicked() {
+                    if ui.add_sized(button_size, egui::Button::new("Install update")).clicked() {
                         self.start_download(&ctx);
                     }
-                } else if ui
-                    .add_enabled(!checking && !downloading, egui::Button::new("Check for updates"))
-                    .clicked()
+                } else if ui.add_enabled_ui(!checking && !downloading, |ui| {
+                    ui.add_sized(button_size, egui::Button::new("Check updates"))
+                }).inner.clicked()
                 {
                     self.start_update_check(&ctx);
                 }
 
+                if ui.add_sized(button_size, egui::Button::new("Feedback")).clicked() {
+                    self.feedback_open = true;
+                    self.feedback_status.clear();
+                }
+            });
+            ui.vertical_centered(|ui| {
                 let color = match self.update_state {
                     UpdateState::Failed => egui::Color32::from_rgb(0xc0, 0x39, 0x2b),
                     UpdateState::Available => egui::Color32::from_rgb(0x1e, 0x8e, 0x3e),
@@ -448,7 +468,7 @@ impl eframe::App for App {
             // The in-app updater can't repair itself, so the manual download page
             // is the only route forward and must always be one click away.
             if self.update_state == UpdateState::Failed {
-                ui.horizontal(|ui| {
+                ui.horizontal_wrapped(|ui| {
                     ui.label(
                         egui::RichText::new("Your internet may be fine — our service can be down.")
                             .size(11.0)
@@ -467,16 +487,7 @@ impl eframe::App for App {
             }
 
             ui.add_space(6.0);
-
-            // ── Feedback ─────────────────────────────────────────────────────
-            ui.horizontal(|ui| {
-                ui.label(egui::RichText::new("Found a bug or have an idea?").size(11.0).weak());
-                if ui.button("💬 Send Feedback").clicked() {
-                    self.feedback_open = true;
-                    self.feedback_status.clear();
-                }
-            });
-        }
+        });
 
         self.show_feedback_window(&ctx);
     }
@@ -492,7 +503,7 @@ impl App {
             .open(&mut open)
             .collapsible(false)
             .resizable(false)
-            .default_width(380.0)
+            .default_width(330.0)
             .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
             .show(ctx, |ui| {
                 ui.label(
@@ -652,10 +663,9 @@ pub fn run(
 ) -> Result<(), String> {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
-            // Sized to the CONTENT. 560 left ~150 px of dead space below the
-            // feedback row, which reads as a window that failed to load
-            // something. Measured against the real window, not guessed.
-            .with_inner_size([380.0, 420.0])
+            // Compact square companion; scrolling handles long recovery messages.
+            .with_inner_size([400.0, 400.0])
+            .with_min_inner_size([400.0, 400.0])
             .with_resizable(false)
             // with_resizable(false) alone does NOT grey out the maximize button on
             // Windows -- the caption button stays lit and clickable, and clicking it

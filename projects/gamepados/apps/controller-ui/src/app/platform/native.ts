@@ -30,7 +30,7 @@ export interface AndroidBridge {
   setNativeInputGeometry(json: string): void;
   setNativeInputActive(active: boolean): void;
   setNativeGyroConfig(json: string): void;
-  nativeGyroCalibrate(): void;
+  nativeGyroCalibrate(): string | void;
   setInputStreaming(on: boolean): void;
 
   // Session / transport
@@ -80,6 +80,8 @@ export interface AndroidBridge {
   /** Playtime: forward a capability ticket to the PC over the input socket.
    *  Present on every flavour — quota is not a store-specific concern. */
   sendPlaytimeTicket?(base64Ticket: string): void;
+  getGuestTrialState?(): string;
+  setGuestTrialActive?(active: boolean): string;
 
   // System
   openUrl(url: string): void;
@@ -97,6 +99,18 @@ function bridge(): AndroidBridge | null {
 
 export function isNative(): boolean {
   return bridge() !== null;
+}
+
+export type GuestTrialSnapshot = { remainingSeconds: number; limitSeconds: number; resetsAt: number };
+export function nativeGuestTrial(active?: boolean): GuestTrialSnapshot | null {
+  const b = bridge();
+  if (!b?.getGuestTrialState || !b.setGuestTrialActive) return null;
+  const raw = active === undefined ? b.getGuestTrialState() : b.setGuestTrialActive(active);
+  const value = JSON.parse(raw) as GuestTrialSnapshot;
+  if (!Number.isFinite(value.remainingSeconds) || !Number.isFinite(value.resetsAt)) {
+    throw new Error("Could not read the free trial clock.");
+  }
+  return value;
 }
 
 /** Call a bridge method, returning `fallback` if the bridge, the method, or the
@@ -242,4 +256,3 @@ export function sendPlaytimeTicket(base64Ticket: string): boolean {
     return false;
   }
 }
-

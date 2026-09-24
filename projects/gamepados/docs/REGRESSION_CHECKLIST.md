@@ -453,3 +453,55 @@ Release source must be back to `if (BuildConfig.DEBUG)`.
 
 🤖 automated (`cargo test` / build) · 📱 needs the phone · ⚠️ has bitten us ·
 🚨 caused a crash or a live user-facing bug
+
+
+### Guest daily trial and normal-tilt wrap (2026-09-12)
+
+Guests must launch without authentication, retain usage after closing/reopening,
+stop input at 30 minutes, and see plans on expiry. Browsing plans must not prompt
+for sign-in; choosing a purchase may. Run GuestQuotaTest and controller-ui/guest-smoke.mjs.
+Test native Wi-Fi and USB expiry on hardware; the browser test covers presentation only.
+
+Ordinary tilt must remain centered after full rotations and after leaving/re-entering
+the controller. Calibrate both transport paths, rotate the display, and background/resume.
+Multi-turn wheel mode must still track full turns without a wrap at 180 degrees.
+Run tools/wheel-unwrap.test.js and the native angle test; finish with a phone endurance run.
+
+### Distribution-specific resizing and controller-only keep-awake (2026-09-15)
+
+- Generate process<Flavor>DebugMainManifest for all seven distributions. In each
+  merged MainActivity, resizeableActivity must be true except playstore=false.
+  The Play setting preserves the owner's preference, not a Google policy mandate.
+  Android 16/API 36 can ignore this restriction on large screens; do not promise
+  that the manifest flag disables tablet support on every device.
+- Run ScreenAwakePolicyTest: browsing never holds the display awake; an active
+  controller does while resumed; background, controller exit and quota expiry do not.
+- Run controller-ui/responsive-smoke.mjs against the existing UI bundle. External
+  requests are mocked/blocked. Covers dashboard/controller at phone, tablet
+  landscape/portrait and narrow-window sizes, plus intro and guest plan/expiry flow.
+- On hardware: verify actual display timeout on Home/Account; no timeout while
+  playing; background/resume and quota expiry; tablet/foldable resize during touch,
+  hit alignment, gyro calibration and camera preview. Browser tests do not prove
+  Android native overlay geometry or real sensor behavior.
+- Standing UDP connection is intentionally unchanged; reconnect/energy testing
+  is required before deciding whether to suspend it while backgrounded.
+
+## Transport switches — 2026-09-20
+
+Wi-Fi protection must yield to an explicit USB selection, but merely plugging a cable must not hijack Wi-Fi. Native stop and queued start state must settle before USB debugging opens. Tether notification retries must never own independent teardown timers. QR scanning must release the existing native engine (Android suppresses scan results while it runs).
+
+Automated: controller-ui/transport-switch.test.mjs (13 regression cases). Physical: Wi-Fi -> Tethering -> Debugging -> QR Wi-Fi, rapid choices, cable removal/replug, PC restart; check actual input and subscription limits. See docs/handoffs/2026-09-20-transport-switch.md.
+
+
+## Resume and directed tether broadcast (2026-09-20)
+
+- Opening Manage must preserve the native session: simulate the real window.exitSession bridge, not just telemetry.
+- Warm Recents return must retain the link; cold start must restore only a confirmed PC and respect saved USB choice. Test actual Android process death separately.
+- Light/dark scanner ancestors must be transparent and native CameraX preview visible on a phone.
+- Directed broadcast discovery must work when subnet broadcast ends in .15/.31/.63/.127 as well as .255. ACK must lock to the responding PC and port.
+- PC replies must use a unicast address on the receiving interface. cargo test includes invalid_broadcast_source_retries_on_the_receiving_interface.
+- Actual Wi-Fi -> USB-debug -> tether transitions must show connection on both devices with only one controller. Hardware test remains pending when ADB is empty.
+
+
+## Cold-launch dashboard transitions (2026-09-21)
+Root AnimatePresence initial=false suppressed all newly mounted tab animations for the lifetime of the first dashboard. Visiting Connect replaced its presence context, masking the bug. Keep root presence initial enabled; native first Home uses explicit settled opacity/position only. Run apps/controller-ui/cold-tab-motion.test.mjs against Vite on 127.0.0.1:5187: frame samples must contain intermediate opacity values on the first Settings/Account/Home switches, before any Connect visit, and after returning. Reduced-motion must remain instant. startup-back.test.mjs checks native first Home remains fully visible under the splash; motion-polish.test.mjs checks one route layer and stable cards.

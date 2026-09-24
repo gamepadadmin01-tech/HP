@@ -456,13 +456,17 @@ mod imp {
             // IPv6 has its own pktinfo with a different layout, and this server
             // binds an IPv4 wildcard, so a V6 peer here is not a thing that can
             // happen — fall back rather than pretend to handle it.
-            let (Some(local), SocketAddr::V4(dst4)) = (local, dst) else {
+            let (Some(mut local), SocketAddr::V4(dst4)) = (local, dst) else {
                 return sock.send_to(buf, dst);
             };
             if !self.active() {
                 return sock.send_to(buf, dst);
             }
 
+            if local.addr.is_unspecified() {
+                local.addr = crate::netdetect::reply_address(local.ifindex, *dst4.ip())
+                    .ok_or_else(|| io::Error::new(io::ErrorKind::AddrNotAvailable, "receiving interface has no IPv4 address"))?;
+            }
             let mut name = to_sockaddr_in(dst4);
             let mut control = ControlBuf::zeroed();
             // SAFETY: control is CONTROL_LEN (64) >= cmsg_space_pktinfo() (24),
@@ -506,7 +510,21 @@ mod imp {
                 )
             };
             if rc == SOCKET_ERROR {
-                return Err(last_wsa_error());
+                let error = last_wsa_error();
+                // A directed broadcast on /28, /27, etc. need not end in .255.
+                // If Winsock rejects that destination as a reply SOURCE, keep
+                // the receiving interface and let it choose its unicast address.
+                // Never fall back to the default route (which may be Wi-Fi/VPN).
+                if !local.addr.is_unspecified()
+                    && matches!(error.raw_os_error(), Some(10049) | Some(10022))
+                {
+                    if let Some(addr) = crate::netdetect::reply_address(local.ifindex, *dst4.ip()) {
+                        if addr != local.addr {
+                            return self.send_to(sock, buf, SocketAddr::V4(dst4), Some(LocalAddr { addr, ifindex: local.ifindex }));
+                        }
+                    }
+                }
+                return Err(error);
             }
             Ok(sent as usize)
         }
@@ -572,6 +590,31 @@ mod tests {
         match sock.local_addr().unwrap() {
             SocketAddr::V4(a) => a,
             other => panic!("expected IPv4, got {other}"),
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn invalid_broadcast_source_retries_on_the_receiving_interface() {
+        let server = UdpSocket::bind(("0.0.0.0", 0)).unwrap();
+        server.set_read_timeout(Some(Duration::from_secs(2))).unwrap();
+        let client = UdpSocket::bind(("127.0.0.1", 0)).unwrap();
+        client.set_read_timeout(Some(Duration::from_secs(2))).unwrap();
+        let replier = Replier::new(&server);
+        assert!(replier.active());
+        client.send_to(b"discover", (Ipv4Addr::LOCALHOST, v4(&server).port())).unwrap();
+        let mut buf = [0u8; 64];
+        let (_, peer, local) = replier.recv_from(&server, &mut buf).unwrap();
+        let local = local.unwrap();
+        for last in [15, 31, 63, 127, 255] {
+            // Emulate pktinfo carrying a subnet broadcast as the incoming
+            // destination. It is not a local unicast SOURCE on this machine.
+            replier.send_to(&server, b"ACK", peer, Some(LocalAddr {
+                addr: Ipv4Addr::new(192, 0, 2, last), ifindex: local.ifindex,
+            })).unwrap();
+            let (n, from) = client.recv_from(&mut buf).unwrap();
+            assert_eq!(&buf[..n], b"ACK");
+            assert_eq!(from.ip(), Ipv4Addr::LOCALHOST);
         }
     }
 

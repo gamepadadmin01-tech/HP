@@ -77,6 +77,9 @@ int udpSocket = -1;
 int accessoryFd = -1;
 std::atomic<bool> accessoryMode(false);
 struct sockaddr_in serverAddr;
+// Discovery is explicit: directed USB broadcasts need not end in .255.
+bool discoveringPeer = false;
+uint32_t discoveryBroadcast = INADDR_BROADCAST;
 
 // ── Peer recovery ────────────────────────────────────────────────────────────
 // Start of the current "have we heard anything?" window, CLOCK_MONOTONIC ns. Set
@@ -103,6 +106,12 @@ static const uint64_t PEER_SILENT_NS = 3500000000ULL; // 3.5s
 uint32_t expectedHash = 0;
 pthread_t txThread;
 std::atomic<uint64_t> packetCount(0);
+// Transport diagnostics are deliberately lock-free: they are written on the
+// native TX/RX path and read only by the UI's low-rate telemetry poll. They are
+// observations, never inputs to packet scheduling.
+std::atomic<uint64_t> ackCount(0);
+std::atomic<uint64_t> sendFailureCount(0);
+std::atomic<float>    txRateHzAtomic(0.0f);
 
 // ── GRX encrypted-input bridge. LIVE: the hot-path/RX hooks + initNetworkNative
 //    caching are applied and Kotlin sets GRX_ENABLED=true. Once a handshake
@@ -138,11 +147,33 @@ struct in_addr connectedPeer = { 0 };
 // Real round-trip latency (ms). Computed from the send-timestamp the PC echoes
 // back inside each ACK. Exposed via JNI so the HUD shows a true number.
 std::atomic<float>    latencyMsAtomic(0.0f);
+// Last RTT is the most recent ACK sample. Jitter is an EWMA of the absolute
+// difference between consecutive samples, so it flags an unstable link without
+// pretending to be packet loss (UDP redundancy makes loss unknowable here).
+std::atomic<float>    lastRttMsAtomic(0.0f);
+std::atomic<float>    rttJitterMsAtomic(0.0f);
 // Monotonic-ns timestamp of the last ACK received from the PC. This is the
 // ONLY reliable "the PC is actually there" signal: UDP sendto() succeeds locally
 // even when nothing is listening, so a rising packet-send count does NOT mean
 // connected. The link is "alive" only if an ACK arrived recently.
 std::atomic<uint64_t> lastAckMonoNs(0);
+
+static void recordRttSample(float rttMs) {
+    float previous = lastRttMsAtomic.exchange(rttMs, std::memory_order_relaxed);
+    if (previous > 0.0f) {
+        float delta = std::fabs(rttMs - previous);
+        float priorJitter = rttJitterMsAtomic.load(std::memory_order_relaxed);
+        float smoothedJitter = (priorJitter <= 0.0f)
+            ? delta
+            : (priorJitter * 0.8f + delta * 0.2f);
+        rttJitterMsAtomic.store(smoothedJitter, std::memory_order_relaxed);
+    }
+    float priorLatency = latencyMsAtomic.load(std::memory_order_relaxed);
+    float smoothedLatency = (priorLatency <= 0.0f)
+        ? rttMs
+        : (priorLatency * 0.8f + rttMs * 0.2f);
+    latencyMsAtomic.store(smoothedLatency, std::memory_order_relaxed);
+}
 
 // Rumble from the PC over Wi-Fi (UDP). The PC sends "RMB" + large + small for
 // THIS phone's virtual pad. We stash the latest motor values and bump a sequence
@@ -365,6 +396,11 @@ void* txThreadLoop(void* arg) {
     uint8_t lastSentInput[8];
     memset(lastSentInput, 0xFF, sizeof(lastSentInput)); // != neutral → forces the first send
     uint64_t lastSendNs = 0;
+    // The actual send rate is variable by design (event-driven input plus
+    // redundancy and heartbeat), so report it over a one-second window instead
+    // of the obsolete fixed "1000 Hz" dashboard value.
+    uint64_t rateWindowStartNs = 0;
+    uint64_t rateWindowPackets = 0;
     // FIX 1: remaining back-to-back resends for the most recent CHANGED input.
     // Set to CHANGED_PACKET_REDUNDANCY when input changes; decremented each poll
     // it forces an extra send. Keep-alive heartbeats do not touch this.
@@ -476,6 +512,16 @@ void* txThreadLoop(void* arg) {
             }
             if (sent > 0) {
                 packetCount++;
+                if (rateWindowStartNs == 0) rateWindowStartNs = rawTimestamp;
+                rateWindowPackets++;
+                uint64_t rateWindowNs = rawTimestamp - rateWindowStartNs;
+                if (rateWindowNs >= 1000000000ULL) {
+                    txRateHzAtomic.store(
+                        (float)rateWindowPackets * 1000000000.0f / (float)rateWindowNs,
+                        std::memory_order_relaxed);
+                    rateWindowStartNs = rawTimestamp;
+                    rateWindowPackets = 0;
+                }
                 memcpy(lastSentInput, curInput, 8);   // remember what we sent
                 lastSendNs = rawTimestamp;
                 // ADPF: report what this wake→send actually cost. rawTimestamp was
@@ -498,6 +544,7 @@ void* txThreadLoop(void* arg) {
                 }
             }
             if (sent < 0) {
+                sendFailureCount.fetch_add(1, std::memory_order_relaxed);
                 int err = errno;
                 if (accessoryMode) {
                     // EAGAIN/EWOULDBLOCK = USB OUT buffer momentarily full; harmless,
@@ -536,8 +583,7 @@ void* txThreadLoop(void* arg) {
         //
         // Only for UDP: AOA is point-to-point and has no addressing to recover.
         if (!accessoryMode && udpSocket != -1) {
-            uint32_t dest = ntohl(serverAddr.sin_addr.s_addr);
-            bool destIsBroadcast = (dest == INADDR_BROADCAST) || ((dest & 0xFF) == 0xFF);
+            bool destIsBroadcast = discoveringPeer;
             uint64_t lastAck = lastAckMonoNs.load(std::memory_order_relaxed);
             uint64_t epoch   = discoveryEpochNs.load(std::memory_order_relaxed);
             uint64_t since   = (lastAck > epoch) ? lastAck : epoch;
@@ -557,7 +603,8 @@ void* txThreadLoop(void* arg) {
                 }
                 socketConnected = false;
                 connectedPeer.s_addr = 0;
-                serverAddr.sin_addr.s_addr = htonl(INADDR_BROADCAST);
+                serverAddr.sin_addr.s_addr = discoveryBroadcast;
+                discoveringPeer = true;
                 // Re-open the window, so a server that stays missing is retried on a
                 // steady 6s cadence instead of this firing on every 2ms tick.
                 discoveryEpochNs.store(rawTimestamp, std::memory_order_relaxed);
@@ -610,8 +657,8 @@ void* txThreadLoop(void* arg) {
                     // ACK below) so no other LAN host can drive the phone's motor.
                     if (rec >= 5 && rxBuffer[0] == 'R' && rxBuffer[1] == 'M' && rxBuffer[2] == 'B') {
                         uint32_t dst = ntohl(serverAddr.sin_addr.s_addr);
-                        bool dstBroadcast = (dst == INADDR_BROADCAST) || ((dst & 0xFF) == 0xFF);
-                        if (!dstBroadcast && fromAddr.sin_addr.s_addr != serverAddr.sin_addr.s_addr) {
+                        bool dstBroadcast = discoveringPeer;
+                        if (dstBroadcast || fromAddr.sin_addr.s_addr != serverAddr.sin_addr.s_addr || fromAddr.sin_port != serverAddr.sin_port) {
                             continue; // rumble from an unexpected host — ignore it
                         }
                         rumbleLeft.store((uint8_t)rxBuffer[3], std::memory_order_relaxed);
@@ -631,8 +678,8 @@ void* txThreadLoop(void* arg) {
                     // broadcast discovery the source is by definition unknown.)
                     {
                         uint32_t dest = ntohl(serverAddr.sin_addr.s_addr);
-                        bool destIsBroadcast = (dest == INADDR_BROADCAST) || ((dest & 0xFF) == 0xFF);
-                        if (!destIsBroadcast && fromAddr.sin_addr.s_addr != serverAddr.sin_addr.s_addr) {
+                        bool destIsBroadcast = discoveringPeer;
+                        if (fromAddr.sin_port != serverAddr.sin_port || (!destIsBroadcast && fromAddr.sin_addr.s_addr != serverAddr.sin_addr.s_addr)) {
                             continue; // ACK from an unexpected host — ignore it
                         }
                     }
@@ -641,6 +688,7 @@ void* txThreadLoop(void* arg) {
                         clock_gettime(CLOCK_MONOTONIC, &ackNow);
                         uint64_t ackNs = (uint64_t)ackNow.tv_sec * 1000000000LL + ackNow.tv_nsec;
                         lastAckMonoNs.store(ackNs, std::memory_order_relaxed);  // link-alive heartbeat
+                        ackCount.fetch_add(1, std::memory_order_relaxed);
 
                         // TRUE round-trip: the PC echoed back the exact send-time we
                         // stamped into this packet's `timestamp` field. RTT = now −
@@ -653,9 +701,7 @@ void* txThreadLoop(void* arg) {
                             if (echoed != 0 && ackNs > echoed) {
                                 float rttMs = (float)(ackNs - echoed) / 1000000.0f;
                                 if (rttMs >= 0.0f && rttMs < 1000.0f) {  // sanity clamp
-                                    float prev = latencyMsAtomic.load(std::memory_order_relaxed);
-                                    float smoothed = (prev <= 0.0f) ? rttMs : (prev * 0.8f + rttMs * 0.2f);
-                                    latencyMsAtomic.store(smoothed, std::memory_order_relaxed);
+                                    recordRttSample(rttMs);
                                 }
                             }
                         }
@@ -666,9 +712,10 @@ void* txThreadLoop(void* arg) {
                         // the real unicast host, so switching to it stops the wasteful
                         // 1000Hz broadcast and is required on networks that rate-limit it.
                         uint32_t curDest = ntohl(serverAddr.sin_addr.s_addr);
-                        bool curIsBroadcast = (curDest == INADDR_BROADCAST) || ((curDest & 0xFF) == 0xFF);
+                        bool curIsBroadcast = discoveringPeer;
                         if (curIsBroadcast) {
                             serverAddr.sin_addr = fromAddr.sin_addr;
+                            discoveringPeer = false;
                             char ipStr[INET_ADDRSTRLEN];
                             inet_ntop(AF_INET, &serverAddr.sin_addr, ipStr, sizeof(ipStr));
                             LOGI("Received ACK from PC. Locked destination IP to unicast: %s", ipStr);
@@ -679,7 +726,7 @@ void* txThreadLoop(void* arg) {
                         // IP ever changes). Never connect() to a broadcast address.
                         {
                             uint32_t lockedDest = ntohl(serverAddr.sin_addr.s_addr);
-                            bool lockedIsBroadcast = (lockedDest == INADDR_BROADCAST) || ((lockedDest & 0xFF) == 0xFF);
+                            bool lockedIsBroadcast = discoveringPeer;
                             bool peerChanged = (serverAddr.sin_addr.s_addr != connectedPeer.s_addr);
                             if (!lockedIsBroadcast && (!socketConnected || peerChanged)) {
                                 if (connect(udpSocket, (struct sockaddr*)&serverAddr, sizeof(serverAddr)) == 0) {
@@ -731,15 +778,14 @@ void* txThreadLoop(void* arg) {
                     clock_gettime(CLOCK_MONOTONIC, &ackNow);
                     uint64_t ackNs = (uint64_t)ackNow.tv_sec * 1000000000LL + ackNow.tv_nsec;
                     lastAckMonoNs.store(ackNs, std::memory_order_relaxed);
+                    ackCount.fetch_add(1, std::memory_order_relaxed);
                     if (rec >= 11) {
                         uint64_t echoed = 0;
                         std::memcpy(&echoed, rxBuffer + 3, 8);
                         if (echoed != 0 && ackNs > echoed) {
                             float rttMs = (float)(ackNs - echoed) / 1000000.0f;
                             if (rttMs >= 0.0f && rttMs < 1000.0f) {
-                                float prev = latencyMsAtomic.load(std::memory_order_relaxed);
-                                float smoothed = (prev <= 0.0f) ? rttMs : (prev * 0.8f + rttMs * 0.2f);
-                                latencyMsAtomic.store(smoothed, std::memory_order_relaxed);
+                                recordRttSample(rttMs);
                             }
                         }
                     }
@@ -925,6 +971,8 @@ Java_com_gamepad_client_MainActivity_initNetworkNative(JNIEnv* env, jobject thiz
     serverAddr.sin_family = AF_INET;
     serverAddr.sin_port = htons(port);
     inet_pton(AF_INET, ip, &serverAddr.sin_addr);
+    discoveringPeer = std::strcmp(key, "usb") == 0;
+    discoveryBroadcast = discoveringPeer ? serverAddr.sin_addr.s_addr : htonl(INADDR_BROADCAST);
 
     env->ReleaseStringUTFChars(ipStr, ip);
     env->ReleaseStringUTFChars(keyStr, key);
@@ -941,6 +989,9 @@ Java_com_gamepad_client_MainActivity_initNetworkNative(JNIEnv* env, jobject thiz
 
     // Start Tx Thread
     packetCount = 0;
+    ackCount = 0;
+    sendFailureCount = 0;
+    txRateHzAtomic.store(0.0f, std::memory_order_relaxed);
     lastAckMonoNs.store(0, std::memory_order_relaxed);   // reset link-alive state
     {
         // Open the first peer-recovery window (see PEER_SILENT_NS).
@@ -950,6 +1001,8 @@ Java_com_gamepad_client_MainActivity_initNetworkNative(JNIEnv* env, jobject thiz
                                std::memory_order_relaxed);
     }
     latencyMsAtomic.store(0.0f, std::memory_order_relaxed);
+    lastRttMsAtomic.store(0.0f, std::memory_order_relaxed);
+    rttJitterMsAtomic.store(0.0f, std::memory_order_relaxed);
     rumbleLeft.store(0, std::memory_order_relaxed);       // clear stale motor state
     rumbleRight.store(0, std::memory_order_relaxed);      // (seq stays monotonic)
     isRunning = true;
@@ -981,6 +1034,8 @@ Java_com_gamepad_client_MainActivity_stopNetworkNative(JNIEnv* env, jobject thiz
         accessoryFd = -1;
     }
     accessoryMode = false;
+    if (g_activity) { env->DeleteGlobalRef(g_activity); g_activity = nullptr; }
+    g_mid_seal = nullptr; g_mid_ctrl = nullptr;
     // FIX 2: clear connected-socket state so the next init starts fresh.
     socketConnected = false;
     connectedPeer.s_addr = 0;
@@ -1033,8 +1088,13 @@ Java_com_gamepad_client_MainActivity_initAccessoryNative(JNIEnv* env, jobject th
     }
 
     packetCount = 0;
+    ackCount = 0;
+    sendFailureCount = 0;
+    txRateHzAtomic.store(0.0f, std::memory_order_relaxed);
     lastAckMonoNs.store(0, std::memory_order_relaxed);
     latencyMsAtomic.store(0.0f, std::memory_order_relaxed);
+    lastRttMsAtomic.store(0.0f, std::memory_order_relaxed);
+    rttJitterMsAtomic.store(0.0f, std::memory_order_relaxed);
     rumbleLeft.store(0, std::memory_order_relaxed);
     rumbleRight.store(0, std::memory_order_relaxed);
     isRunning = true;
@@ -1066,6 +1126,33 @@ Java_com_gamepad_client_MainActivity_getNativePacketCount(JNIEnv* env, jobject t
 extern "C" JNIEXPORT jfloat JNICALL
 Java_com_gamepad_client_MainActivity_getNativeLatencyMs(JNIEnv* env, jobject thiz) {
     return (jfloat)latencyMsAtomic.load(std::memory_order_relaxed);
+}
+
+// Most recent ACK RTT, as distinct from the smoothed latency shown in the HUD.
+extern "C" JNIEXPORT jfloat JNICALL
+Java_com_gamepad_client_MainActivity_getNativeLastRttMs(JNIEnv* env, jobject thiz) {
+    return (jfloat)lastRttMsAtomic.load(std::memory_order_relaxed);
+}
+
+// EWMA of consecutive RTT differences. This is a stability signal, not loss.
+extern "C" JNIEXPORT jfloat JNICALL
+Java_com_gamepad_client_MainActivity_getNativeRttJitterMs(JNIEnv* env, jobject thiz) {
+    return (jfloat)rttJitterMsAtomic.load(std::memory_order_relaxed);
+}
+
+extern "C" JNIEXPORT jfloat JNICALL
+Java_com_gamepad_client_MainActivity_getNativePacketRateHz(JNIEnv* env, jobject thiz) {
+    return (jfloat)txRateHzAtomic.load(std::memory_order_relaxed);
+}
+
+extern "C" JNIEXPORT jlong JNICALL
+Java_com_gamepad_client_MainActivity_getNativeAckCount(JNIEnv* env, jobject thiz) {
+    return (jlong)ackCount.load(std::memory_order_relaxed);
+}
+
+extern "C" JNIEXPORT jlong JNICALL
+Java_com_gamepad_client_MainActivity_getNativeSendFailureCount(JNIEnv* env, jobject thiz) {
+    return (jlong)sendFailureCount.load(std::memory_order_relaxed);
 }
 
 // Milliseconds since the last ACK from the PC, or -1 if no ACK ever received.

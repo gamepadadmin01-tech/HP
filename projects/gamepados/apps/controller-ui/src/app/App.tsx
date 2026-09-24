@@ -1,15 +1,26 @@
+import { savedPc, connectionMode, rememberMode, pendingWireless, confirmWireless, cancelPendingWireless, selectedLayout, rememberLayout, dashboardTab, rememberTab } from "./store/connectionMemory";
+import { createTransportCoordinator, USB_CHOICE_EVENT, WIRELESS_CHOICE_EVENT, prepareWirelessConnection } from "./transportCoordinator";
 import React, { useState, useRef, useEffect, useCallback, useMemo, useSyncExternalStore } from "react";
 // @ts-ignore - Ignore missing declaration file error
 import { createPortal } from "react-dom";
-import { Home, Usb, Activity, Gamepad2, X, Settings, User } from "lucide-react";
+import { Home, Usb, Activity, Gamepad2, X, Settings, User, Check, ArrowUpRight, Plus, ChevronRight, MoreHorizontal } from "lucide-react";
 import { QRScanOverlay } from "./components/Dialogs";
 import { PlaytimeLockout } from "./components/PlaytimeLockout";
 import { PlaytimeToast } from "./components/PlaytimeToast";
-import { SignInWall } from "./components/SignInWall";
+import { GuestTrialPill } from "./components/GuestPlans";
 import { beginPlay, endPlay, getPlaytimeState, isBlocked, onPlaytimeChange } from "./store/playtime";
-import { onDashboardTabRequest } from "./store/navIntent";
+import { onDashboardTabRequest, requestDashboardTab } from "./store/navIntent";
 import { LaunchNotice } from "./components/LaunchNotice";
-import { motion, AnimatePresence } from "framer-motion";
+import { CalmConnect } from "./components/CalmConnect";
+import { CalmSettings as TabSystem } from "./components/CalmSettings";
+import { useOverlayFocus, closeTopOverlay } from "./components/useOverlayFocus";
+import { CalmBrand, AppearanceButton, ConnectionSummary, DashboardAllowance, useShellAppearance } from "./components/CalmShell";
+
+import { ShellMotion } from "./components/ShellMotion";
+import { ShellScreenTransition } from "./components/ShellScreenTransition";
+import { SignInScreen } from "./components/SignInScreen";
+import { Ticket } from "lucide-react";
+import { motion, AnimatePresence, useIsPresent, useReducedMotion } from "framer-motion";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 import { View, BtnId, DashTab, GamepadPreset, CustomPad, CustomBtnDef, WidgetType, WidgetShape, WidgetAnchor, BtnPosOverride, PosOverrideMap } from "./types";
@@ -33,7 +44,7 @@ import {
   nativeInputEnabled, setNativeInputEnabled, clampWheelRange, WHEEL_RANGES,
 } from "./store/prefs";
 import type { WiredPref } from "./store/prefs";
-import { TabAccount } from "./components/TabAccount";
+import { TabAccount, AppSupport } from "./components/TabAccount";
 import { getSession, onSessionChange, revalidate } from "./store/account";
 import { SPRING, SPRING_SNAP, FADE, STEP, cardIn, backdropIn } from "./motion";
 
@@ -560,10 +571,11 @@ const usbWS = {
       let ws=null, latest=null, enabled=false, stream=false;
       function connect(){
         try{
-          ws=new WebSocket('ws://127.0.0.1:7777');
+          const socket = new WebSocket('ws://127.0.0.1:7777');
+          ws = socket;
           ws.binaryType='arraybuffer';
-          ws.onopen=function(){ postMessage({t:'open',v:true}); };
-          ws.onclose=function(){ ws=null; postMessage({t:'open',v:false}); };
+          ws.onopen=function(){ if(ws === socket && enabled) postMessage({t:'open',v:true}); };
+          ws.onclose=function(){ if(ws !== socket) return; ws=null; postMessage({t:'open',v:false}); };
           ws.onerror=function(){};
           ws.onmessage=function(e){
             var b=new Uint8Array(e.data);
@@ -696,7 +708,7 @@ function writeGyroZero(z: { x: number; y: number }) {
   try { localStorage.setItem(GYRO_ZERO_KEY, JSON.stringify(z)); } catch {}
 }
 
-function useGyro(maxAngle: number = 45, deadzone: number = 0, onGyroChange?: () => void, enabled: boolean = true, active: boolean = true) {
+function useGyro(maxAngle: number = 45, deadzone: number = 0, onGyroChange?: () => void, enabled: boolean = true, active: boolean = true, wheel: boolean = false) {
   // `enabled` = the user's gyro toggle. When off the loop still runs, so the
   //             bars glide to rest instead of freezing mid-tilt.
   // `active`  = is the controller screen actually on screen. When false there is
@@ -739,7 +751,15 @@ function useGyro(maxAngle: number = 45, deadzone: number = 0, onGyroChange?: () 
   // the app silently re-zero to the current pose would be actively wrong.
   const zeroRef = useRef(readGyroZero());
   const calibrate = useCallback(() => {
-    zeroRef.current = { ...rawRef.current };
+    let zero = { ...rawRef.current };
+    try {
+      const result = (window as any).AndroidBridge?.nativeGyroCalibrate?.();
+      if (typeof result === "string") {
+        const nativeZero = JSON.parse(result);
+        if (Number.isFinite(nativeZero.x) && Number.isFinite(nativeZero.y)) zero = nativeZero;
+      }
+    } catch {}
+    zeroRef.current = zero;
     writeGyroZero(zeroRef.current);
   }, []);
 
@@ -829,7 +849,8 @@ function useGyro(maxAngle: number = 45, deadzone: number = 0, onGyroChange?: () 
           // Keep the uncorrected reading for calibrate(), then apply the zero offset
           // so "wherever the phone is held when you tap CALIBRATE" becomes centre.
           rawRef.current = { x: data.nx || 0, y: data.ny || 0 };
-          const nx = (data.nx || 0) - zeroRef.current.x;
+          const deltaX = (data.nx || 0) - zeroRef.current.x;
+          const nx = wheel ? deltaX : ((deltaX + 180) % 360 + 360) % 360 - 180;
           const ny = (data.ny || 0) - zeroRef.current.y;
           const gateX = Math.abs(nx) < dzDeg ? 0 : nx;
           const gateY = Math.abs(ny) < dzDeg ? 0 : ny;
@@ -944,13 +965,13 @@ function useGyro(maxAngle: number = 45, deadzone: number = 0, onGyroChange?: () 
 
     window.addEventListener("deviceorientation", handleOrientation);
     return () => window.removeEventListener("deviceorientation", handleOrientation);
-  }, [maxAngle, deadzone, active]);
+  }, [maxAngle, deadzone, active, wheel]);
 
   return { tiltRef, leftBarRef, rightBarRef, calibrate, idleRef, idle };
 }
 
 // ─── Controller Screen ────────────────────────────────────────────────────────
-function ControllerScreen({ onBack, isActive, activeMapping, customPad, controllerLayout, posOverride, gyroOn, setGyroOn, gyroMaxAngle, gyroWheel, gyroMode, gyroDeadzone, gyroHaptic, gyroThrottle, gyroIdleDetect, rumbleOn }: {
+function ControllerScreen({ onBack, isActive: screenActive, activeMapping, customPad, controllerLayout, posOverride, gyroOn, setGyroOn, gyroMaxAngle, gyroWheel, gyroMode, gyroDeadzone, gyroHaptic, gyroThrottle, gyroIdleDetect, rumbleOn }: {
   onBack: () => void; isActive: boolean;
   activeMapping: Partial<Record<BtnId, string>>;
   customPad?: CustomPad;
@@ -980,6 +1001,8 @@ function ControllerScreen({ onBack, isActive, activeMapping, customPad, controll
   // while the clock ticks, so subscribing to it re-rendered this whole screen --
   // pad SVG included -- once a second during play. A boolean flips at most once
   // a session, so React bails out until it actually changes.
+  const present = useIsPresent();
+  const isActive = screenActive && present;
   const outOfTime = useSyncExternalStore(onPlaytimeChange, isBlocked, isBlocked);
   // A fresh install could open this screen and stream real input with no
   // account at all — playtime was never tracked because nothing checked for
@@ -992,7 +1015,15 @@ function ControllerScreen({ onBack, isActive, activeMapping, customPad, controll
     if (!isActive) return;
     void beginPlay();
     return () => { void endPlay(); };
-  }, [isActive]);
+  }, [isActive, hasSession]);
+
+  const leavingForPlans = useRef(false);
+  useEffect(() => {
+    if (!isActive || !outOfTime || hasSession || leavingForPlans.current) return;
+    leavingForPlans.current = true;
+    requestDashboardTab("account");
+    onBack();
+  }, [isActive, outOfTime, hasSession, onBack]);
 
   useEffect(() => {
     if (!isActive) return;
@@ -1113,7 +1144,7 @@ function ControllerScreen({ onBack, isActive, activeMapping, customPad, controll
   }, []);
   // `isActive` is the same signal the streaming worker uses — see the 1.3.23
   // always-streaming fix. One source of truth for "the user is playing".
-  const gyroTilt = useGyro(gyroMaxAngle, gyroDeadzone, () => sendTelemetryRef.current(), gyroOn, isActive);
+  const gyroTilt = useGyro(gyroMaxAngle, gyroDeadzone, () => sendTelemetryRef.current(), gyroOn, isActive, gyroWheel);
   const lastGyroHitMax = useRef({ x: false, y: false });
   const [realTelemetry, setRealTelemetry] = useState(null);
 
@@ -1397,13 +1428,11 @@ function ControllerScreen({ onBack, isActive, activeMapping, customPad, controll
   // DASHBOARD, pad_writes=1. The wired CONNECTION stays open (standing link);
   // only transmission is gated. Cleanup also fires on unmount.
   useEffect(() => {
-    // `&& !outOfTime && hasSession` is the actual enforcement on this side.
-    // The overlays below are only what the user sees -- a dialog that can be
-    // dismissed, or that fails to mount, must never be the thing standing
-    // between a spent quota (or a missing account) and input reaching the PC.
+    // Quota gates actual input for both guests and signed-in accounts.
+    // The expiry dialog is presentation; it does not enforce the allowance.
     // Latching NEUTRAL here also means the pad goes inert rather than
     // freezing on whatever was last held down.
-    const streaming = isActive && !outOfTime && hasSession;
+    const streaming = isActive && !outOfTime && !isBlocked();
     usbWS.setStreaming(streaming);
     // Same gate for the NATIVE engine (Wi-Fi/tether). Its ~30Hz keep-alive
     // otherwise re-broadcasts the last real payload from every screen; when
@@ -1477,7 +1506,7 @@ function ControllerScreen({ onBack, isActive, activeMapping, customPad, controll
     // "I can touch the controller but not the sign-in box". Both overlays
     // share this one root cause and both are fixed by the same condition.
     if (!isActive || !nativeFlag || !bridge || !bridge.setNativeInputGeometry
-      || !hasSession || outOfTime) return;
+      || outOfTime) return;
     let cancelled = false;
     let raf1 = 0, raf2 = 0;
     const deactivate = () => {
@@ -1626,15 +1655,20 @@ function ControllerScreen({ onBack, isActive, activeMapping, customPad, controll
         ← BACK
       </button>
 
-      {/* Live latency badge — real measured round-trip ms. Always visible so
-          you can compare against other apps under identical conditions.
-          Green <20ms, amber 20–40, red >40. */}
+      {/* Live link-quality badge. Latency is a smoothed ACK round trip; jitter
+          is the average change between consecutive RTT samples. Showing both
+          catches a link that has a good average but feels jerky in play. */}
       {(() => {
         const lat: number | null = (realTelemetry && typeof (realTelemetry as any).latency === "number")
           ? (realTelemetry as any).latency : null;
+        const jitter: number | null = (realTelemetry && typeof (realTelemetry as any).jitter === "number")
+          ? (realTelemetry as any).jitter : null;
         const connected = !!(realTelemetry && (realTelemetry as any).linkAlive);
-        const color = lat == null ? "rgba(255,255,255,0.4)"
-          : lat < 20 ? "#34d399" : lat < 40 ? "#fbbf24" : "#f87171";
+        // Two links can have the same average RTT but very different feel. Add
+        // two jitter units to the colour threshold without changing the RTT shown.
+        const qualityMs = lat == null ? null : lat + Math.max(0, jitter ?? 0) * 2;
+        const color = qualityMs == null ? "rgba(255,255,255,0.4)"
+          : qualityMs < 20 ? "#34d399" : qualityMs < 40 ? "#fbbf24" : "#f87171";
         return (
           <div className="absolute z-10 flex items-center gap-1 px-2 py-1 rounded-full pointer-events-none"
             style={{
@@ -1646,7 +1680,9 @@ function ControllerScreen({ onBack, isActive, activeMapping, customPad, controll
             }}>
             <span className="w-1.5 h-1.5 rounded-full" style={{ background: color, boxShadow: `0 0 6px ${color}` }} />
             <span className="text-[10px] font-bold tabular-nums" style={{ color }}>
-              {connected && lat != null ? `${lat.toFixed(1)} ms` : "— ms"}
+              {connected && lat != null
+                ? `${lat.toFixed(1)} ms${jitter != null && jitter >= 0.1 ? ` · j${jitter.toFixed(1)}` : ""}`
+                : "— ms"}
             </span>
           </div>
         );
@@ -1748,8 +1784,7 @@ function ControllerScreen({ onBack, isActive, activeMapping, customPad, controll
               onPointerDown={(e) => {
                 e.stopPropagation();
                 gyroTilt.calibrate();
-                // PHASE 3: zero the NATIVE gyro path too (it keeps its own offset).
-                try { (window as any).AndroidBridge?.nativeGyroCalibrate?.(); } catch {}
+                // calibrate() uses the native snapshot for BOTH paths.
                 triggerHaptic(15);
               }}
               className="pointer-events-auto flex items-center gap-1 px-2 py-0.5 rounded-full text-[8px] font-bold tracking-wider uppercase active:scale-90 transition-transform"
@@ -1906,7 +1941,7 @@ function ControllerScreen({ onBack, isActive, activeMapping, customPad, controll
               // symmetrically about the widget's (x,y) centre. Drives the
               // analog ltFill / rtFill. Footprint matches the old app
               // (each pill w≈92 h≈538 at r92, ~12px centre gap).
-              if (btn.type === "ltrt") {
+              if ((btn.type as string) === "ltrt") {
                 const pillW  = btn.r;
                 const pillH  = btn.r * 5.85;
                 const pillRx = btn.r * 0.5;
@@ -2102,14 +2137,9 @@ function ControllerScreen({ onBack, isActive, activeMapping, customPad, controll
         )}
       </AnimatePresence>
 
-      {/* Checked ahead of the quota lockout above -- if there is no account at
-          all, quota has not even come up yet. Same "this is the symptom, not
-          the mechanism" rule: the streaming gate already stopped input before
-          this had a chance to render. No dismiss button anywhere in it, on
-          purpose -- see SignInWall.tsx for why. */}
-      <AnimatePresence>
-        {!hasSession && <SignInWall key="signin-wall" />}
-      </AnimatePresence>
+      {!hasSession && !outOfTime && <GuestTrialPill onPlans={() => {
+        requestDashboardTab("account"); onBack();
+      }} />}
     </div>
   );
 }
@@ -2140,324 +2170,30 @@ function useNetworkTelemetry(isActive: boolean) {
   return telemetry;
 }
 function ScannerScreen({ onDashboard }: { onDashboard: () => void }) {
+  const shellPresent = useIsPresent();
   const realTelemetry = useNetworkTelemetry(true);
-  const [tab, setTab] = useState<"wireless" | "wired">("wireless");
-  const [wiredMode, setWiredModeState] = useState<WiredPref>(getWiredPref());
-  const chooseWired = (m: WiredPref) => { setWiredPref(m); setWiredModeState(m); };
+  const { appearance, toggle } = useShellAppearance();
   const [showScanner, setShowScanner] = useState(false);
-  const [showManual, setShowManual] = useState(false);
-  const [ip, setIp] = useState("");
-  const [port, setPort] = useState("7777");
-  const [connecting, setConnecting] = useState(false);
-  const [usbStatus, setUsbStatus] = useState<"idle" | "connecting" | "success" | "failed">("idle");
-  // NOTE: USB auto-pair is handled globally at the app root (onUsbTetherChanged)
-  // so it works from any screen and any plug-in ordering — not just here.
+  useEffect(() => {
+    (window as any).__scannerBack = () => {
+      if (!showScanner) return false;
+      setShowScanner(false); return true;
+    };
+    return () => { delete (window as any).__scannerBack; };
+  }, [showScanner]);
+  // USB auto-pair remains at the app root; never reintroduce cached PC addresses.
 
-  // Recently-connected-PC caching was removed: on some phones, switching between
-  // PCs could dial the stale saved PC instead of the freshly-scanned one. Every
-  // connection is now a fresh QR scan. Purge any cache an older build left behind.
-  useEffect(() => { try { localStorage.removeItem("last_server"); } catch {} }, []);
-
-  function handleManualConnect() {
-    const bridge = (window as any).AndroidBridge;
-    if (bridge && bridge.connectToPC) {
-      bridge.connectToPC(ip, parseInt(port) || 7777, "manual");
-    }
+  const manualConnect = (ip: string, port: number, key: string) => {
+    prepareWirelessConnection();
+    pendingWireless({ ip, port, key });
+    (window as any).AndroidBridge?.connectToPC?.(ip, port, key);
     onDashboard();
-  }
-
-  function handleWiredConnect() {
-    setConnecting(true);
-    setUsbStatus("connecting");
-    const bridge = (window as any).AndroidBridge;
-    if (bridge && bridge.connectToPC) {
-      bridge.connectToPC("255.255.255.255", parseInt(port) || 7777, "usb");
-    }
-    
-    let attempts = 0;
-    const interval = setInterval(() => {
-      attempts++;
-      const isConnected = bridge && (() => {
-        try {
-          const telemetryStr = bridge.getNetworkTelemetryJson();
-          const tel = JSON.parse(telemetryStr);
-          return tel && tel.linkAlive;
-        } catch(e) { return false; }
-      })();
-
-      if (isConnected) {
-        clearInterval(interval);
-        setUsbStatus("success");
-        setTimeout(() => {
-          setConnecting(false);
-          setUsbStatus("idle");
-          onDashboard();
-        }, 1200);
-      } else if (attempts >= 10) { // 2.5 seconds timeout
-        clearInterval(interval);
-        setUsbStatus("failed");
-        setConnecting(false);
-      }
-    }, 250);
-  }
-
-  const stepDot = (n: number, active: boolean) => (
-    <div className="flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold"
-      style={{ background: active ? "rgba(79,134,198,0.15)" : "rgba(255,255,255,0.05)", border: `1.5px solid ${active ? "#5D90CB" : "rgba(255,255,255,0.1)"}`, color: active ? "#5D90CB" : "rgba(255,255,255,0.35)" }}>
-      {n}
-    </div>
-  );
-
-  return (
-    <div className={`absolute inset-0 flex flex-col overflow-hidden transition-colors duration-300 ${showScanner ? "bg-transparent" : "bg-background"}`}
-      style={{ fontFamily: "'Inter',sans-serif" }}>
-      {showScanner && <QRScanOverlay onClose={() => setShowScanner(false)} onConnect={onDashboard} />}
-
-      {!showScanner && (
-        <>
-          {/* Header */}
-          <div className="flex-shrink-0 flex items-center justify-between px-5 pb-4"
-        style={{ background: "rgba(7,9,15,0.95)", borderBottom: "1px solid rgba(79,134,198,0.08)", paddingTop: "calc(var(--android-safe-top, env(safe-area-inset-top, 36px)) + 12px)" }}>
-        <div className="flex items-center gap-2.5">
-          <Gamepad2 size={17} className="text-primary" />
-          <span className="text-base font-bold tracking-[0.18em] text-primary"
-            style={{ fontFamily: "'Space Grotesk',sans-serif" }}>GAMEPAD OS</span>
-        </div>
-        <button onClick={onDashboard}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold"
-          style={{ background: "rgba(79,134,198,0.07)", border: "1px solid rgba(79,134,198,0.18)", color: "rgba(79,134,198,0.75)" }}>
-          <Settings size={11} /> Dashboard
-        </button>
-      </div>
-
-      {/* Title */}
-      <div className="flex-shrink-0 px-5 pt-5 pb-4">
-        <h1 className="text-xl font-bold text-foreground" style={{ fontFamily: "'Space Grotesk',sans-serif" }}>Connect to PC</h1>
-        <p className="text-xs text-muted-foreground mt-1">Choose your connection method below</p>
-      </div>
-
-      {/* Connection method tabs */}
-      <div className="flex-shrink-0 px-5 mb-4">
-        <div className="flex gap-2 p-1 rounded-xl" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)" }}>
-          {(["wireless", "wired"] as const).map(t => (
-            <button key={t} onClick={() => { setTab(t); setShowManual(false); }}
-              className="flex-1 py-2.5 rounded-lg text-xs font-bold tracking-wide transition-all duration-200"
-              style={tab === t
-                ? { background: t === "wireless" ? "rgba(79,134,198,0.15)" : "rgba(90,16,16,0.5)", color: t === "wireless" ? "#5D90CB" : "#ff6060", border: `1px solid ${t === "wireless" ? "rgba(79,134,198,0.3)" : "rgba(200,40,40,0.4)"}` }
-                : { background: "transparent", color: "rgba(255,255,255,0.35)", border: "1px solid transparent" }}>
-              {t === "wireless" ? "⌘ Wireless" : "⟠ Wired (USB)"}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Scrollable content */}
-      <div className="flex-1 overflow-y-auto px-5 pb-8">
-
-        <AnimatePresence mode="wait">
-          {/* ── Wireless Tab ── */}
-          {tab === "wireless" && (
-            <motion.div
-              key="wireless"
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -12 }}
-              transition={{ duration: 0.18, ease: "easeOut" }}
-              className="space-y-3"
-            >
-              {/* Step 1 */}
-              <div className="rounded-2xl p-4" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}>
-                <div className="flex items-start gap-3">
-                  {stepDot(1, true)}
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-foreground">Get the PC Server</p>
-                    <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
-                      Download and run the Gamepad Host app on your Windows PC
-                    </p>
-                    <button
-                      onClick={() => {
-                        const url = "https://gamepad.space/#download";
-                        const b = (window as any).AndroidBridge;
-                        if (b && b.openUrl) { try { b.openUrl(url); return; } catch {} }
-                        try { window.open(url, "_blank"); } catch {}
-                      }}
-                      className="mt-3 px-4 py-2 rounded-lg text-xs font-semibold transition-all active:scale-95 duration-150"
-                      style={{ background: "transparent", border: "1px solid rgba(79,134,198,0.35)", color: "#5D90CB" }}>
-                      Get Download Link
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              {/* Step 2 */}
-              <div className="rounded-2xl p-4" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}>
-                <div className="flex items-start gap-3">
-                  {stepDot(2, true)}
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-foreground">Prepare to Scan</p>
-                    <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
-                      Ensure both devices are on the same Wi-Fi network. Open the PC app to display your connection QR code.
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Step 3 — Scan action */}
-              <div className="rounded-2xl p-4" style={{ background: "rgba(79,134,198,0.04)", border: "1px solid rgba(79,134,198,0.15)" }}>
-                <div className="flex items-start gap-3 mb-4">
-                  {stepDot(3, true)}
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-foreground">Scan &amp; Connect</p>
-                    <p className="text-xs text-muted-foreground mt-1">Point your camera at the QR code shown on the PC app</p>
-                  </div>
-                </div>
-                <button onClick={() => setShowScanner(true)}
-                  className="w-full py-3.5 rounded-xl text-sm font-bold tracking-wide transition-all active:scale-[0.98] duration-150"
-                  style={{ background: "rgba(79,134,198,0.18)", border: "1.5px solid rgba(79,134,198,0.4)", color: "#5D90CB" }}>
-                  📷 Scan PC QR Code
-                </button>
-                <button onClick={() => setShowManual(v => !v)}
-                  className="w-full mt-2 py-1.5 text-xs text-muted-foreground/60 transition-colors hover:text-muted-foreground">
-                  {showManual ? "▲ hide manual entry" : "or enter details manually"}
-                </button>
-                {showManual && (
-                  <div className="mt-1 space-y-2">
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1">PC IP Address</label>
-                        <input value={ip} onChange={e => setIp(e.target.value)}
-                          placeholder="192.168.1.xxx" maxLength={15}
-                          className="w-full px-2.5 py-2 rounded-lg text-xs text-foreground font-mono outline-none"
-                          style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(79,134,198,0.2)" }} />
-                      </div>
-                      <div>
-                        <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Port</label>
-                        <input value={port} onChange={e => setPort(e.target.value)}
-                          placeholder="7777" maxLength={5}
-                          className="w-full px-2.5 py-2 rounded-lg text-xs text-foreground font-mono outline-none"
-                          style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(79,134,198,0.2)" }} />
-                      </div>
-                    </div>
-                    <button onClick={handleManualConnect}
-                      className="w-full py-3 rounded-xl text-sm font-bold transition-all active:scale-[0.98] duration-150"
-                      style={{ background: "rgba(79,134,198,0.12)", border: "1px solid rgba(79,134,198,0.3)", color: "#5D90CB" }}>
-                      Connect
-                    </button>
-                  </div>
-                )}
-              </div>
-            </motion.div>
-          )}
-
-          {/* ── Wired (USB) Tab ── */}
-          {tab === "wired" && (
-            <motion.div
-              key="wired"
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -12 }}
-              transition={{ duration: 0.18, ease: "easeOut" }}
-              className="space-y-3"
-            >
-              {/* Wired mode selector: auto-prefers tethering, or force one. Exactly
-                  ONE transport connects, so the phone never registers as two pads. */}
-              <div className="rounded-2xl p-3" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}>
-                <p className="text-[11px] font-semibold text-muted-foreground mb-2 px-0.5">WIRED MODE</p>
-                <div className="grid grid-cols-3 gap-1.5">
-                  {([["auto", "Auto"], ["tether", "USB Tethering"], ["usbdebug", "USB Debugging"]] as [WiredPref, string][]).map(([m, label]) => {
-                    const on = wiredMode === m;
-                    return (
-                      <button key={m} onClick={() => chooseWired(m)}
-                        className="py-2 rounded-xl text-[11px] font-semibold transition-colors"
-                        style={{
-                          background: on ? "rgba(251,191,36,0.15)" : "rgba(255,255,255,0.03)",
-                          color: on ? "#fbbf24" : "rgba(255,255,255,0.6)",
-                          border: `1px solid ${on ? "rgba(251,191,36,0.4)" : "rgba(255,255,255,0.08)"}`,
-                        }}>
-                        {label}
-                      </button>
-                    );
-                  })}
-                </div>
-                <p className="text-[10px] text-muted-foreground mt-2 px-0.5 leading-relaxed">
-                  {wiredMode === "auto" ? "Prefers USB tethering for lowest latency; falls back to USB debugging."
-                    : wiredMode === "tether" ? "Forces USB tethering (enable it in Settings → Hotspot & tethering)."
-                    : "Forces USB debugging over adb (Developer Options → USB Debugging)."}
-                </p>
-              </div>
-
-              {/* Step 1 */}
-              <div className="rounded-2xl p-4" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}>
-                <div className="flex items-start gap-3">
-                  {stepDot(1, true)}
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-foreground">Enable USB Debugging</p>
-                    <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
-                      On your phone: <span className="text-foreground font-semibold">Settings → Developer Options → USB Debugging</span>. (Tap <span className="text-foreground font-semibold">Build Number</span> 7× to unlock Developer Options.)
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Step 2 */}
-              <div className="rounded-2xl p-4" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}>
-                <div className="flex items-start gap-3">
-                  {stepDot(2, true)}
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-foreground">Plug in &amp; run the PC app</p>
-                    <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
-                      Connect the USB cable and make sure <span className="text-foreground font-semibold">GamepadServer</span> is running on your PC.
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Step 3 — fully automatic, no button. */}
-              <div className="rounded-2xl p-4" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}>
-                <div className="flex items-start gap-3">
-                  {stepDot(3, true)}
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-foreground">Automatic Connection</p>
-                    <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
-                      No button needed — your PC is detected and connected automatically over USB.
-                    </p>
-                  </div>
-                </div>
-                {(() => {
-                  const state = linkState(realTelemetry);
-                  const color = linkColor(state);
-                  const line =
-                    state === "connected" ? "USB connected — controller ready"
-                    : state === "no-reply" ? "PC not replying"
-                    : state === "stalled" ? "PC stopped answering"
-                    : "Waiting for USB + PC server…";
-                  return (
-                    <div className="flex flex-col items-center gap-1 mt-4 py-2.5 px-3 rounded-xl"
-                      style={{ background: "rgba(0,0,0,0.25)", border: "1px solid rgba(255,255,255,0.06)" }}>
-                      <div className="flex items-center gap-2">
-                        <div className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: color }} />
-                        <span className="text-[11px] font-mono" style={{ color }}>{line}</span>
-                      </div>
-                      {/* The entire reason these states exist: tell the user what
-                          to go and check, instead of restating the symptom. */}
-                      {(state === "no-reply" || state === "stalled") && (
-                        <span className="text-[10px] leading-snug text-center"
-                          style={{ color: "rgba(255,255,255,0.55)" }}>
-                          {linkHint(state)}
-                        </span>
-                      )}
-                    </div>
-                  );
-                })()}
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
-      </>
-      )}
-    </div>
-  );
+  };
+  return <div className={`gp-connect gp-shell absolute inset-0 flex flex-col overflow-hidden ${showScanner ? "gp-camera-active" : ""}`} data-calm-theme={appearance} style={{ pointerEvents: shellPresent ? 'auto' : 'none' }}>
+    {showScanner ? <QRScanOverlay onClose={() => setShowScanner(false)} onConnect={onDashboard} />
+      : <CalmConnect telemetry={realTelemetry} appearance={appearance} onAppearance={toggle}
+          onBack={onDashboard} onScan={() => setShowScanner(true)} onManual={manualConnect} />}
+  </div>;
 }
 
 // ─── Shared dashboard helpers ─────────────────────────────────────────────────
@@ -2490,57 +2226,21 @@ function GamepadCard({ preset, active, onPlay, onEdit, onSelect, isModified }: {
   preset: GamepadPreset; active: boolean; onPlay: () => void;
   onEdit?: () => void; onSelect?: () => void; isModified?: boolean;
 }) {
-  return (
-    <div className="rounded-2xl flex flex-col overflow-hidden transition-all duration-200 cursor-pointer"
-      onClick={onSelect}
-      style={{
-        border: `1.5px solid ${active ? preset.color : "rgba(255,255,255,0.12)"}`,
-        background: active ? `${preset.color}0e` : "rgba(255,255,255,0.02)",
-        boxShadow: active ? `0 0 0 1px ${preset.color}, 0 0 18px ${preset.color}55` : "none",
-      }}>
-      {/* Card header: icon + name (compact — two cards share each row) */}
-      <div className="flex items-center justify-between px-2.5 pt-2.5 pb-1.5 min-w-0">
-        <div className="flex items-center gap-1.5 min-w-0">
-          <span className="text-base leading-none flex-shrink-0">{preset.icon}</span>
-          <div className="min-w-0">
-            <p className="text-xs font-semibold text-foreground leading-tight truncate">{preset.name}</p>
-            <p className="text-[9px] text-muted-foreground truncate">{preset.genre}</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-1 flex-shrink-0">
-          {isModified && (
-            <span className="text-[8px] font-semibold px-1 py-0.5 rounded"
-              style={{ background: `${preset.color}20`, color: preset.color }}>edited</span>
-          )}
-          {active && <div className="w-2 h-2 rounded-full" style={{ background: preset.color }} />}
-        </div>
-      </div>
-
-      {/* Full-width visual layout preview — same renderer as the custom pads */}
-      <div className="mx-2.5 mb-1.5 rounded-lg overflow-hidden"
-        style={{ background: "rgba(0,0,0,0.55)", border: "1px solid rgba(255,255,255,0.07)" }}>
-        <svg viewBox="0 0 1280 570" className="w-full block" preserveAspectRatio="xMidYMid meet" style={{ aspectRatio: "1280 / 570" }}>
-          {STANDARD_LAYOUT_THUMB.map(b => <PadThumbWidget key={b.uid} b={b} accent={preset.color} />)}
-        </svg>
-      </div>
-
-      {/* Actions */}
-      <div className="px-2.5 pb-2.5 flex gap-1.5">
-        <button onClick={onPlay}
-          className="flex-1 py-2 rounded-lg text-[11px] font-black tracking-widest transition-all active:scale-[0.97] duration-150 select-none"
-          style={{ background: active ? preset.color : `${preset.color}22`, color: active ? "#000001" : preset.color, border: `1px solid ${preset.color}50`, touchAction: 'manipulation' }}>
-          <span>{active ? "LAUNCH" : "PLAY"}</span>
-        </button>
-        {onEdit && (
-          <button onClick={onEdit}
-            className="px-2 py-1.5 rounded-lg text-[10px] font-semibold transition-all active:scale-[0.97] duration-150"
-            style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.55)" }}>
-            EDIT
-          </button>
-        )}
-      </div>
+  return <div className="calm-controller-card" data-selected={active}>
+    <button data-no-shell-press className="calm-card-select" onClick={onSelect} aria-pressed={active}>
+      <span><strong className="calm-card-name">{preset.name}</strong><small className="calm-card-detail">{isModified ? "Personalized controls" : "Ready for your next game"}</small></span>
+      <span className="calm-card-check" aria-hidden="true"><Check size={16} /></span>
+    </button>
+    <button className="calm-pad-preview" onClick={onSelect} aria-label={`Select ${preset.name}`} aria-pressed={active}>
+      <svg viewBox="0 0 1280 570" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+        {STANDARD_LAYOUT_THUMB.map(b => <PadThumbWidget key={b.uid} b={b} accent={preset.color} />)}
+      </svg>
+    </button>
+    <div className="calm-card-actions">
+      <button className="calm-primary" onClick={onPlay} aria-label={`Play ${preset.name}`}>Play<ArrowUpRight size={18} aria-hidden="true" /></button>
+      {onEdit && <button className="calm-secondary" onClick={onEdit}>Edit</button>}
     </div>
-  );
+  </div>;
 }
 
 // ─── Preset label editor ──────────────────────────────────────────────────────
@@ -2951,7 +2651,7 @@ function PadThumbWidget({ b, accent }: { b: CustomBtnDef; accent: string }) {
       </g>
     ))}</g>;
   }
-  if (b.type === "ltrt") {
+  if ((b.type as string) === "ltrt") {
     const pillW = r, pillH = r * 5.85, gap = r * 0.13, rx = r * 0.5;
     const ltX = x - gap / 2 - pillW, rtX = x + gap / 2;
     return (
@@ -3019,52 +2719,28 @@ function CustomPadSlot({ pad, active, onPlay, onEdit, onDelete, onDuplicate, onS
   // Only LAUNCH stays on the card; everything else lives behind a ⋮ menu.
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirmDel, setConfirmDel] = useState(false);
+  const menuRef=useRef<HTMLDivElement>(null);
+  useOverlayFocus(menuOpen,menuRef,()=>{setMenuOpen(false);setConfirmDel(false);});
   // Full-width layout thumbnail — render the actual widget shapes (not labels),
   // scaled from the 1264×570 design canvas, like a mini image of the pad.
   const CW = 1280, CH = 570;
 
   return (
-    <div className="rounded-2xl flex flex-col transition-all duration-200"
-      style={{
-        border: `1.5px solid ${active ? pad.color : "rgba(255,255,255,0.12)"}`,
-        background: active ? `${pad.color}0e` : "rgba(255,255,255,0.02)",
-        boxShadow: active ? `0 0 0 1px ${pad.color}, 0 0 18px ${pad.color}55` : "none",
-      }}>
-
-      {/* Card header: name (compact — two cards share each row) */}
-      <div className="flex items-center gap-1.5 px-2.5 pt-2.5 pb-1.5 min-w-0">
-        <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: pad.color }} />
-        <div className="min-w-0">
-          <p className="text-xs font-semibold text-foreground leading-tight truncate">{pad.name}</p>
-          <p className="text-[9px] text-muted-foreground truncate">{pad.buttons.length} widget{pad.buttons.length !== 1 ? "s" : ""} · Custom</p>
-        </div>
-      </div>
-
-      {/* Full-width layout preview thumbnail */}
-      <div className="mx-2.5 mb-1.5 rounded-lg overflow-hidden cursor-pointer" onClick={onSelect}
-        style={{ background: "rgba(0,0,0,0.55)", border: "1px solid rgba(255,255,255,0.07)" }}>
-        <svg viewBox={`0 0 ${CW} ${CH}`} className="w-full block" preserveAspectRatio="xMidYMid meet" style={{ aspectRatio: `${CW} / ${CH}` }}>
-          {pad.buttons.length === 0 && (
-            <text x={CW / 2} y={CH / 2} textAnchor="middle" dominantBaseline="central"
-              fontSize={36} fill="rgba(255,255,255,0.25)" style={{ fontFamily: "'Inter',sans-serif" }}>Empty layout</text>
-          )}
+    <div className="calm-controller-card" data-selected={active}>
+      <button data-no-shell-press className="calm-card-select" onClick={onSelect} aria-pressed={active}>
+        <span><strong className="calm-card-name">{pad.name}</strong><small className="calm-card-detail">{pad.buttons.length} controls · Your layout</small></span>
+        <span className="calm-card-check" aria-hidden="true"><Check size={16} /></span>
+      </button>
+      <button className="calm-pad-preview" onClick={onSelect} aria-label={`Select ${pad.name}`} aria-pressed={active}>
+        <svg viewBox={`0 0 ${CW} ${CH}`} preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+          {pad.buttons.length === 0 && <text x={CW / 2} y={CH / 2} textAnchor="middle" dominantBaseline="central" fontSize={36} fill="rgba(255,255,255,0.5)">Empty layout</text>}
           {pad.buttons.map(b => <PadThumbWidget key={b.uid} b={b} accent={pad.color} />)}
         </svg>
-      </div>
-
-      {/* Actions: LAUNCH stays on the card; Edit / Duplicate / Share / Delete
-          live behind a ⋮ menu so the card stays clean. */}
-      <div className="px-2.5 pb-2.5 flex gap-1.5 relative">
-        <button onClick={onPlay}
-          className="flex-1 py-2 rounded-lg text-[11px] font-black tracking-widest transition-all active:scale-[0.97] duration-150 select-none"
-          style={{ background: active ? pad.color : `${pad.color}22`, color: active ? "#000001" : pad.color, border: `1px solid ${pad.color}50`, touchAction: "manipulation" }}>
-          {active ? "LAUNCH" : "PLAY"}
-        </button>
-        <button onClick={e => { e.stopPropagation(); setConfirmDel(false); setMenuOpen(v => !v); }}
-          className={`px-2.5 rounded-lg text-base leading-none transition-all active:scale-95 ${menuOpen ? "text-primary" : "text-white/60"}`}
-          style={{ background: menuOpen ? "rgba(79,134,198,0.1)" : "rgba(255,255,255,0.06)", border: `1px solid ${menuOpen ? "rgba(79,134,198,0.3)" : "rgba(255,255,255,0.1)"}` }}
-          title="More options" aria-label="More options">
-          ⋮
+      </button>
+      <div className="calm-card-actions">
+        <button className="calm-primary" onClick={onPlay} aria-label={`Play ${pad.name}`}>Play<ArrowUpRight size={18} aria-hidden="true" /></button>
+        <button className="calm-icon-button" onClick={() => { setConfirmDel(false); setMenuOpen(v => !v); }} aria-label={`More options for ${pad.name}`} aria-expanded={menuOpen}>
+          <MoreHorizontal size={22} aria-hidden="true" />
         </button>
 
         <AnimatePresence>
@@ -3074,39 +2750,40 @@ function CustomPadSlot({ pad, active, onPlay, onEdit, onDelete, onDuplicate, onS
               <div className="fixed inset-0 z-40" onClick={() => { setMenuOpen(false); setConfirmDel(false); }} />
               <motion.div
                 initial={{ opacity: 0, scale: 0.85 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }}
+                ref={menuRef} role="dialog" aria-label={`Actions for ${pad.name}`}
                 transition={SPRING_SNAP}
                 style={{ transformOrigin: "bottom right" }}
-                className="absolute right-2.5 bottom-12 z-50 w-36 rounded-xl overflow-hidden shadow-2xl bg-zinc-900 border border-white/12">
+                className="absolute right-2.5 bottom-12 z-50 w-36 rounded-xl overflow-hidden shadow-2xl calm-surface border border-white/12">
                 {!confirmDel ? (
                   <>
                     <button onClick={() => { setMenuOpen(false); onEdit(); }}
-                      className="w-full flex items-center gap-2.5 px-3 py-2.5 text-[11px] font-semibold text-white/85 hover:bg-white/8 active:bg-white/12 transition-colors">
+                      className="w-full flex items-center gap-2.5 px-3 py-2.5 text-xs font-semibold calm-ink hover:bg-white/8 active:bg-white/12 transition-colors">
                       <span className="w-3.5 text-center text-primary">✎</span> Edit
                     </button>
                     <button onClick={() => { setMenuOpen(false); onDuplicate(); }}
-                      className="w-full flex items-center gap-2.5 px-3 py-2.5 text-[11px] font-semibold text-white/85 hover:bg-white/8 active:bg-white/12 transition-colors border-t border-white/5">
-                      <span className="w-3.5 text-center text-white/60">◫</span> Duplicate
+                      className="w-full flex items-center gap-2.5 px-3 py-2.5 text-xs font-semibold calm-ink hover:bg-white/8 active:bg-white/12 transition-colors border-t border-white/5">
+                      <span className="w-3.5 text-center calm-muted">◫</span> Duplicate
                     </button>
                     <button onClick={() => { setMenuOpen(false); onShare(); }}
-                      className="w-full flex items-center gap-2.5 px-3 py-2.5 text-[11px] font-semibold text-white/85 hover:bg-white/8 active:bg-white/12 transition-colors border-t border-white/5">
+                      className="w-full flex items-center gap-2.5 px-3 py-2.5 text-xs font-semibold calm-ink hover:bg-white/8 active:bg-white/12 transition-colors border-t border-white/5">
                       <span className="w-3.5 text-center text-primary">⤴</span> Share
                     </button>
                     <button onClick={() => setConfirmDel(true)}
-                      className="w-full flex items-center gap-2.5 px-3 py-2.5 text-[11px] font-semibold text-red-400 hover:bg-red-500/10 active:bg-red-500/15 transition-colors border-t border-white/5">
+                      className="w-full flex items-center gap-2.5 px-3 py-2.5 text-xs font-semibold text-red-400 hover:bg-red-500/10 active:bg-red-500/15 transition-colors border-t border-white/5">
                       <span className="w-3.5 text-center">🗑</span> Delete
                     </button>
                   </>
                 ) : (
                   <div className="p-2.5">
-                    <p className="text-[10px] font-bold text-red-400 text-center mb-2 leading-snug">Delete &ldquo;{pad.name}&rdquo;?</p>
+                    <p className="text-xs font-bold text-red-400 text-center mb-2 leading-snug">Delete &ldquo;{pad.name}&rdquo;?</p>
                     <div className="flex gap-1.5">
                       <button onClick={() => { setMenuOpen(false); setConfirmDel(false); onDelete(); }}
-                        className="flex-1 py-1.5 rounded-lg text-[10px] font-black bg-red-600 active:bg-red-700 text-white transition-all active:scale-95">
+                        className="flex-1 py-1.5 rounded-lg text-xs font-black bg-red-600 active:bg-red-700 calm-ink transition-all active:scale-95">
                         DELETE
                       </button>
                       <button onClick={() => setConfirmDel(false)}
-                        className="flex-1 py-1.5 rounded-lg text-[10px] font-semibold text-white/70 transition-all active:scale-95"
-                        style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)" }}>
+                        className="flex-1 py-1.5 rounded-lg text-xs font-semibold calm-muted transition-all active:scale-95"
+                        style={{ background: "var(--calm-soft, #292f31)", border: "1px solid var(--calm-line, #343c3f)" }}>
                         CANCEL
                       </button>
                     </div>
@@ -3129,7 +2806,8 @@ function CustomPadSlot({ pad, active, onPlay, onEdit, onDelete, onDuplicate, onS
 
 
 
-function TabHome({ onLaunch, onConnect, onLaunchEditor, selectedPresetId, onSelectPreset, customPads, onSaveCustomPad, onDeleteCustomPad, onDuplicateCustomPad, presetOverrides, onSavePresetOverride, onResetPreset, posOverrides, onSavePosOverride, onResetPosOverride, onNewLayout, pendingEditPad, onClearPendingEditPad }: {
+function TabHome({ realTelemetry, onLaunch, onConnect, onLaunchEditor, selectedPresetId, onSelectPreset, customPads, onSaveCustomPad, onDeleteCustomPad, onDuplicateCustomPad, presetOverrides, onSavePresetOverride, onResetPreset, posOverrides, onSavePosOverride, onResetPosOverride, onNewLayout, pendingEditPad, onClearPendingEditPad }: {
+  realTelemetry: any;
   onLaunch: () => void; onConnect: () => void;
   selectedPresetId: string; onSelectPreset: (id: string) => void;
   customPads: CustomPad[]; onSaveCustomPad: (p: CustomPad) => void;
@@ -3148,8 +2826,17 @@ function TabHome({ onLaunch, onConnect, onLaunchEditor, selectedPresetId, onSele
 }) {
   const [editingPad, setEditingPad] = useState<CustomPad | null>(null);
   const [editingPreset, setEditingPreset] = useState<GamepadPreset | null>(null);
+  useEffect(() => {
+    (window as any).__presetBack = () => {
+      if (!editingPreset) return false;
+      setEditingPreset(null); return true;
+    };
+    return () => { delete (window as any).__presetBack; };
+  }, [editingPreset]);
   // Share-by-code result modal state + publisher.
   const [shareState, setShareState] = useState<{ padName: string; status: "sharing" | "done" | "error"; code?: string; error?: string } | null>(null);
+  const shareRef=useRef<HTMLDivElement>(null);
+  useOverlayFocus(!!shareState,shareRef,()=>setShareState(null));
   // One code per layout. If this pad already has a code and its content has not
   // changed since, show that code immediately — no request, so tapping Share
   // repeatedly costs the server nothing and never burns the share rate limit.
@@ -3190,102 +2877,41 @@ function TabHome({ onLaunch, onConnect, onLaunchEditor, selectedPresetId, onSele
       onClearPendingEditPad();
     }
   }, [pendingEditPad]);
+  const controllers = [
+    ...GAMEPAD_PRESETS.map(preset => ({ id: preset.id, preset, pad: null as CustomPad | null })),
+    ...customPads.map(pad => ({ id: pad.padId, preset: null as GamepadPreset | null, pad })),
+  ];
 
-  return (
-    <div className="space-y-4">
-      {/* Plans are coming, and the 24h gift is tied to an ACCOUNT — most live
-          users have never made one. Placed above everything else because its
-          whole job is to be seen before the release that introduces the limit.
-          This is the "one release before" notice BILLING_DECISIONS 2.1 asks for. */}
-      <LaunchNotice />
-
-      {/* Connect to PC banner */}
-      <button onClick={onConnect}
-        className="w-full flex items-center justify-between px-4 py-3.5 rounded-2xl transition-all active:scale-[0.98] duration-150"
-        style={{ background: "rgba(79,134,198,0.07)", border: "1.5px solid rgba(79,134,198,0.22)" }}>
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
-            style={{ background: "rgba(79,134,198,0.12)" }}>
-            <Usb size={17} className="text-primary" />
-          </div>
-          <div className="text-left">
-            <p className="text-sm font-bold text-primary">Connect to PC</p>
-            <p className="text-[11px] text-muted-foreground mt-0.5">Wireless or USB — set up your connection</p>
-          </div>
-        </div>
-        <span className="text-primary text-lg leading-none ml-2">›</span>
-      </button>
-
-      {/* Standard controllers */}
-      <div>
-        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-3">Standard Controllers</p>
-        <div className="grid grid-cols-2 gap-2.5">
-          {GAMEPAD_PRESETS.map(preset => {
-            const override = presetOverrides[preset.id];
-            const effectivePreset = override ? { ...preset, mapping: { ...preset.mapping, ...override } } : preset;
-            return (
-              <GamepadCard key={preset.id} preset={effectivePreset}
-                active={selectedPresetId === preset.id}
-                isModified={!!override}
-                onSelect={() => onSelectPreset(preset.id)}
-                onPlay={() => { onSelectPreset(preset.id); onLaunch(); }} />
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Custom pads */}
-      <div>
-        <div className="flex items-center justify-between mb-3">
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">Custom Pads</p>
-          <span className="text-[10px] font-mono text-muted-foreground/60">{customPads.length} layout{customPads.length !== 1 ? "s" : ""}</span>
-        </div>
-        <div className="grid grid-cols-2 gap-2.5">
-          {customPads.map(pad => (
-            <CustomPadSlot key={pad.padId} pad={pad}
-              active={selectedPresetId === pad.padId}
-              onSelect={() => onSelectPreset(pad.padId)}
-              onPlay={() => { onSelectPreset(pad.padId); onLaunch(); }}
-              onEdit={() => { if (onLaunchEditor) onLaunchEditor(pad); else setEditingPad(pad); }}
-              onDelete={() => onDeleteCustomPad(pad.padId)}
-              onDuplicate={() => onDuplicateCustomPad(pad)}
-              onShare={() => sharePad(pad)} />
-          ))}
-
-          {/* Empty state placeholder */}
-          {customPads.length === 0 && (
-            <div className="col-span-full py-8 px-4 rounded-2xl border border-dashed border-white/10 bg-white/[0.01] flex flex-col items-center justify-center text-center gap-2.5">
-              <div className="w-12 h-12 rounded-full bg-white/5 flex items-center justify-center border border-white/10 text-xl select-none">🎮</div>
-              <div>
-                <p className="text-sm font-semibold text-white/80">No Custom Layouts Yet</p>
-                <p className="text-xs text-muted-foreground max-w-[280px] mx-auto mt-0.5">Design a personalized virtual controller layout tailored perfectly for your games.</p>
-              </div>
-            </div>
-          )}
-
-          {/* Create layout CTA card */}
-          <motion.button whileTap={{ scale: 0.96 }}
-            onClick={onNewLayout}
-            className="rounded-2xl flex flex-col items-center justify-center gap-2 min-h-[100px] transition-all duration-150"
-            style={{ background: "rgba(255,255,255,0.018)", border: "1.5px dashed rgba(255,255,255,0.14)" }}>
-            <div className="w-8 h-8 rounded-full flex items-center justify-center"
-              style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)" }}>
-              <span className="text-white/55 text-lg leading-none">+</span>
-            </div>
-            <span className="text-[10px] font-bold text-muted-foreground/80 tracking-widest uppercase">New Layout</span>
-          </motion.button>
-        </div>
-      </div>
+  return (
+    <div className="calm-home">
+      <div className="calm-intro console-home-intro"><span className="console-eyebrow">LESS SETUP. MORE PLAY.</span><h1 data-testid="home-heading">Ready, player one.</h1><p>Your next session starts right here.</p></div>
+      <ConnectionSummary telemetry={realTelemetry} onClick={onConnect} />
+      <div className="calm-section-heading"><h2>Your loadout</h2><span>{controllers.length.toString().padStart(2, "0")} {controllers.length === 1 ? "LAYOUT" : "LAYOUTS"}</span></div>
+      <div className="calm-library" data-count={controllers.length}>
+        {controllers.map(({ id, preset, pad }) => pad ? <CustomPadSlot key={id} pad={pad}
+          active={selectedPresetId === id} onSelect={() => onSelectPreset(id)}
+          onPlay={() => { onSelectPreset(id); onLaunch(); }}
+          onEdit={() => { if (onLaunchEditor) onLaunchEditor(pad); else setEditingPad(pad); }}
+          onDelete={() => onDeleteCustomPad(id)} onDuplicate={() => onDuplicateCustomPad(pad)} onShare={() => sharePad(pad)} />
+          : <GamepadCard key={id} preset={presetOverrides[id] ? { ...preset!, mapping: { ...preset!.mapping, ...presetOverrides[id] } } : preset!}
+              active={selectedPresetId === id} isModified={!!presetOverrides[id]}
+              onSelect={() => onSelectPreset(id)} onPlay={() => { onSelectPreset(id); onLaunch(); }} />)}
+      </div>
+      <button className="calm-create-layout" data-testid="create-layout-button" onClick={onNewLayout}>
+        <span className="console-create-icon"><Plus size={22} aria-hidden="true" /></span><span className="calm-grow"><strong>Make it your own.</strong><small>Create a custom controller layout</small></span><ChevronRight size={18} aria-hidden="true" />
+      </button>
+      <DashboardAllowance />
+      <LaunchNotice />
       {/* Editor is rendered at the APP ROOT as its own full-screen view, not
           here — a fixed element under this CSS-transformed tab container would
           anchor to the transform and let the dashboard bleed through. */}
 
       {shareState && (
         <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/60 backdrop-blur-sm px-6" onClick={() => setShareState(null)}>
-          <div className="bg-zinc-900 border border-white/10 rounded-3xl p-6 w-full max-w-[320px] shadow-2xl" onClick={e => e.stopPropagation()}>
+          <div ref={shareRef} role="dialog" aria-modal="true" aria-label="Share controller layout" className="calm-surface border border-white/10 rounded-3xl p-6 w-full max-w-[320px] shadow-2xl" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-white font-bold text-base truncate pr-2">Share "{shareState.padName}"</h3>
-              <button onClick={() => setShareState(null)} className="w-8 h-8 rounded-full bg-white/5 text-white/60 flex items-center justify-center active:scale-90 flex-shrink-0">
+              <h3 className="calm-ink font-bold text-base truncate pr-2">Share "{shareState.padName}"</h3>
+              <button onClick={() => setShareState(null)} className="w-8 h-8 rounded-full bg-white/5 calm-muted flex items-center justify-center active:scale-90 flex-shrink-0">
                 <X size={15} />
               </button>
             </div>
@@ -3293,12 +2919,12 @@ function TabHome({ onLaunch, onConnect, onLaunchEditor, selectedPresetId, onSele
             {shareState.status === "error" && (<p className="text-sm text-red-400 py-2 leading-snug">{shareState.error}</p>)}
             {shareState.status === "done" && shareState.code && (
               <>
-                <p className="text-xs text-muted-foreground mb-3 leading-snug">Anyone can load this controller in <span className="text-white/80">New Layout, Import from Code</span> using:</p>
+                <p className="text-xs text-muted-foreground mb-3 leading-snug">Anyone can load this controller in <span className="calm-ink">New Layout, Import from Code</span> using:</p>
                 <div className="rounded-xl bg-primary/10 border border-primary/30 py-4 mb-3 text-center">
                   <span className="text-2xl font-mono font-black tracking-[0.35em] text-primary select-all">{shareState.code}</span>
                 </div>
                 <button onClick={() => { try { (navigator as any).clipboard?.writeText(shareState.code); } catch {} }}
-                  className="w-full py-2.5 rounded-xl bg-white/5 border border-white/10 text-white/80 text-xs font-bold active:scale-95 transition-all">Copy code</button>
+                  className="w-full py-2.5 rounded-xl bg-white/5 border border-white/10 calm-ink text-xs font-bold active:scale-95 transition-all">Copy code</button>
               </>
             )}
           </div>
@@ -3322,255 +2948,6 @@ function TabHome({ onLaunch, onConnect, onLaunchEditor, selectedPresetId, onSele
 
 // ─── Tab: System (Network + Sensors + Thermals) ───────────────────────────────
 
-interface TabSystemProps {
-  gyroOn: boolean;
-  setGyroOn: (v: boolean) => void;
-  gyroMaxAngle: number;
-  setGyroMaxAngle: (v: number) => void;
-  /** Wheel mode: mounted phone rotated like a steering wheel (ticket #1959ade3). */
-  gyroWheel: boolean;
-  setGyroWheel: (v: boolean) => void;
-  /** Lock-to-lock travel in degrees while wheel mode is on. */
-  gyroWheelRange: number;
-  setGyroWheelRange: (v: number) => void;
-  gyroMode: string;
-  setGyroMode: (v: string) => void;
-  gyroDeadzone: number;
-  setGyroDeadzone: (v: number) => void;
-  gyroHaptic: boolean;
-  setGyroHaptic: (v: boolean) => void;
-  gyroThrottle: boolean;
-  setGyroThrottle: (v: boolean) => void;
-  gyroIdleDetect: boolean;
-  setGyroIdleDetect: (v: boolean) => void;
-  rumbleOn: boolean;
-  setRumbleOn: (v: boolean) => void;
-}
-
-function TabSystem({ gyroOn, setGyroOn, gyroMaxAngle, setGyroMaxAngle, gyroWheel, setGyroWheel, gyroWheelRange, setGyroWheelRange, gyroMode, setGyroMode, gyroDeadzone, setGyroDeadzone, gyroHaptic, setGyroHaptic, gyroThrottle, setGyroThrottle, gyroIdleDetect, setGyroIdleDetect, rumbleOn, setRumbleOn }: TabSystemProps) {
-  // (Removed a 20Hz setTick interval that re-rendered this tab every 50ms and
-  //  caused scroll jank — it only fed unused browser-preview gyro values.)
-  const isBridge = typeof window !== "undefined" && !!(window as any).AndroidBridge;
-
-  const [temp, setTemp] = useState(0);
-
-  useEffect(() => {
-    const bridge = (window as any).AndroidBridge;
-    const queryStats = () => {
-      if (bridge && bridge.getSystemStatsJson) {
-        try {
-          const stats = JSON.parse(bridge.getSystemStatsJson());
-          if (typeof stats.temp === "number") setTemp(stats.temp);
-        } catch (e) {
-          console.error("Failed to parse system stats", e);
-        }
-      }
-    };
-    queryStats();
-    const id = setInterval(queryStats, 1500);
-    return () => clearInterval(id);
-  }, []);
-
-  return (
-    <div className="space-y-4">
-      {!isBridge && (
-        <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-3 text-center">
-          <p className="text-xs font-bold text-red-400 font-mono tracking-widest">OFFLINE BROWSER PREVIEW</p>
-          <p className="text-[10px] text-muted-foreground mt-1">Connect to Android App for real telemetry</p>
-        </div>
-      )}
-
-
-
-      {/* Sensors Segment with radar calibration scope */}
-
-      <SectionDivider>Tilt Controls</SectionDivider>
-      <Card className="p-4 bg-black/40 border-border/40">
-        <div className="flex justify-between items-center mb-3">
-          <div>
-            <p className="text-sm font-semibold text-foreground">Tilt Steering</p>
-            <p className="text-xs text-muted-foreground mt-0.5">Steer by tilting your phone left and right</p>
-          </div>
-          <Toggle on={gyroOn} onChange={setGyroOn} />
-        </div>
-
-        {gyroOn && (
-          <div className="mb-4 bg-secondary/20 p-4 rounded-lg border border-border/40 space-y-5">
-
-            <p className="text-xs font-semibold text-primary/80 uppercase tracking-wide">Left/right device rotation</p>
-
-            {/* Wheel mode — support ticket #1959ade3: "make 900 and 720 degree gyro
-                for truck or bus sims". Tilt steering caps out at a wrist-flick, so this
-                mode has the phone MOUNTED and physically rotated like a wheel instead.
-                The sensor already measures true in-plane rotation; the native layer
-                unwraps it past the ±180° seam into real multi-turn travel. */}
-            <div>
-              <div className="flex justify-between items-center">
-                <div>
-                  <p className="text-sm font-semibold text-foreground">Wheel mode</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">Mount the phone and turn it like a steering wheel. Full multi-turn travel for truck and bus sims.</p>
-                </div>
-                <Toggle on={gyroWheel} onChange={setGyroWheel} />
-              </div>
-              {gyroWheel && (
-                <div className="mt-3">
-                  <p className="text-sm text-foreground mb-2">Lock-to-lock range</p>
-                  <div className="flex gap-2">
-                    {WHEEL_RANGES.map(r => (
-                      <button key={r} onClick={() => setGyroWheelRange(r)}
-                        className="flex-1 px-2 py-2 rounded-lg text-sm font-semibold transition"
-                        style={gyroWheelRange === r
-                          ? { background: "rgba(79,134,198,0.18)", color: "#5D90CB", border: "1px solid rgba(79,134,198,0.5)" }
-                          : { background: "rgba(255,255,255,0.04)", color: "rgba(255,255,255,0.6)", border: "1px solid rgba(255,255,255,0.12)" }}>
-                        {r}°
-                      </button>
-                    ))}
-                  </div>
-                  <div className="mt-2 text-[11px] text-muted-foreground space-y-2">
-                    <p className="font-mono text-foreground">{Math.round(clampWheelRange(gyroWheelRange) / 2)}° each way for full lock</p>
-                    <p className="font-sans leading-relaxed">900° matches a sim truck wheel (2.5 turns); 720° is two turns.</p>
-                    <p className="font-sans leading-relaxed">Mount the phone upright or tilted, never flat — lying flat there is no rotation to measure.</p>
-                    <p className="font-sans leading-relaxed">The screen stays locked while wheel mode is on, so turning the phone cannot flip your steering.</p>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Tilt sensitivity is meaningless once wheel mode is on — steering then
-                follows the lock-to-lock range instead. Hidden rather than disabled, so
-                there is no dead control sitting there inviting a change that does nothing. */}
-            {!gyroWheel && (
-            <div>
-              <div className="flex justify-between items-center mb-2">
-                <div className="flex items-center gap-2">
-                  <span className="text-muted-foreground transform rotate-45">⤡</span>
-                  <p className="text-sm text-foreground">Steering sensitivity</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-3">
-                <input type="range" min="1" max="90" step="1" value={gyroMaxAngle} onChange={e => {
-                  setGyroMaxAngle(Number(e.target.value));
-                }}
-                  className="w-full accent-[#5D90CB] h-1 rounded-lg appearance-none cursor-pointer bg-white/10" />
-              </div>
-              <div className="mt-2 text-[11px] text-muted-foreground font-mono">
-                <p className="text-foreground">{gyroMaxAngle}°</p>
-              </div>
-            </div>
-            )}
-
-            <div>
-              <div className="flex justify-between items-center mb-2">
-                <div className="flex items-center gap-2">
-                  <span className="text-muted-foreground transform rotate-45">⤡</span>
-                  <p className="text-sm text-foreground">Steering range</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-3">
-                <input type="range" min="0" max="30" step="1" value={gyroDeadzone} onChange={e => setGyroDeadzone(Number(e.target.value))}
-                  className="w-full accent-[#5D90CB] h-1 rounded-lg appearance-none cursor-pointer bg-white/10" />
-              </div>
-              <div className="mt-2 text-[11px] text-muted-foreground space-y-3 font-mono">
-                <div>
-                  <p className="text-foreground">{gyroDeadzone}°</p>
-                  <p>Default: 0°; Recommended: 0-15°</p>
-                </div>
-                <p className="font-sans leading-relaxed">Ignores tiny tilts, so the car stays straight when you want it to.</p>
-                <p className="font-sans leading-relaxed">Once you tilt past this, steering follows your real tilt amount.</p>
-                <p className="font-sans leading-relaxed">Set to 0 to react to the smallest tilt instantly.</p>
-              </div>
-            </div>
-
-            {/* Gyro mode — RACING (1-axis steering wheel) vs 3D (2-axis look).
-                Restored after the 2026-07-14 App.tsx corruption dropped it. */}
-            <div>
-              <p className="text-sm font-semibold text-foreground mb-2">Gyro mode</p>
-              <div className="flex gap-2">
-              <button onClick={() => setGyroMode("racing")}
-                className="flex-1 px-3 py-2 rounded-lg text-sm font-semibold transition"
-                style={gyroMode === "racing" ? { background: "rgba(79,134,198,0.18)", color: "#5D90CB", border: "1px solid rgba(79,134,198,0.5)" } : { background: "rgba(255,255,255,0.04)", color: "rgba(255,255,255,0.6)", border: "1px solid rgba(255,255,255,0.12)" }}>
-                Racing
-              </button>
-              <button onClick={() => setGyroMode("3d")}
-                className="flex-1 px-3 py-2 rounded-lg text-sm font-semibold transition"
-                style={gyroMode === "3d" ? { background: "rgba(79,134,198,0.18)", color: "#5D90CB", border: "1px solid rgba(79,134,198,0.5)" } : { background: "rgba(255,255,255,0.04)", color: "rgba(255,255,255,0.6)", border: "1px solid rgba(255,255,255,0.12)" }}>
-                3D
-              </button>
-              </div>
-              <p className="text-[11px] text-muted-foreground mt-2 font-sans leading-relaxed">
-                {gyroMode === "racing"
-                  ? "Steering wheel: tilt left/right drives the LEFT stick. One axis."
-                  : "Look/aim: tilt drives the RIGHT stick on both axes, with an on-screen scope."}
-              </p>
-            </div>
-
-            {/* Tilt throttle — racing only (3D already uses pitch to look). */}
-            {gyroMode === "racing" && (
-              <div className="flex justify-between items-center">
-                <div>
-                  <p className="text-sm font-semibold text-foreground">Tilt throttle</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">Tilt forward to accelerate, back to brake (left-stick Y).</p>
-                </div>
-                <Toggle on={gyroThrottle} onChange={setGyroThrottle} />
-              </div>
-            )}
-
-            {/* Automatic idle detection (#2) — pause tilt while the phone is
-                resting flat on a surface, so a set-down phone can't drive the
-                stick. Off = gyro streams continuously regardless of pose. */}
-            <div className="flex justify-between items-center">
-              <div>
-                <p className="text-sm font-semibold text-foreground">Auto idle when flat</p>
-                <p className="text-xs text-muted-foreground mt-0.5">Pause tilt when the phone is resting flat on a surface. Turn off for continuous gyro input.</p>
-              </div>
-              <Toggle on={gyroIdleDetect} onChange={setGyroIdleDetect} />
-            </div>
-          </div>
-        )}
-      </Card>
-
-      <SectionDivider>Vibration & Rumble</SectionDivider>
-      <Card className="p-4 bg-black/40 border-border/40 space-y-4">
-        <div className="flex justify-between items-center">
-          <div>
-            <p className="text-sm font-semibold text-foreground">App Vibration</p>
-            <p className="text-xs text-muted-foreground mt-0.5">Button presses and full-turn bumps</p>
-          </div>
-          <Toggle on={gyroHaptic} onChange={setGyroHaptic} />
-        </div>
-
-        <div className="h-px w-full bg-white/5 my-2" />
-
-        <div className="flex justify-between items-center">
-          <div>
-            <p className="text-sm font-semibold text-foreground">Game Rumble Feedback</p>
-            <p className="text-xs text-muted-foreground mt-0.5">Feel rumble from the game — crashes, weapons, terrain</p>
-          </div>
-          <Toggle on={rumbleOn} onChange={setRumbleOn} />
-        </div>
-        </Card>
-
-      {/* Thermals Segment */}
-      <SectionDivider>System Performance</SectionDivider>
-      <Card className="p-4 bg-black/40 border-border/40 space-y-4">
-        {/* Device temperature - live read-only indicator (no perf logic) */}
-        <div className="flex items-center justify-between p-3 rounded-xl border bg-secondary/20 border-border/40">
-          <div className="flex items-center gap-2.5">
-            <span className="text-base">🌡️</span>
-            <div>
-              <p className="text-sm font-semibold text-foreground">Device Temperature</p>
-              <p className="text-[10px] text-muted-foreground mt-0.5">Live reading. Your phone's OS manages any thermal throttling.</p>
-            </div>
-          </div>
-          <span className="text-lg font-mono font-bold text-primary">{temp > 0 ? `${temp.toFixed(1)}°C` : "--"}</span>
-        </div>
-
-        </Card>
-
-    </div>
-  );
-}
-
 // ─── Developer Payload Simulator ─────────────────────────────────────────────
 
 // (Developer Payload Simulator component completely removed for player simplicity)
@@ -3593,6 +2970,8 @@ function openExternal(url: string) {
 }
 function FeedbackCard() {
   const [open, setOpen] = useState(false);
+  const feedbackRef=useRef<HTMLDivElement>(null);
+  useOverlayFocus(open,feedbackRef,()=>setOpen(false));
   const [email, setEmail] = useState("");
   const [message, setMessage] = useState("");
   const [state, setState] = useState<"idle" | "sending" | "ok" | "err">("idle");
@@ -3631,16 +3010,16 @@ function FeedbackCard() {
     <>
       {/* Bare block: the Account page owns the panel and the heading. */}
       <div className="p-4 space-y-3">
-        <p className="text-[11px] text-muted-foreground leading-relaxed">Found a bug or have an idea? Send us a message — we read every one and reply by email.</p>
+        <p className="text-xs text-muted-foreground leading-relaxed">Found a bug or have an idea? Send us a message — we read every one and reply by email.</p>
         <div className="flex gap-2">
           <button onClick={openTray}
             className="flex-1 py-2.5 rounded-lg text-[13px] font-semibold active:scale-95 transition-transform"
-            style={{ background: "transparent", color: "rgba(255,255,255,0.72)", border: "1px solid rgba(255,255,255,0.14)" }}>
+            style={{ background: "transparent", color: "var(--calm-muted, #a6b0b3)", border: "1px solid var(--calm-line, #343c3f)" }}>
             Submit feedback
           </button>
           <button onClick={() => openExternal(CONTACT_URL)}
             className="flex-1 py-2.5 rounded-lg text-[13px] font-semibold active:scale-95 transition-transform"
-            style={{ background: "transparent", color: "rgba(255,255,255,0.72)", border: "1px solid rgba(255,255,255,0.14)" }}>
+            style={{ background: "transparent", color: "var(--calm-muted, #a6b0b3)", border: "1px solid var(--calm-line, #343c3f)" }}>
             Contact us
           </button>
         </div>
@@ -3649,20 +3028,22 @@ function FeedbackCard() {
       {/* Slide-up feedback tray (bottom sheet) */}
       <div
         onClick={closeTray}
+        aria-hidden={!open}
         style={{
           position: "fixed", inset: 0, zIndex: 200,
           background: "rgba(0,0,0,0.6)",
           opacity: open ? 1 : 0,
           pointerEvents: open ? "auto" : "none",
           transition: "opacity 0.22s ease",
-          display: "flex", alignItems: "flex-end", justifyContent: "center",
+          display: open ? "flex" : "none", alignItems: "flex-end", justifyContent: "center",
         }}
       >
         <div
           onClick={(e) => e.stopPropagation()}
+          ref={feedbackRef} role="dialog" aria-modal="true" aria-label="Send feedback"
           style={{
             width: "100%", maxWidth: 520,
-            background: "#12161F",
+            background: "var(--calm-surface, #202527)",
             borderTop: "1px solid rgba(255,255,255,0.1)",
             borderRadius: "20px 20px 0 0",
             padding: "12px 16px calc(20px + env(safe-area-inset-bottom, 0px))",
@@ -3671,13 +3052,13 @@ function FeedbackCard() {
             maxHeight: "88vh", overflowY: "auto",
           }}
         >
-          <div style={{ width: 40, height: 4, borderRadius: 2, background: "rgba(255,255,255,0.2)", margin: "2px auto 14px" }} />
+          <div style={{ width: 40, height: 4, borderRadius: 2, background: "var(--calm-soft, #292f31)", margin: "2px auto 14px" }} />
           {state === "ok" ? (
             <div className="py-6 text-center space-y-2">
               <p className="text-[15px] font-semibold text-emerald-400">Thanks! Your feedback was sent ✓</p>
               <p className="text-[12px] text-muted-foreground">We'll reply to your email if it needs a response.</p>
               <button onClick={closeTray} className="mt-2 px-5 py-2 rounded-lg text-[13px] font-semibold"
-                style={{ background: "rgba(79,134,198,0.15)", color: "#5D90CB", border: "1px solid rgba(79,134,198,0.35)" }}>Done</button>
+                style={{ background: "rgba(79,134,198,0.15)", color: "var(--calm-accent, #abc8db)", border: "1px solid rgba(79,134,198,0.35)" }}>Done</button>
             </div>
           ) : (
             <div className="space-y-3">
@@ -3685,12 +3066,12 @@ function FeedbackCard() {
                 <p className="text-[15px] font-bold text-foreground">Send feedback</p>
                 <button onClick={closeTray} aria-label="Close" className="text-muted-foreground text-lg leading-none px-2 py-1">✕</button>
               </div>
-              <input type="email" inputMode="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Your email"
+              <input aria-label="Your email" type="email" inputMode="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Your email"
                 className="w-full text-[14px] rounded-lg bg-white/5 border border-white/10 px-3 py-2.5 text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-primary/50" />
-              <textarea value={message} onChange={(e) => setMessage(e.target.value)} rows={5} placeholder="Tell us what's on your mind…"
+              <textarea aria-label="Feedback message" value={message} onChange={(e) => setMessage(e.target.value)} rows={5} placeholder="Tell us what's on your mind…"
                 className="w-full text-[14px] rounded-lg bg-white/5 border border-white/10 px-3 py-2.5 text-foreground placeholder:text-muted-foreground/50 resize-none focus:outline-none focus:border-primary/50" />
               {/* Live hint so the send button is never a mysterious "dead" button. */}
-              <div className="flex items-center justify-between text-[11px]">
+              <div className="flex items-center justify-between text-xs">
                 <span className={msgLen >= 10 ? "text-muted-foreground" : "text-amber-400"}>
                   {msgLen === 0 ? "Write at least 10 characters" : msgLen < 10 ? `${10 - msgLen} more character${10 - msgLen === 1 ? "" : "s"}` : "Message looks good"}
                 </span>
@@ -3701,7 +3082,7 @@ function FeedbackCard() {
                 className="w-full py-3 rounded-lg text-[14px] font-semibold transition-colors disabled:cursor-not-allowed"
                 style={{
                   background: valid ? "rgba(79,134,198,0.18)" : "rgba(255,255,255,0.04)",
-                  color: valid ? "#5D90CB" : "rgba(255,255,255,0.4)",
+                  color: valid ? "var(--calm-accent, #abc8db)" : "rgba(255,255,255,0.4)",
                   border: `1px solid ${valid ? "rgba(79,134,198,0.4)" : "rgba(255,255,255,0.08)"}`,
                 }}>
                 {state === "sending" ? "Sending…" : "Send feedback"}
@@ -3880,18 +3261,15 @@ function UpdateChecker({ compact = false }: { compact?: boolean }) {
   if (compact) {
     if (state !== "available") return null;
     return (
-      <div className="mb-3 rounded-xl p-3 flex items-center justify-between gap-3"
-        style={{ background: "rgba(79,134,198,0.1)", border: "1px solid rgba(79,134,198,0.3)" }}>
+      <div className="console-update-banner flex items-center justify-between gap-3">
         <div className="min-w-0">
           <p className="text-xs font-bold text-foreground">Update available{info.version ? ` · v${info.version}` : ""}</p>
-          {info.notes && <p className="text-[10px] text-muted-foreground truncate">{info.notes}</p>}
+          {info.notes && <p className="text-xs text-muted-foreground truncate">{info.notes}</p>}
         </div>
         {busy ? (
-          <span className="flex-shrink-0 text-[11px] font-bold" style={{ color: "#5D90CB" }}>{dlText}</span>
+          <span className="flex-shrink-0 text-xs font-bold" style={{ color: "var(--calm-accent, #abc8db)" }}>{dlText}</span>
         ) : (
-          <button onClick={download}
-            className="flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold active:scale-95 transition-transform"
-            style={{ background: "rgba(79,134,198,0.18)", border: "1px solid rgba(79,134,198,0.4)", color: "#5D90CB" }}>
+          <button data-testid="download-update-button" onClick={download} className="calm-text-button">
             {dl ? "Retry" : "Update"}
           </button>
         )}
@@ -3906,23 +3284,23 @@ function UpdateChecker({ compact = false }: { compact?: boolean }) {
     <div className="p-4 space-y-2">
       {state === "available" ? (
         <div className="space-y-2">
-          <p className="text-xs font-semibold" style={{ color: "#5D90CB" }}>Update available{info.version ? `: v${info.version}` : ""}</p>
-          {info.notes && <p className="text-[11px] text-muted-foreground leading-relaxed">{info.notes}</p>}
+          <p className="text-xs font-semibold" style={{ color: "var(--calm-accent, #abc8db)" }}>Update available{info.version ? `: v${info.version}` : ""}</p>
+          {info.notes && <p className="text-xs text-muted-foreground leading-relaxed">{info.notes}</p>}
           {busy ? (
             <div className="space-y-1">
-              <div className="h-1.5 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.1)" }}>
-                <div className="h-full transition-all" style={{ width: `${Math.max(3, dl?.pct ?? 0)}%`, background: "#5D90CB" }} />
+              <div className="h-1.5 rounded-full overflow-hidden" style={{ background: "var(--calm-soft, #292f31)" }}>
+                <div className="h-full transition-all" style={{ width: `${Math.max(3, dl?.pct ?? 0)}%`, background: "var(--calm-accent, #abc8db)" }} />
               </div>
-              <p className="text-[11px]" style={{ color: "#5D90CB" }}>{dlText}</p>
+              <p className="text-xs" style={{ color: "var(--calm-accent, #abc8db)" }}>{dlText}</p>
             </div>
           ) : (
             <>
               {dl && (dl.phase === "error" || dl.phase === "permission") && (
-                <p className="text-[11px]" style={{ color: dl.phase === "error" ? "#ff6b6b" : "#5D90CB" }}>{dl.msg}</p>
+                <p className="text-xs" style={{ color: dl.phase === "error" ? "#ff6b6b" : "var(--calm-accent, #abc8db)" }}>{dl.msg}</p>
               )}
               <button onClick={download}
                 className="w-full py-2 rounded-lg text-xs font-bold active:scale-95 transition-transform"
-                style={{ background: "rgba(79,134,198,0.15)", border: "1px solid rgba(79,134,198,0.35)", color: "#5D90CB" }}>
+                style={{ background: "rgba(79,134,198,0.15)", border: "1px solid rgba(79,134,198,0.35)", color: "var(--calm-accent, #abc8db)" }}>
                 {dl ? "Retry update" : (canSelfUpdate ? "Download & install update" : getDistributionChannel() === "playstore" ? "Update via Google Play" : "Update via store")}
               </button>
             </>
@@ -3930,7 +3308,7 @@ function UpdateChecker({ compact = false }: { compact?: boolean }) {
         </div>
       ) : (
         <div className="flex items-center justify-between gap-2">
-          <span className="text-[11px] text-muted-foreground">
+          <span className="text-xs text-muted-foreground">
             {state === "checking" ? "Checking for updates…" :
              state === "latest"   ? "You're on the latest version." :
              // Only the DIRECT build may point at the website: telling a store
@@ -3941,12 +3319,12 @@ function UpdateChecker({ compact = false }: { compact?: boolean }) {
              reachedServer.current
                ? <>Our update service isn't responding. Get the latest version at{" "}
                    <a href="https://gamepad.space/#download" target="_blank" rel="noreferrer"
-                      className="underline" style={{ color: "#5D90CB" }}>gamepad.space</a>.</>
+                      className="underline" style={{ color: "var(--calm-accent, #abc8db)" }}>gamepad.space</a>.</>
                : "Couldn't check right now — check your connection."}
           </span>
           <button onClick={check} disabled={state === "checking"}
-            className="flex-shrink-0 px-3 py-1.5 rounded-lg text-[11px] font-semibold active:scale-95 transition-transform"
-            style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.12)", color: "rgba(255,255,255,0.8)", opacity: state === "checking" ? 0.6 : 1 }}>
+            className="flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold active:scale-95 transition-transform"
+            style={{ background: "var(--calm-soft, #292f31)", border: "1px solid var(--calm-line, #343c3f)", color: "var(--calm-muted, #a6b0b3)", opacity: state === "checking" ? 0.6 : 1 }}>
             Check for updates
           </button>
         </div>
@@ -3956,9 +3334,9 @@ function UpdateChecker({ compact = false }: { compact?: boolean }) {
 }
 
 // ─── Bottom nav (3 tabs) ──────────────────────────────────────────────────────
-const TABS: { id: DashTab; label: string; Icon: React.ComponentType<{ size?: number; className?: string }> }[] = [
-  { id: "home",   label: "Home",   Icon: Home },
-  { id: "system", label: "System", Icon: Activity },
+const TABS: { id: DashTab; label: string; Icon: React.ComponentType<{ size?: number | string; className?: string }> }[] = [
+  { id: "home",   label: "Play",   Icon: Home },
+  { id: "system", label: "Settings", Icon: Settings },
   { id: "account", label: "Account", Icon: User },
 ];
 
@@ -4000,8 +3378,16 @@ function DashboardScreen({
   rumbleOn: boolean; setRumbleOn: (v: boolean) => void;
 }) {
   const [tab, setTab] = useState<DashTab>("home");
-  const [slideClass, setSlideClass] = useState("tab-r");
-  const prevIdxRef = useRef(0);
+  const tabHistory = useRef<DashTab[]>([]);
+  useEffect(() => { rememberTab(tab); }, [tab]);
+  const [authOpen, setAuthOpen] = useState(false);
+  const reduceShellMotion = useReducedMotion();
+  const dashboardEntered = useRef(false);
+  useEffect(() => { dashboardEntered.current = true; }, []);
+  const profileButtonRef = useRef<HTMLButtonElement>(null);
+  const shellPresent = useIsPresent();
+  const mainRef=useRef<HTMLElement>(null);
+  const { appearance, toggle } = useShellAppearance();
   // Signed-in session, or null. Never gates the controller.
   const session = useSyncExternalStore(onSessionChange, getSession, getSession);
   // Confirm a stored token is still valid, once. Offline keeps the session.
@@ -4009,9 +3395,26 @@ function DashboardScreen({
   // Pull the account's layouts whenever a session appears — this is what puts
   // your pads back after a reinstall or on a new phone.
   useEffect(() => { onSignedInSync(); }, [session?.token]);
+  useEffect(() => {
+    if (authOpen && session) {
+      setAuthOpen(false);
+      setTab('account');
+      mainRef.current?.scrollTo({ top: 0 });
+    }
+  }, [authOpen, session]);
+  useEffect(() => {
+    if (!authOpen) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') { event.preventDefault(); closeSignIn(); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [authOpen]);
 
   // ── Blueprint dialog state (hoisted here so dialog renders outside scrollable area) ──
   const [showBlueprintDialog, setShowBlueprintDialog] = useState(false);
+  const blueprintRef=useRef<HTMLDivElement>(null);
+  useOverlayFocus(showBlueprintDialog,blueprintRef,()=>closeBlueprintDialog());
   const [createStep, setCreateStep] = useState<"type" | "template" | "name" | "import">("type");
   const [selectedTemplate, setSelectedTemplate] = useState("");
   const [newPadName, setNewPadName] = useState("");
@@ -4126,11 +3529,23 @@ function DashboardScreen({
   }
 
   function changeTab(newTab: DashTab) {
-    if (newTab === tab) return;
-    const newIdx = TABS.findIndex(t => t.id === newTab);
-    setSlideClass(newIdx > prevIdxRef.current ? "tab-r" : "tab-l");
-    prevIdxRef.current = newIdx;
+    setAuthOpen(false);
+    if (newTab === tab && !authOpen) return;
+    if (newTab !== tab) tabHistory.current.push(tab);
+    mainRef.current?.scrollTo({top:0});
     setTab(newTab);
+  }
+
+  function openProfile() {
+    mainRef.current?.scrollTo({ top: 0 });
+    if (getSession()) changeTab('account');
+    else setAuthOpen(true);
+  }
+
+  function closeSignIn() {
+    setAuthOpen(false);
+    mainRef.current?.scrollTo({ top: 0 });
+    profileButtonRef.current?.focus({ preventScroll: true });
   }
 
   // Another view asking for a specific tab — currently the controller's
@@ -4146,106 +3561,41 @@ function DashboardScreen({
         closeBlueprintDialog();
         return true; // handled
       }
+      if (authOpen) { closeSignIn(); return true; }
+      if (tab !== "home") {
+        setTab(tabHistory.current.pop() || "home");
+        mainRef.current?.scrollTo({ top: 0 });
+        return true;
+      }
       return false; // nothing open, let back navigate normally
     };
     return () => {
       delete (window as any).__dashboardCloseDialog;
     };
-  }, [showBlueprintDialog]);
+  }, [showBlueprintDialog, authOpen, tab]);
 
 
   return (
-    <div className="flex flex-col h-full bg-background" style={{ fontFamily: "'Inter',sans-serif" }}>
-      <style>{`
-        @keyframes tabR { from{transform:translate3d(24px,0,0);opacity:0} to{transform:translate3d(0,0,0);opacity:1} }
-        @keyframes tabL { from{transform:translate3d(-24px,0,0);opacity:0} to{transform:translate3d(0,0,0);opacity:1} }
-        /* expo-out easing → fast start, gentle settle = "buttery". GPU-composited. */
-        .tab-r{animation:tabR 340ms cubic-bezier(0.16,1,0.3,1);will-change:transform,opacity;backface-visibility:hidden}
-        .tab-l{animation:tabL 340ms cubic-bezier(0.16,1,0.3,1);will-change:transform,opacity;backface-visibility:hidden}
-      `}</style>
-
-      <header className="flex-shrink-0 flex items-center justify-between px-4 pb-3 border-b border-border bg-[#10141C]"
-        style={{ paddingTop: "calc(var(--android-safe-top, env(safe-area-inset-top, 36px)) + 12px)" }}>
-        <div className="flex items-center gap-2">
-          <Gamepad2 size={14} className="text-primary" />
-          <span className="text-sm font-bold text-primary tracking-widest uppercase"
-            style={{ fontFamily: "'Space Grotesk',sans-serif" }}>GamepadOS</span>
-        </div>
-        <div className="flex items-center gap-2">
-        <div className="flex flex-col items-end opacity-90 pointer-events-none">
-          {(() => {
-            // 4-way, not a boolean. "NO REPLY" is the state that used to render
-            // as DISCONNECTED while the game was responding to the sticks —
-            // transmitting fine, PC never answering. Do NOT collapse this back
-            // into `linkAlive ? ... : ...`; that is the bug, not a simplification.
-            const state = linkState(realTelemetry);
-            const connected = state === "connected";
-            const color = linkColor(state);
-            const type = realTelemetry?.connectionType; // "usbdebug" | "wired"(tether) | "wireless" | "none"
-            const isWired = type === "wired" || type === "usbdebug";
-            const label = type === "usbdebug" ? "🔌 USB DEBUG" : type === "wired" ? "⟠ USB TETHER" : "⌘ WIRELESS";
-            // Only a live link pulses. A degraded one holding steady reads as
-            // "stuck", which is exactly what it is.
-            const dot = connected ? "animate-pulse" : "";
-            return (
-              <div className="flex items-center gap-1.5" title={linkHint(state)}>
-                <div className={`w-1.5 h-1.5 rounded-full ${dot}`}
-                  style={{ background: color, boxShadow: `0 0 6px ${color}` }} />
-                <span className="text-[9px] font-bold tracking-widest text-white drop-shadow-md">
-                  {linkLabel(state)}
-                </span>
-                {connected && (type === "usbdebug" || type === "wired" || type === "wireless") && (
-                  <span className="text-[8px] font-bold tracking-wider px-1.5 py-[1px] rounded-full"
-                    style={{
-                      color: isWired ? "#fbbf24" : "#5D90CB",
-                      background: isWired ? "rgba(251,191,36,0.12)" : "rgba(79,134,198,0.12)",
-                      border: `1px solid ${isWired ? "rgba(251,191,36,0.35)" : "rgba(79,134,198,0.35)"}`,
-                    }}>
-                    {label}
-                  </span>
-                )}
-              </div>
-            );
-          })()}
-        </div>
-        {/* Account button — a shortcut to the tab, nothing in between. */}
-        <button
-          onClick={() => changeTab("account")}
-          aria-label="GamepadOS Account"
-          className="flex items-center gap-1.5 pl-1.5 pr-2.5 py-1 rounded-full transition-all active:scale-95"
-          style={{
-            background: "rgba(255,255,255,0.06)",
-            border: "1px solid rgba(255,255,255,0.12)",
-            minHeight: 30,
-          }}
-        >
-          <span className="w-5 h-5 rounded-full flex items-center justify-center"
-            style={{
-              background: session ? "#5D90CB" : "rgba(255,255,255,0.10)",
-              color: session ? "#0B0E14" : "rgba(255,255,255,0.8)",
-            }}>
-            {session
-              ? <span className="text-[10px] font-bold" style={{ fontFamily: "'Space Grotesk',sans-serif" }}>
-                  {session.user.displayName.trim().charAt(0).toUpperCase()}
-                </span>
-              : <User size={11} />}
-          </span>
-          <span className="text-[10px] font-bold tracking-wide text-white/90 max-w-[80px] truncate"
-            style={{ fontFamily: "'Space Grotesk',sans-serif" }}>
-            {session ? session.user.displayName : "Sign in"}
-          </span>
-        </button>
+    <div className="gp-dashboard gp-shell flex flex-col h-full" data-calm-theme={appearance} style={{ pointerEvents: shellPresent ? 'auto' : 'none' }}>
+      <ShellMotion />
+      <header className="calm-header">
+        <CalmBrand />
+        <div className="calm-header-actions">
+          <AppearanceButton appearance={appearance} onClick={toggle} />
+          <button ref={profileButtonRef} data-testid="profile-shortcut-button" className="calm-account-shortcut" onClick={openProfile} aria-label={session ? 'Open your profile' : 'Sign in to GamepadOS'}>
+            <User size={18} aria-hidden="true" />{session && <span>{session.user.displayName}</span>}
+          </button>
         </div>
       </header>
 
-      <main className="flex-1 overflow-y-auto">
-        <div className="px-4 py-4 max-w-lg mx-auto">
+      <main ref={mainRef} className="calm-main">
+        <div className={authOpen ? 'console-auth-content' : tab === "home" ? "calm-home-content" : "calm-legacy-content"}>
           {/* Update banner. Renders nothing unless an update is actually
-              available, and is hidden on Account because that tab shows the full
+              available, and is hidden on Settings because that tab shows the full
               update block — otherwise the same notice would appear twice. */}
-          {tab !== "account" && <UpdateChecker compact />}
-          <div key={tab} className={slideClass}>
-            {tab === "home"   && <TabHome onLaunch={onLaunch} onConnect={onBack}
+          <motion.div key={authOpen ? 'sign-in' : tab} initial={reduceShellMotion || !dashboardEntered.current ? false : { opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: reduceShellMotion ? 0 : .22, ease: [.22, 1, .36, 1] }}>
+            {authOpen ? <SignInScreen onBack={closeSignIn} onPlans={() => changeTab('account')} /> : <>
+            {tab === "home"   && <TabHome realTelemetry={realTelemetry} onLaunch={onLaunch} onConnect={onBack}
               onLaunchEditor={onLaunchEditor}
               selectedPresetId={selectedPresetId} onSelectPreset={onSelectPreset}
               customPads={customPads} onSaveCustomPad={onSaveCustomPad} onDeleteCustomPad={onDeleteCustomPad}
@@ -4255,7 +3605,7 @@ function DashboardScreen({
               onNewLayout={openBlueprintDialog}
               pendingEditPad={pendingEditPad}
               onClearPendingEditPad={() => setPendingEditPad(null)} />}
-            {tab === "system" && <TabSystem gyroOn={gyroOn} setGyroOn={setGyroOn} gyroMaxAngle={gyroMaxAngle} setGyroMaxAngle={setGyroMaxAngle} gyroWheel={gyroWheel} setGyroWheel={setGyroWheel} gyroWheelRange={gyroWheelRange} setGyroWheelRange={setGyroWheelRange} gyroMode={gyroMode} setGyroMode={setGyroMode} gyroDeadzone={gyroDeadzone} setGyroDeadzone={setGyroDeadzone} gyroHaptic={gyroHaptic} setGyroHaptic={setGyroHaptic} gyroThrottle={gyroThrottle} setGyroThrottle={setGyroThrottle} gyroIdleDetect={gyroIdleDetect} setGyroIdleDetect={setGyroIdleDetect} rumbleOn={rumbleOn} setRumbleOn={setRumbleOn} />}
+            {tab === "system" && <TabSystem gyroOn={gyroOn} setGyroOn={setGyroOn} gyroMaxAngle={gyroMaxAngle} setGyroMaxAngle={setGyroMaxAngle} gyroWheel={gyroWheel} setGyroWheel={setGyroWheel} gyroWheelRange={gyroWheelRange} setGyroWheelRange={setGyroWheelRange} gyroMode={gyroMode} setGyroMode={setGyroMode} gyroDeadzone={gyroDeadzone} setGyroDeadzone={setGyroDeadzone} gyroHaptic={gyroHaptic} setGyroHaptic={setGyroHaptic} gyroThrottle={gyroThrottle} setGyroThrottle={setGyroThrottle} gyroIdleDetect={gyroIdleDetect} setGyroIdleDetect={setGyroIdleDetect} rumbleOn={rumbleOn} setRumbleOn={setRumbleOn}><AppSupport privacyUrl={PRIVACY_URL} updateChecker={<UpdateChecker />} feedback={<FeedbackCard />} /></TabSystem>}
             {tab === "account" && (
               <TabAccount
                 customPadsCount={customPads.length}
@@ -4263,34 +3613,21 @@ function DashboardScreen({
                 gyroMode={gyroMode}
                 gyroThrottle={gyroThrottle}
                 rumbleOn={rumbleOn}
-                privacyUrl={PRIVACY_URL}
                 onOpenSystem={() => changeTab("system")}
-                updateChecker={<UpdateChecker />}
-                feedback={<FeedbackCard />}
+                onSignIn={openProfile}
               />
             )}
-          </div>
+            </>}
+          </motion.div>
+          {!authOpen && tab !== "system" && <div className="calm-existing-update"><UpdateChecker compact /></div>}
         </div>
       </main>
 
-      <nav className="flex-shrink-0 flex border-t border-border bg-[#12161F]"
-        style={{ paddingBottom: "var(--android-safe-bottom, env(safe-area-inset-bottom, 0px))" }}>
-        {TABS.map(({ id, label, Icon }) => {
-          const active = tab === id;
-          return (
-            <button key={id} onClick={() => changeTab(id)}
-              className="flex-1 flex flex-col items-center justify-center gap-0.5 py-2 transition-colors duration-150"
-              style={{ minHeight: "58px" }}>
-              <div className={`flex items-center justify-center rounded-2xl transition-all duration-200 ${active ? "bg-primary/12 px-5 py-1" : "px-3 py-1"}`}>
-                <Icon size={20} className={active ? "text-primary" : "text-muted-foreground"} />
-              </div>
-              <span className={`text-[10px] font-semibold transition-colors duration-150 ${active ? "text-primary" : "text-muted-foreground"}`}>
-                {label}
-              </span>
-            </button>
-          );
-        })}
-      </nav>
+      {!authOpen && <nav className="calm-nav" aria-label="Main navigation">
+        {TABS.map(({ id, label, Icon }) => <motion.button data-no-shell-press data-testid={`nav-${id}-button`} key={id} onClick={() => changeTab(id)} aria-current={tab === id ? "page" : undefined} whileTap={reduceShellMotion ? undefined : { scale: .94 }}>
+          <span className="console-nav-icon">{tab === id && <motion.span className="console-nav-active" layoutId="active-tab" transition={{ type: "spring", stiffness: 400, damping: 30 }} />}{id === 'account' && !session ? <Ticket size={20} /> : <Icon size={20} />}</span><span>{id === 'account' && !session ? 'Plans' : label}</span>
+        </motion.button>)}
+      </nav>}
 
       {/* Blueprint dialog — Portal into document.body so it's completely immune to
           parent transforms, stacking contexts, and keyboard-triggered event bugs */}
@@ -4298,6 +3635,7 @@ function DashboardScreen({
         <AnimatePresence>
           {showBlueprintDialog && (
             <motion.div
+              className="gp-shell calm-dialog" data-calm-theme={appearance}
               {...backdropIn}
               transition={FADE}
               style={{
@@ -4321,12 +3659,14 @@ function DashboardScreen({
                   so the dialog looked like it was flying in from somewhere. */}
               <motion.div
                 {...cardIn}
+                role="dialog" aria-modal="true" aria-label="Create or import a layout"
+                ref={blueprintRef}
                 transition={SPRING}
                 style={{
                   width: "100%", maxWidth: "384px", borderRadius: "24px",
-                  background: "#070910", border: "1px solid rgba(255,255,255,0.09)",
+                  background: "var(--calm-surface, #202527)", border: "1px solid var(--calm-line, #343c3f)",
                   maxHeight: "85vh", overflow: "hidden",
-                  boxShadow: "0 25px 60px rgba(0,0,0,0.6)",
+                  boxShadow: "none",
                 }}
                 onClick={e => e.stopPropagation()}
                 onPointerDown={e => e.stopPropagation()}
@@ -4348,13 +3688,13 @@ function DashboardScreen({
                 >
                   <div className="flex items-start justify-between mb-5">
                     <div>
-                      <h3 className="text-lg font-black text-white tracking-tight">Choose Type</h3>
+                      <h3 className="text-lg font-black calm-ink tracking-tight">Choose Type</h3>
                       <p className="text-xs text-muted-foreground mt-0.5">How would you like to start?</p>
                     </div>
                     <button
                       onClick={closeBlueprintDialog}
                       className="w-8 h-8 flex items-center justify-center rounded-full text-muted-foreground active:scale-90 transition-all mt-0.5"
-                      style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)" }}>
+                      style={{ background: "var(--calm-soft, #292f31)", border: "1px solid var(--calm-line, #343c3f)" }}>
                       <X size={14} />
                     </button>
                   </div>
@@ -4367,13 +3707,13 @@ function DashboardScreen({
                         setCreateStep("name");
                       }}
                       className="text-left p-4 rounded-2xl flex items-center gap-4 active:scale-95 transition-transform duration-100"
-                      style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)" }}
+                      style={{ background: "var(--calm-soft, #292f31)", border: "1px solid var(--calm-line, #343c3f)" }}
                     >
                       <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-zinc-800/30 to-zinc-700/30 border border-white/10 flex items-center justify-center text-2xl flex-shrink-0">
                         ✦
                       </div>
                       <div>
-                        <p className="text-sm font-bold text-white leading-tight">Blank Canvas</p>
+                        <p className="text-sm font-bold calm-ink leading-tight">Blank Canvas</p>
                         <p className="text-xs text-muted-foreground mt-0.5 leading-snug">Start completely empty and build widget by widget.</p>
                       </div>
                     </button>
@@ -4382,26 +3722,26 @@ function DashboardScreen({
                         setCreateStep("template");
                       }}
                       className="text-left p-4 rounded-2xl flex items-center gap-4 active:scale-95 transition-transform duration-100"
-                      style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)" }}
+                      style={{ background: "var(--calm-soft, #292f31)", border: "1px solid var(--calm-line, #343c3f)" }}
                     >
                       <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-600/30 to-indigo-600/30 border border-white/10 flex items-center justify-center text-2xl flex-shrink-0">
                         🎮
                       </div>
                       <div>
-                        <p className="text-sm font-bold text-white leading-tight">Standard Layouts</p>
+                        <p className="text-sm font-bold calm-ink leading-tight">Standard Layouts</p>
                         <p className="text-xs text-muted-foreground mt-0.5 leading-snug">Choose from a variety of pre-configured gamepads.</p>
                       </div>
                     </button>
                     <button
                       onClick={() => { setImportError(""); setImportCode(""); setCreateStep("import"); }}
                       className="text-left p-4 rounded-2xl flex items-center gap-4 active:scale-95 transition-transform duration-100"
-                      style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)" }}
+                      style={{ background: "var(--calm-soft, #292f31)", border: "1px solid var(--calm-line, #343c3f)" }}
                     >
                       <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-600/30 to-teal-600/30 border border-white/10 flex items-center justify-center text-2xl flex-shrink-0">
                         ⤓
                       </div>
                       <div>
-                        <p className="text-sm font-bold text-white leading-tight">Import from Code</p>
+                        <p className="text-sm font-bold calm-ink leading-tight">Import from Code</p>
                         <p className="text-xs text-muted-foreground mt-0.5 leading-snug">Got a share code? Paste it to load someone's controller.</p>
                       </div>
                     </button>
@@ -4418,16 +3758,16 @@ function DashboardScreen({
                 >
                   <div className="flex items-center gap-3 mb-6">
                     <button onClick={() => setCreateStep("type")}
-                      className="w-8 h-8 flex items-center justify-center rounded-full text-white/60 active:scale-90 transition-all text-sm font-bold flex-shrink-0"
-                      style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)" }}>
+                      className="w-8 h-8 flex items-center justify-center rounded-full calm-muted active:scale-90 transition-all text-sm font-bold flex-shrink-0"
+                      style={{ background: "var(--calm-soft, #292f31)", border: "1px solid var(--calm-line, #343c3f)" }}>
                       ←
                     </button>
                     <div>
-                      <h3 className="text-lg font-black text-white tracking-tight">Import from Code</h3>
+                      <h3 className="text-lg font-black calm-ink tracking-tight">Import from Code</h3>
                       <p className="text-xs text-muted-foreground mt-0.5">Paste the code someone shared with you</p>
                     </div>
                   </div>
-                  <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-2 block">Share Code</label>
+                  <label className="text-xs font-bold text-muted-foreground mb-2 block">Share Code</label>
                   <input
                     value={importCode}
                     onChange={e => { setImportCode(e.target.value.toUpperCase()); setImportError(""); }}
@@ -4435,10 +3775,10 @@ function DashboardScreen({
                     placeholder="e.g. K7M2QP"
                     maxLength={12}
                     autoCapitalize="characters"
-                    className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white text-center text-lg font-mono tracking-[0.3em] outline-none focus:border-primary/60 uppercase"
+                    className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 calm-ink text-center text-lg font-mono tracking-[0.3em] outline-none focus:border-primary/60"
                   />
                   {importError && (
-                    <p className="text-[11px] text-red-400 mt-2 leading-snug">{importError}</p>
+                    <p className="text-xs text-red-400 mt-2 leading-snug">{importError}</p>
                   )}
                   <button
                     onClick={importByCode}
@@ -4459,12 +3799,12 @@ function DashboardScreen({
                 >
                   <div className="flex items-center gap-3 mb-6">
                     <button onClick={() => setCreateStep("type")}
-                      className="w-8 h-8 flex items-center justify-center rounded-full text-white/60 active:scale-90 transition-all text-sm font-bold flex-shrink-0"
-                      style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)" }}>
+                      className="w-8 h-8 flex items-center justify-center rounded-full calm-muted active:scale-90 transition-all text-sm font-bold flex-shrink-0"
+                      style={{ background: "var(--calm-soft, #292f31)", border: "1px solid var(--calm-line, #343c3f)" }}>
                       ←
                     </button>
                     <div>
-                      <h3 className="text-lg font-black text-white tracking-tight">Choose Template</h3>
+                      <h3 className="text-lg font-black calm-ink tracking-tight">Choose Template</h3>
                       <p className="text-xs text-muted-foreground mt-0.5">Pick a starting point for your layout</p>
                     </div>
                   </div>
@@ -4479,14 +3819,14 @@ function DashboardScreen({
                           setCreateStep("name");
                         }}
                         className="text-left p-3.5 rounded-2xl flex flex-col gap-2.5 active:scale-95 transition-transform duration-100"
-                        style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)" }}
+                        style={{ background: "var(--calm-soft, #292f31)", border: "1px solid var(--calm-line, #343c3f)" }}
                       >
                         <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${bp.color} border border-white/10 flex items-center justify-center text-2xl flex-shrink-0`}>
                           {bp.icon}
                         </div>
                         <div>
-                          <p className="text-xs font-bold text-white leading-tight">{bp.name}</p>
-                          <p className="text-[10px] text-muted-foreground mt-0.5 leading-snug">{bp.desc}</p>
+                          <p className="text-xs font-bold calm-ink leading-tight">{bp.name}</p>
+                          <p className="text-xs text-muted-foreground mt-0.5 leading-snug">{bp.desc}</p>
                         </div>
                       </button>
                     ))}
@@ -4503,33 +3843,33 @@ function DashboardScreen({
                 >
                   <div className="flex items-center gap-3 mb-6">
                     <button onClick={() => setCreateStep(selectedTemplate === "blank" ? "type" : "template")}
-                      className="w-8 h-8 flex items-center justify-center rounded-full text-white/60 active:scale-90 transition-all text-sm font-bold flex-shrink-0"
-                      style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)" }}>
+                      className="w-8 h-8 flex items-center justify-center rounded-full calm-muted active:scale-90 transition-all text-sm font-bold flex-shrink-0"
+                      style={{ background: "var(--calm-soft, #292f31)", border: "1px solid var(--calm-line, #343c3f)" }}>
                       ←
                     </button>
                     <div>
-                      <h3 className="text-base font-black text-white tracking-tight">Name Your Pad</h3>
-                      <p className="text-[10px] text-muted-foreground mt-0.5">Customize before building</p>
+                      <h3 className="text-base font-black calm-ink tracking-tight">Name Your Pad</h3>
+                      <p className="text-xs text-muted-foreground mt-0.5">Customize before building</p>
                     </div>
                   </div>
 
                   <div className="mb-5">
-                    <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-2 block">Layout Name</label>
+                    <label className="text-xs font-bold text-muted-foreground mb-2 block">Layout Name</label>
                     <input
                       ref={nameInputRef}
                       value={newPadName}
                       onChange={e => setNewPadName(e.target.value)}
                       maxLength={24}
                       onKeyDown={e => { if (e.key === "Enter") commitNewPad(); }}
-                      className="w-full rounded-xl px-4 py-3 text-sm font-semibold text-white outline-none transition-colors"
-                      style={{ background: "rgba(255,255,255,0.05)", border: `1.5px solid ${newPadName ? newPadColor + "80" : "rgba(255,255,255,0.1)"}`, caretColor: newPadColor }}
+                      className="w-full rounded-xl px-4 py-3 text-sm font-semibold calm-ink outline-none transition-colors"
+                      style={{ background: "var(--calm-soft, #292f31)", border: `1.5px solid ${newPadName ? newPadColor + "80" : "rgba(255,255,255,0.1)"}`, caretColor: newPadColor }}
                       placeholder="My Custom Layout"
                     />
                   </div>
 
 
                   <div className="mb-7">
-                    <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-3 block">Accent Color</label>
+                    <label className="text-xs font-bold text-muted-foreground mb-3 block">Accent Color</label>
                     <div className="flex gap-3">
                       {CUSTOM_COLORS.map(c => (
                         <button key={c} onClick={() => setNewPadColor(c)}
@@ -4543,7 +3883,7 @@ function DashboardScreen({
 
                   <button
                     onClick={commitNewPad}
-                    className="w-full py-3.5 rounded-2xl text-sm font-black tracking-widest transition-all duration-150 active:scale-95"
+                    className="w-full py-3.5 rounded-2xl text-sm font-black transition-all duration-150 active:scale-95"
                     style={{ background: newPadColor, color: "#000001" }}
                   >
                     CREATE &amp; OPEN EDITOR
@@ -4569,6 +3909,8 @@ function DashboardScreen({
 //   Controller back → dashboard (not scanner).
 export default function App() {
   const [view, setView] = useState<View>("dashboard");
+  const firstRoute = useRef(true);
+  useEffect(() => { firstRoute.current = false; }, []);
   // Feature-intro / rating overlay (#3). `rated` gates the whole feature off
   // once a rating is submitted, so it unmounts and disposes its resources.
   const [showIntro, setShowIntro] = useState(false);
@@ -4625,7 +3967,7 @@ export default function App() {
     const finish = () => { setIsCurtainDown(false); transitioningRef.current = false; };
     const t1 = setTimeout(() => {
       try { mid(); } catch (e) { console.error(e); }   // fade in fully, then swap view/orientation
-      curtainTimers.current.push(setTimeout(finish, 550));   // hold so the launch animation is clearly seen, then lift
+      curtainTimers.current.push(setTimeout(finish, 180));   // cover physical rotation, without a decorative loading pause
     }, 100);
     const tFailsafe = setTimeout(finish, 1200);        // never leave the curtain stuck down
     curtainTimers.current.push(t1, tFailsafe);
@@ -4652,179 +3994,62 @@ export default function App() {
     }
   }, []);
 
-  // ── Global USB auto-pair ──────────────────────────────────────────────────
-  // The native layer continuously watches the USB-tether interface and calls
-  // this on any change. Handles every ordering (server-first, app-first,
-  // plugged-in-later, replug) for the Play Store release. We only auto-connect
-  // when USB becomes active AND we're not already connected — so it never
-  // fights an existing Wi-Fi/QR session or double-starts the engine.
+  // Native tether notifications and explicit choices use the same coordinator.
   const [usbToast, setUsbToast] = useState(false);
   useEffect(() => {
-    (window as any).onUsbTetherChanged = (active: boolean) => {
-      if (!active) return;
-      // If the user forced USB-debugging, don't auto-start the native tether engine
-      // (that would create a second pad — the transport coordinator owns the WS).
-      if (getWiredPref() === "usbdebug") return;
-      const bridge = (window as any).AndroidBridge;
-      if (!bridge || !bridge.connectToPC) return;
-      // Skip if a link is genuinely alive (PC responding) — don't disrupt it.
-      try {
-        const t = JSON.parse(bridge.getNetworkTelemetryJson?.() || "{}");
-        if (t.linkAlive) return;
-      } catch {}
-      // Auto-connect over USB. CRITICAL: target the USB interface's DIRECTED
-      // broadcast (e.g. 192.168.42.255), not 255.255.255.255 — a limited
-      // broadcast only egresses the default route (Wi-Fi) and never reaches the
-      // PC over USB. Fall back to limited broadcast only if we can't read it.
-      let usbBcast = "255.255.255.255";
-      try { usbBcast = bridge.getUsbBroadcastAddress?.() || "255.255.255.255"; } catch {}
-      bridge.connectToPC(usbBcast, 7777, "usb");
-      setUsbToast(true);
-      setTimeout(() => setUsbToast(false), 2600);
-
-      // If the PC server isn't running yet (USB plugged but server not open),
-      // no packets will flow. Verify; if it doesn't confirm within 6s, stop the
-      // engine so the watcher can cleanly auto-retry once the server appears.
-      let tries = 0;
-      const verify = setInterval(() => {
-        tries++;
-        try {
-          const t = JSON.parse(bridge.getNetworkTelemetryJson?.() || "{}");
-          if (t.linkAlive) { clearInterval(verify); return; } // PC responded → confirmed
-        } catch {}
-        if (tries >= 24) { // ~6s
-          clearInterval(verify);
-          // Server not up yet — stop the engine cleanly (resets the transition
-          // guard so future connects aren't blocked). The native watcher keeps
-          // nudging while USB stays plugged and the engine is off, so this
-          // auto-retries cleanly once the PC server starts.
-          try { (bridge.stopEngine ? bridge.stopEngine() : bridge.stopNetworkNative?.()); } catch {}
-        }
-      }, 250);
+    const bridge = (window as any).AndroidBridge;
+    const w = (window as any).__usbWS;
+    if (!w) return;
+    let toastTimer: ReturnType<typeof setTimeout> | undefined;
+    const coordinator = createTransportCoordinator({
+      now: Date.now,
+      read: () => {
+        let t: any = {}, broadcast = '';
+        try { t = JSON.parse(bridge?.getNetworkTelemetryJson?.() || '{}'); confirmWireless(t); } catch {}
+        try { broadcast = bridge?.getUsbBroadcastAddress?.() || ''; } catch {}
+        return { running: !!t.engineRunning, alive: !!t.linkAlive, kind: t.connectionType || '',
+          broadcast, wirelessIntentAt: (window as any).__wirelessIntentAt || 0, pref: getWiredPref() };
+      },
+      stopNative: () => { try { bridge?.stopEngine?.(); } catch {} },
+      startTether: broadcast => {
+        try { bridge?.connectToPC?.(broadcast, 7777, 'usb'); } catch {}
+        setUsbToast(true); clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => setUsbToast(false), 2600);
+      },
+      connectDebug: () => w.connect(), disconnectDebug: () => w.disconnect(),
+    });
+    const chooseUsb = () => {
+      rememberMode("usb"); cancelPendingWireless();
+      (window as any).__wirelessIntentAt = 0;
+      coordinator.chooseUsb();
     };
-    return () => { delete (window as any).onUsbTetherChanged; };
-  }, []);
-
-  // ── Transport coordinator: exactly ONE transport live at a time ─────────────
-  // Fixes the "device connects twice" double-pad and makes USB-tethering usable.
-  // The PC allocates a virtual pad for EVERY open WebSocket and for every UDP
-  // source, so we must never have the USB-debug WS open at the same time as a
-  // native (Wi-Fi/tether) link. Reconciles every 1.5s based on the wired pref:
-  //   usbdebug → force WS on + stop the native engine
-  //   tether   → native only (never WS); initiate the tether connect if needed
-  //   auto     → native (Wi-Fi or tether) wins; WS only as a last-resort fallback
-  useEffect(() => {
-    let lastConnectAttempt = 0;
-    // Backoff for the auto-mode tether attempt below. The tether path has its own
-    // ~6s verify loop (see onUsbTetherChanged) that stops the engine when no ACK
-    // ever arrives. Retrying that on a flat 4s timer produces a permanent
-    // start/fail/stop/restart cycle: the engine is torn down and rebuilt every few
-    // seconds, and because each init resets the link state the UI flaps to NO REPLY
-    // on every pass. Observed on-device as a 6s sawtooth in the engine log while the
-    // server was happily receiving 30Hz of packets.
-    //
-    // So: widen the gap after each attempt that fails to establish a link, and reset
-    // the moment one succeeds. A tether that cannot ACK now costs one attempt every
-    // 30s instead of one every 4s.
-    const TETHER_RETRY_MIN = 4000;
-    const TETHER_RETRY_MAX = 30000;
-    let tetherRetryDelay = TETHER_RETRY_MIN;
-    const reconcile = () => {
-      const bridge = (window as any).AndroidBridge;
-      const w = (window as any).__usbWS;
-      if (!w) return;
-      const pref = getWiredPref();
-      let nativeLink = false, ctype = "", engineRunning = false;
-      try {
-        const t = JSON.parse(bridge?.getNetworkTelemetryJson?.() || "{}");
-        nativeLink = !!t.linkAlive; ctype = t.connectionType || "";
-        // engineRunning = native UDP TX thread is alive REGARDLESS of ACKs. This is
-        // the true "a native socket already owns a pad" signal; linkAlive can be false
-        // during an ACK gap while the engine is still blasting UDP, so gating the WS on
-        // linkAlive would let a second virtual pad open. Use engineRunning below.
-        engineRunning = !!t.engineRunning;
-      } catch {}
-      let usbBcast = "", tetherAvail = false;
-      try {
-        const b = bridge?.getUsbBroadcastAddress?.();
-        if (b && b !== "255.255.255.255") { usbBcast = b; tetherAvail = true; }
-      } catch {}
-      const now = Date.now();
-
-      // WIRELESS PROTECTION: a Wi-Fi (QR/manual) link uses the native engine just
-      // like tether does. If one is live — or was recently requested — never let a
-      // forced wired pref stopEngine() it, and keep the USB-debug WS closed so the
-      // phone can't register as a second pad. This is what lets the user keep an
-      // explicit Wired-mode selection without it clobbering a fresh wireless connect.
-      //
-      // ⚠️ CONTRACT WITH THE QR SCANNER (Dialogs.tsx QRScanOverlay).
-      // `__wirelessIntentAt` is REFRESHED on every poll tick while that dialog is
-      // verifying — it is not a one-shot stamp. So this window does not need to be
-      // as long as the whole connect budget; it only needs to outlast the gap
-      // BETWEEN refreshes (150ms). It effectively means "verification stopped more
-      // than WIRELESS_INTENT_MS ago".
-      //
-      // This used to be a single stamp taken at scan time, which coupled this
-      // number to the scanner's timeout: when the scanner ran longer than the
-      // window, the window expired mid-connect and the `usbdebug` branch below
-      // happily stopEngine()'d a wireless link that was still coming up. Do NOT
-      // go back to a one-shot stamp — the refresh is what keeps these independent.
-      const WIRELESS_INTENT_MS = 8000;
-      const wirelessIntentAt = (window as any).__wirelessIntentAt || 0;
-      const wirelessLive = nativeLink && ctype === "wireless";
-      if (wirelessLive || (now - wirelessIntentAt < WIRELESS_INTENT_MS)) {
-        w.disconnect();
-        return;
+    window.addEventListener(USB_CHOICE_EVENT, chooseUsb);
+    window.addEventListener(WIRELESS_CHOICE_EVENT, coordinator.chooseWireless);
+    (window as any).onUsbTetherChanged = coordinator.reconcile;
+    const id = setInterval(coordinator.reconcile, 1500);
+    // Restore the last confirmed PC only for a remembered Wi-Fi choice.
+    // A warm WebView already has a native engine: never tear it down on mount.
+    const pc = savedPc();
+    if (connectionMode() === "wireless" && pc && bridge?.connectToPC) {
+      coordinator.chooseWireless();
+      let running = false;
+      try { running = !!JSON.parse(bridge.getNetworkTelemetryJson?.() || "{}").engineRunning; } catch {}
+      if (!running) {
+        prepareWirelessConnection(); pendingWireless(pc);
+        bridge.connectToPC(pc.ip, pc.port, pc.key);
       }
-
-      if (pref === "usbdebug") {
-        // Force USB-debugging: WS on, native engine off (no phantom UDP pad).
-        // Stop whenever the engine is RUNNING (not merely linkAlive) so a native
-        // socket can never coexist with the WS during an ACK gap.
-        if (engineRunning) { try { bridge?.stopEngine?.(); } catch {} }
-        w.connect();
-      } else if (pref === "tether") {
-        // Force USB-tethering: native only, never the WS.
-        w.disconnect();
-        const onTether = nativeLink && ctype === "wired";
-        if (!onTether && tetherAvail && now - lastConnectAttempt > 4000) {
-          lastConnectAttempt = now;
-          try { bridge?.connectToPC?.(usbBcast, 7777, "usb"); } catch {}
-        }
-      } else {
-        // auto: native (Wi-Fi or tether) wins; WS only when there's no native path.
-        // "native path exists" = the engine is running (covers the ACK-gap window)
-        // or a tether adapter is present — NOT linkAlive, which misses a running-but-
-        // unACKed engine and would let the WS open a second pad.
-        if (engineRunning || tetherAvail) {
-          w.disconnect();
-          // Closing the WS is only half the job, and this branch used to stop there.
-          // On the DEFAULT pref ("auto"), enabling USB tethering made tetherAvail go
-          // true, which tore down the WORKING WebSocket transport and then started
-          // nothing in its place — the tether connect is only initiated by the
-          // explicit `tether` branch above. The user was left with no transport at
-          // all until they went and picked "tether" in the Wired tab by hand, which
-          // reads exactly as "USB tethering doesn't work" and as the PC not seeing
-          // the controller when it is plugged in.
-          //
-          // !engineRunning is what keeps this honest: a live Wi-Fi link already
-          // owns the native engine, and must never be dragged onto tether just
-          // because a cable happens to be plugged in for charging. Same 4s rate
-          // limit as the explicit branch, so a failing connect cannot spin.
-          const onTether = nativeLink && ctype === "wired";
-          if (onTether) {
-            tetherRetryDelay = TETHER_RETRY_MIN; // link is up — next failure retries promptly
-          } else if (!engineRunning && tetherAvail && now - lastConnectAttempt > tetherRetryDelay) {
-            lastConnectAttempt = now;
-            tetherRetryDelay = Math.min(tetherRetryDelay * 2, TETHER_RETRY_MAX);
-            try { bridge?.connectToPC?.(usbBcast, 7777, "usb"); } catch {}
-          }
-        } else { w.connect(); }
-      }
+    }
+    coordinator.reconcile();
+    const resumeTransport = () => { if (!document.hidden) coordinator.reconcile(); };
+    document.addEventListener("visibilitychange", resumeTransport);
+    return () => {
+      document.removeEventListener("visibilitychange", resumeTransport);
+      clearInterval(id);
+      window.removeEventListener(USB_CHOICE_EVENT, chooseUsb);
+      clearTimeout(toastTimer);
+      window.removeEventListener(WIRELESS_CHOICE_EVENT, coordinator.chooseWireless);
+      delete (window as any).onUsbTetherChanged;
     };
-    const id = setInterval(reconcile, 1500);
-    reconcile();
-    return () => clearInterval(id);
   }, []);
 
   function navigateTo(target: View) {
@@ -4854,7 +4079,8 @@ export default function App() {
     }
   }
 
-  const [selectedPresetId, setSelectedPresetId] = useState("xbox");
+  const [selectedPresetId, setSelectedPresetId] = useState(selectedLayout);
+  useEffect(() => { rememberLayout(selectedPresetId); }, [selectedPresetId]);
   const [editingPad, setEditingPad] = useState<CustomPad | null>(null);
   // The editor's "Save & Quit" calls onSave and THEN its close handler, which is
   // onCancel. This flag lets onCancel know a save just happened so it does not
@@ -4980,6 +4206,11 @@ export default function App() {
 
   useEffect(() => {
     (window as any).handleAndroidBack = () => {
+      if (transitioningRef.current) return;
+      if (closeTopOverlay()) return;
+      if ((window as any).__editorBack?.()) return;
+      if ((window as any).__authBack?.()) return;
+      if ((window as any).__presetBack?.()) return;
       const currentView = viewRef.current;
       if (currentView === "controller") {
         navigateTo("dashboard");
@@ -4990,12 +4221,10 @@ export default function App() {
         if (typeof closeFn === "function" && closeFn()) {
           return; // dialog was closed, stay on dashboard
         }
-        navigateTo("scanner");
+        (window as any).AndroidBridge?.exitApp?.();
       } else {
-        const bridge = (window as any).AndroidBridge;
-        if (bridge && bridge.exitApp) {
-          bridge.exitApp();
-        }
+        if ((window as any).__scannerBack?.()) return;
+        navigateTo("dashboard");
       }
     };
     return () => {
@@ -5004,14 +4233,7 @@ export default function App() {
   }, []);
 
 
-  useEffect(() => {
-    if (view === "scanner") {
-      const exitFn = (window as any).exitSession;
-      if (exitFn) {
-        exitFn();
-      }
-    }
-  }, [view]);
+  // Managing connection options is navigation, not a disconnect.
 
   function saveCustomPad(p: CustomPad) {
     setCustomPads(prev => {
@@ -5107,31 +4329,15 @@ export default function App() {
         )}
       </AnimatePresence>
 
-      <AnimatePresence initial={false}>
+      <AnimatePresence mode="wait" custom={view}>
         {view === "scanner" && (
-          <motion.div
-            key="scanner"
-            initial={{ opacity: 0, x: "-8%" }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: "-8%" }}
-            transition={{ duration: 0.34, ease: [0.16, 1, 0.3, 1] }}
-            style={{ willChange: "transform, opacity", backfaceVisibility: "hidden" }}
-            className="absolute inset-0 z-0"
-          >
+          <ShellScreenTransition key="scanner" direction={-1} className="absolute inset-0 z-0">
             <ScannerScreen onDashboard={() => navigateTo("dashboard")} />
-          </motion.div>
+          </ShellScreenTransition>
         )}
 
         {view === "dashboard" && (
-          <motion.div
-            key="dashboard"
-            initial={{ opacity: 0, x: "8%" }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: "8%" }}
-            transition={{ duration: 0.34, ease: [0.16, 1, 0.3, 1] }}
-            style={{ willChange: "transform, opacity", backfaceVisibility: "hidden" }}
-            className="absolute inset-0 z-10"
-          >
+          <ShellScreenTransition key="dashboard" direction={1} skipEntrance={firstRoute.current && !!(window as any).AndroidBridge?.onUiReady} className="absolute inset-0 z-10">
             <DashboardScreen
               onLaunch={() => navigateTo("controller")}
               onBack={() => navigateTo("scanner")}
@@ -5157,15 +4363,15 @@ export default function App() {
               gyroIdleDetect={gyroIdleDetect} setGyroIdleDetect={setGyroIdleDetect}
               rumbleOn={rumbleOn} setRumbleOn={setRumbleOn}
             />
-          </motion.div>
+          </ShellScreenTransition>
         )}
 
         {view === "controller" && (
           <motion.div
             key="controller"
-            initial={{ opacity: 0, scale: 0.98 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.98 }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
             transition={{ duration: 0.34, ease: [0.16, 1, 0.3, 1] }}
             style={{ willChange: "transform, opacity", backfaceVisibility: "hidden" }}
             className="absolute inset-0 z-20"

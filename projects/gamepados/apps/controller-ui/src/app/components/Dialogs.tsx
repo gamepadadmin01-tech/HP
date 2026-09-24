@@ -1,8 +1,11 @@
 import React, { useState, useEffect, useRef } from "react";
+import { prepareWirelessConnection } from "../transportCoordinator";
+import { pendingWireless, confirmWireless } from "../store/connectionMemory";
 // @ts-ignore - createPortal types
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, QrCode } from "lucide-react";
+import { useShellAppearance } from "./CalmShell";
 
 export const DIALOG_DUR  = 260;
 
@@ -120,11 +123,13 @@ function parsePairingPayload(raw: string): { ip: string; port: number; key: stri
 }
 
 export function QRScanOverlay({ onClose, onConnect }: { onClose: () => void; onConnect: () => void }) {
+  const { appearance } = useShellAppearance();
   // null = scanning, "verifying" = sent, "failed" = bad scan / no link in time.
   const [status, setStatus] = useState<null | "verifying" | "failed">(null);
   const [statusMsg, setStatusMsg] = useState("");
   const verifyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const verifyPoll = useRef<ReturnType<typeof setInterval> | null>(null);
+  const verifying = useRef(false);
 
   const stopVerifyTimers = () => {
     if (verifyTimer.current) { clearTimeout(verifyTimer.current); verifyTimer.current = null; }
@@ -133,9 +138,15 @@ export function QRScanOverlay({ onClose, onConnect }: { onClose: () => void; onC
 
   useEffect(() => {
     const bridge = (window as any).AndroidBridge;
+    // Android intentionally ignores camera results while its engine is running.
+    // Release the previous transport when scanning starts, and protect the
+    // scanner from USB auto-connect until it closes (even before a QR is found).
+    prepareWirelessConnection();
+    const scanIntent = setInterval(() => { (window as any).__wirelessIntentAt = Date.now(); }, 1000);
     if (bridge && bridge.startCameraScan) bridge.startCameraScan();
 
     (window as any).onQRScanned = (payload: string) => {
+      if (verifying.current) return;
       if (!bridge || !bridge.connectToPC) {
         // Browser/simulator fallback.
         console.log("Mock QR Scan Received:", payload);
@@ -217,6 +228,7 @@ export function QRScanOverlay({ onClose, onConnect }: { onClose: () => void; onC
           try {
             const t = JSON.parse(bridge.getNetworkTelemetryJson?.() || "{}");
             if (t.linkAlive) {   // PC actually responded (ACK), not just "we sent"
+              confirmWireless(t);
               stopVerifyTimers();
               // No pairing cache — every connect is a fresh scan (avoids dialing a
               // stale PC when switching computers).
@@ -235,10 +247,15 @@ export function QRScanOverlay({ onClose, onConnect }: { onClose: () => void; onC
         }, ATTEMPT_MS);
       };
 
+      stopVerifyTimers();
+      verifying.current = true;
+      prepareWirelessConnection();
+      pendingWireless(parsed);
       startAttempt();
     };
 
     return () => {
+      clearInterval(scanIntent);
       stopVerifyTimers();
       if (bridge && bridge.stopCameraScan) bridge.stopCameraScan();
       delete (window as any).onQRScanned;
@@ -247,6 +264,7 @@ export function QRScanOverlay({ onClose, onConnect }: { onClose: () => void; onC
   }, []);
 
   const retryScan = () => {
+    verifying.current = false;
     setStatus(null);
     setStatusMsg("");
     const bridge = (window as any).AndroidBridge;
@@ -254,11 +272,11 @@ export function QRScanOverlay({ onClose, onConnect }: { onClose: () => void; onC
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-transparent scanner-overlay-active"
+    <div data-testid="qr-scanner-screen" data-calm-theme={appearance} className="gp-shell console-scanner fixed inset-0 z-50 flex flex-col items-center justify-center bg-transparent scanner-overlay-active"
       style={{ fontFamily: "'Inter',sans-serif" }}>
       <style>{`
         /* Force transparent backgrounds down to the root for Android CameraX visibility */
-        body, html, #root, .scanner-overlay-active, .fixed.bg-black { background: transparent !important; }
+        body, html, #root, .gp-connect.gp-camera-active, .scanner-overlay-active, .fixed.bg-black { background: transparent !important; }
         @keyframes laserSweep2{0%,100%{top:0}50%{top:calc(100% - 3px)}}
         @keyframes cornerPulse2{0%,100%{opacity:0.55}50%{opacity:1}}
         .corner2{animation:cornerPulse2 2.4s ease-in-out infinite}
@@ -270,10 +288,10 @@ export function QRScanOverlay({ onClose, onConnect }: { onClose: () => void; onC
       `}</style>
       
       {/* Semi-transparent header/footer masks around transparent scanning cutout */}
-      <div className="absolute top-0 left-0 right-0 flex items-center justify-between z-10 px-5 pb-4 bg-black/60 backdrop-blur-sm"
+      <div className="console-scanner-top absolute top-0 left-0 right-0 flex items-center justify-between z-10 px-5 pb-4 bg-black/60 backdrop-blur-sm"
         style={{ paddingTop: "calc(var(--android-safe-top, env(safe-area-inset-top, 36px)) + 12px)" }}>
-        <p className="text-sm font-bold text-primary" style={{ fontFamily: "'Space Grotesk',sans-serif" }}>Scan QR Code</p>
-        <button onClick={onClose}
+        <p className="text-sm font-bold text-primary" style={{ fontFamily: "'Space Grotesk',sans-serif" }}>Scan. Pair. Play.</p>
+        <button data-testid="close-scanner-button" aria-label="Close scanner" onClick={onClose}
           className="w-8 h-8 flex items-center justify-center rounded-full"
           style={{ background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.12)" }}>
           <X size={14} className="text-foreground" />
@@ -309,7 +327,8 @@ export function QRScanOverlay({ onClose, onConnect }: { onClose: () => void; onC
         </div>
       </div>
       
-      <div className="absolute bottom-0 left-0 right-0 p-8 bg-black/60 backdrop-blur-sm text-center z-10">
+      {!(window as any).AndroidBridge?.startCameraScan && <div className="console-browser-camera"><p>Camera pairing is available in the Android app. Open GamepadServer on your PC, then scan its QR code with your phone.</p><button data-testid="scanner-return-button" className="calm-text-button" onClick={onClose}>Back to connection options</button></div>}
+      <div className="console-scanner-bottom absolute bottom-0 left-0 right-0 p-8 bg-black/60 backdrop-blur-sm text-center z-10">
         <p className="text-xs font-mono text-primary/70">Align the PC Server QR Code within the frame</p>
       </div>
 
@@ -346,4 +365,3 @@ export function QRScanOverlay({ onClose, onConnect }: { onClose: () => void; onC
     </div>
   );
 }
-

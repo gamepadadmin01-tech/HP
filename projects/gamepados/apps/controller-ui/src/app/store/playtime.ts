@@ -45,6 +45,7 @@ import { getSession } from "./account";
 import { getBillingState, refresh as refreshBilling } from "./billing";
 import { sendPlaytimeTicket } from "../platform/native";
 import { readJson, writeJson, KEYS } from "./storage";
+import { guestTrial } from "./guestTrial";
 
 export type PlaytimeStatus =
   /** Controller closed. */
@@ -220,6 +221,7 @@ let tickTimer: ReturnType<typeof setInterval> | null = null;
 let local: LocalUsage = { periodKey: "", usedSeconds: 0 };
 let limitSeconds: number | null = null;
 let unlimited = false;
+let guestMode = false;
 /** Guards against beginPlay/endPlay racing on a fast open-close. */
 let generation = 0;
 
@@ -318,6 +320,7 @@ async function flushAndRefresh(id: string | null, f: number, sq: number) {
 /** One second of play. Counts even while the app is backgrounded with the
  *  controller open — that is the rule, not an oversight. */
 function tick() {
+  if (guestMode) { publishGuest(); return; }
   if (unlimited || limitSeconds === null) return;
   local = { ...local, usedSeconds: local.usedSeconds + 1 };
   saveLocal(local);
@@ -398,12 +401,17 @@ export async function beginPlay(): Promise<void> {
 
   const session = getSession();
   if (!session) {
-    // Signing in to play is a separate product gate (§2.3) and is deliberately
-    // NOT switched on here — turning it on silently would put a wall between
-    // install and first play with no warning release in front of it.
-    publish("untracked");
+    guestMode = true;
+    sessionId = null;
+    unlimited = false;
+    clearAlerts();
+    guestTrial(true);
+    publishGuest();
+    if (state.status !== "blocked") tickTimer = setInterval(tick, 1000);
     return;
   }
+  guestMode = false;
+  guestTrial(false);
 
   // Start from whatever is on disk so an offline session still counts, and so a
   // spent quota is spent before the first request comes back.
@@ -507,6 +515,8 @@ function startLocalOnly(myGeneration: number) {
 /** The controller closed. Bill the remainder and stop. */
 export async function endPlay(): Promise<void> {
   generation += 1;
+  if (guestMode) guestTrial(false);
+  guestMode = false;
   clearTimers();
   clearAlerts();
   const id = sessionId;
@@ -524,6 +534,24 @@ export async function endPlay(): Promise<void> {
   }
   void refreshBilling();
 }
+
+function publishGuest() {
+  const trial = guestTrial();
+  const period = new Date(trial.resetsAt).toISOString();
+  if (period !== state.resetsAt) warned = new Set();
+  const blocked = trial.remainingSeconds <= 0;
+  if (blocked) { clearTimers(); clearAlerts(); }
+  else checkWarnings(trial.remainingSeconds);
+  set({
+    status: blocked ? "blocked" : "playing",
+    remainingSeconds: trial.remainingSeconds,
+    limitSeconds: trial.limitSeconds,
+    resetsAt: period,
+    message: blocked ? "Your 30 free minutes are used for today. Choose a plan to keep playing, or come back tomorrow." : "",
+  });
+}
+
+window.addEventListener("guest-trial-expired", () => { if (guestMode) publishGuest(); });
 
 /** After a purchase or a promo: drop the block and let the user back in without
  *  making them reopen the controller. */

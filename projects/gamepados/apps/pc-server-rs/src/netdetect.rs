@@ -386,7 +386,7 @@ mod win {
     /// Every IPv4 adapter as `(description, ip, on_link_prefix_len)`, loopback
     /// excluded. The prefix length is what the OS actually assigned — see
     /// `same_subnet` for why assuming /24 instead was a bug.
-    pub fn ipv4_adapters_with_prefix() -> Vec<(String, String, u8)> {
+    pub fn ipv4_adapters_with_index() -> Vec<(String, String, u8, u32)> {
         let mut out = Vec::new();
         let mut size: u32 = 16 * 1024;
         let mut buf: Vec<u8> = Vec::new();
@@ -433,11 +433,11 @@ mod win {
                     if !sa.is_null() && (*sa).sin_family == AF_INET as u16 {
                         let o = (*sa).sin_addr;
                         let ip = format!("{}.{}.{}.{}", o[0], o[1], o[2], o[3]);
-                        if !ip.starts_with("127.") {
+                        {
                             // 0 or >32 means the API gave us nothing usable; the
                             // caller falls back to /24 rather than trusting it.
                             let plen = u.on_link_prefix_length;
-                            out.push((desc.clone(), ip, if plen == 0 || plen > 32 { 0 } else { plen }));
+                            out.push((desc.clone(), ip, if plen == 0 || plen > 32 { 0 } else { plen }, a.if_index));
                         }
                     }
                     ua = u.next;
@@ -446,6 +446,10 @@ mod win {
             }
         }
         out
+    }
+
+    pub fn ipv4_adapters_with_prefix() -> Vec<(String, String, u8)> {
+        ipv4_adapters_with_index().into_iter().filter(|(_, ip, _, _)| !ip.starts_with("127.")).map(|(d,i,p,_)| (d,i,p)).collect()
     }
 
     /// Back-compat view for callers that don't care about the prefix.
@@ -843,4 +847,12 @@ mod tests {
         // Garbage never silently matches.
         assert!(!same_subnet("nonsense", "10.0.6.194", 20));
     }
+}
+
+/// Select a real unicast source on the receiving interface, never a route-selected NIC.
+#[cfg(windows)]
+pub fn reply_address(ifindex: u32, peer: std::net::Ipv4Addr) -> Option<std::net::Ipv4Addr> {
+    let candidates: Vec<_> = win::ipv4_adapters_with_index().into_iter().filter(|(_,_,_,i)| *i == ifindex).collect();
+    candidates.iter().find(|(_,ip,p,_)| *p > 0 && same_subnet(ip, &peer.to_string(), *p))
+        .or_else(|| candidates.first()).and_then(|(_,ip,_,_)| ip.parse().ok())
 }

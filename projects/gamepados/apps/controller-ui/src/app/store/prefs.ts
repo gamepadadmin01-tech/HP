@@ -1,3 +1,4 @@
+import { USB_CHOICE_EVENT } from "../transportCoordinator";
 // ─── Preference repository ────────────────────────────────────────────────────
 //
 // Motion and transport settings. Every default here is the behaviour already
@@ -102,6 +103,7 @@ export function getWiredPref(): WiredPref {
 
 export function setWiredPref(v: WiredPref): void {
   writeString(KEYS.wiredPref, v);
+  window.dispatchEvent(new Event(USB_CHOICE_EVENT));
 }
 
 /** Native touch input. Default ON — only an explicit "0" disables it, which is

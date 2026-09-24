@@ -14,13 +14,23 @@
 //  • It never thanks someone for a bad rating. Under 4 stars it asks what went
 //    wrong and sends that to support instead of fishing for a store review.
 //
+// The thank-you step invites EVERY rater to follow the Instagram page (Akhil's
+// call, 2026-09-23 — not only the 4-5 star ones). It used to close itself after
+// 1.4s, too fast to read a button, let alone tap it, so it now stays until the
+// user taps Follow or ✕. The rating is already saved before this step appears,
+// so closing it any way at all is simply "done".
+//
 // Delivery is feedback.ts, which queues offline and retries on reconnect.
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Star, Send } from "lucide-react";
+import { X, Star, Send, Instagram } from "lucide-react";
 import { submitRating } from "./feedback";
+import { openUrl } from "./platform/native";
+import { INSTAGRAM_URL } from "./social";
+import { useShellAppearance } from "./components/CalmShell";
+import { useOverlayFocus } from "./components/useOverlayFocus";
 
 const RATED_KEY = "feature_rated_v2"; // bump the suffix to re-introduce in a future version
 const NAV_KEY = "intro_nav_count";
@@ -31,11 +41,11 @@ const FIRST_SHOW_AT = 4;
 // After a dismiss-without-rating, wait this many more transitions before re-asking.
 const REPEAT_INTERVAL = 6;
 
-const ACCENT = "#5D90CB";
+const ACCENT = "var(--calm-accent, #abc8db)";
 const STAR_ON = "#F5C451";
-const PANEL = "#151A23";
-const SUNK = "#10141C";
-const MUTED = "#7C8AA0";
+const PANEL = "var(--calm-surface, #202527)";
+const SUNK = "var(--calm-soft, #292f31)";
+const MUTED = "var(--calm-muted, #a6b0b3)";
 
 /** True once the user has submitted a rating — the feature is then permanently off. */
 export function introRated(): boolean {
@@ -114,22 +124,21 @@ export function FeatureIntroOverlay({
   /** Injected clock (ms). Kept out of the module so render stays deterministic. */
   now: () => number;
 }) {
+  const { appearance } = useShellAppearance();
   const [picked, setPicked] = useState(0);
   const [step, setStep] = useState<Step>("rate");
   const [note, setNote] = useState("");
-  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    return () => {
-      if (closeTimer.current) clearTimeout(closeTimer.current);
-    };
-  }, []);
+  const dialogRef=useRef<HTMLDivElement>(null);
 
   function finish(stars: number, text?: string) {
     markRated();
     submitRating(stars, now(), text);
     setStep("done");
-    closeTimer.current = setTimeout(() => onRated(), 1400);
+  }
+
+  function followInstagram() {
+    openUrl(INSTAGRAM_URL);
+    onRated();
   }
 
   function submit() {
@@ -140,16 +149,24 @@ export function FeatureIntroOverlay({
     else setStep("note");
   }
 
+  // ✕, backdrop, Escape and Android Back all come through here. Before a rating
+  // that is a dismissal (ask again later); on the thank-you step the rating is
+  // already saved, so it is simply the end.
   const dismiss = () => {
+    if (step === "done") { onRated(); return; }
     snoozeIntro();
     onClose();
   };
+  useOverlayFocus(open, dialogRef, dismiss);
 
   return createPortal(
     <AnimatePresence>
       {open && (
         <motion.div
           key="rating-overlay"
+          className="gp-shell calm-rating" data-calm-theme={appearance}
+          role="dialog" aria-modal="true" aria-label="Rate your GamepadOS experience"
+          ref={dialogRef}
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
@@ -177,9 +194,9 @@ export function FeatureIntroOverlay({
               borderRadius: 16,
               background: PANEL,
               border: "1px solid rgba(79,134,198,0.12)",
-              boxShadow: "0 24px 64px rgba(0,0,0,0.55)",
+              boxShadow: "none",
               overflow: "hidden",
-              fontFamily: "'Inter',sans-serif",
+              fontFamily: "system-ui, sans-serif",
             }}
           >
             {/* ✕ — always available; the prompt is never forced. */}
@@ -209,14 +226,14 @@ export function FeatureIntroOverlay({
                     exit={{ opacity: 0, x: -12 }} transition={FADE}>
                     <Badge />
                     <h2 style={{
-                      fontSize: 18, fontWeight: 700, color: "#E2E8F0", margin: "14px 0 0",
-                      fontFamily: "'Space Grotesk','Inter',sans-serif",
+                      fontSize: 18, fontWeight: 700, color: "var(--calm-ink, #f0f2ed)", margin: "14px 0 0",
+                      fontFamily: "system-ui, sans-serif",
                     }}>
                       How's GamepadOS playing?
                     </h2>
                     <p style={{ fontSize: 12.5, color: MUTED, lineHeight: 1.55, margin: "8px 6px 0" }}>
-                      This build brings a faster input path and a rebuilt motion
-                      engine. Your rating tells us whether it landed.
+                      How does it feel to play? Tell us what works for you and
+                      what could feel better.
                     </p>
 
                     <div style={{ display: "flex", justifyContent: "center", gap: 4, margin: "20px 0 6px" }}>
@@ -240,7 +257,7 @@ export function FeatureIntroOverlay({
                               size={32}
                               strokeWidth={1.75}
                               style={{
-                                color: active ? STAR_ON : "rgba(255,255,255,0.20)",
+                                color: active ? STAR_ON : "var(--calm-muted, #a6b0b3)",
                                 fill: active ? STAR_ON : "transparent",
                                 transition: "color 160ms ease, fill 160ms ease",
                               }}
@@ -269,7 +286,7 @@ export function FeatureIntroOverlay({
                         borderRadius: 12, border: "none",
                         background: ACCENT, color: "#0B0E14",
                         fontSize: 13.5, fontWeight: 700, letterSpacing: "0.02em",
-                        fontFamily: "'Space Grotesk','Inter',sans-serif",
+                        fontFamily: "system-ui, sans-serif",
                         cursor: picked ? "pointer" : "default",
                         touchAction: "manipulation",
                       }}
@@ -285,8 +302,8 @@ export function FeatureIntroOverlay({
                     exit={{ opacity: 0, x: -12 }} transition={FADE}>
                     <Badge />
                     <h2 style={{
-                      fontSize: 18, fontWeight: 700, color: "#E2E8F0", margin: "14px 0 0",
-                      fontFamily: "'Space Grotesk','Inter',sans-serif",
+                      fontSize: 18, fontWeight: 700, color: "var(--calm-ink, #f0f2ed)", margin: "14px 0 0",
+                      fontFamily: "system-ui, sans-serif",
                     }}>
                       What went wrong?
                     </h2>
@@ -303,8 +320,8 @@ export function FeatureIntroOverlay({
                         width: "100%", marginTop: 16, padding: 12,
                         borderRadius: 12, background: SUNK,
                         border: "1px solid rgba(79,134,198,0.14)",
-                        color: "#E2E8F0", fontSize: 13, lineHeight: 1.5,
-                        fontFamily: "'Inter',sans-serif", resize: "none", outline: "none",
+                        color: "var(--calm-ink, #f0f2ed)", fontSize: 13, lineHeight: 1.5,
+                        fontFamily: "system-ui, sans-serif", resize: "none", outline: "none",
                       }}
                     />
                     <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
@@ -312,9 +329,9 @@ export function FeatureIntroOverlay({
                         onClick={() => finish(picked)}
                         style={{
                           flex: 1, padding: "12px 0", borderRadius: 12,
-                          background: "rgba(255,255,255,0.04)",
-                          border: "1px solid rgba(255,255,255,0.10)",
-                          color: "rgba(255,255,255,0.75)", fontSize: 13, fontWeight: 600,
+                          background: "var(--calm-soft, #292f31)",
+                          border: "1px solid var(--calm-line, #343c3f)",
+                          color: "var(--calm-muted, #a6b0b3)", fontSize: 13, fontWeight: 600,
                           touchAction: "manipulation", cursor: "pointer",
                         }}
                       >
@@ -330,7 +347,7 @@ export function FeatureIntroOverlay({
                           flex: 1.4, padding: "12px 0", borderRadius: 12, border: "none",
                           background: ACCENT, color: "#0B0E14",
                           fontSize: 13, fontWeight: 700,
-                          fontFamily: "'Space Grotesk','Inter',sans-serif",
+                          fontFamily: "system-ui, sans-serif",
                           display: "flex", alignItems: "center", justifyContent: "center", gap: 7,
                           touchAction: "manipulation", cursor: "pointer",
                         }}
@@ -361,8 +378,8 @@ export function FeatureIntroOverlay({
                         : <Send size={22} style={{ color: ACCENT }} />}
                     </motion.div>
                     <p style={{
-                      fontSize: 15.5, fontWeight: 700, color: "#E2E8F0", margin: 0,
-                      fontFamily: "'Space Grotesk','Inter',sans-serif",
+                      fontSize: 15.5, fontWeight: 700, color: "var(--calm-ink, #f0f2ed)", margin: 0,
+                      fontFamily: "system-ui, sans-serif",
                     }}>
                       {picked >= 4 ? "Thanks for the rating" : "Thanks — message sent"}
                     </p>
@@ -373,6 +390,24 @@ export function FeatureIntroOverlay({
                       {typeof navigator !== "undefined" && navigator.onLine === false
                         ? " Sends when you're back online."
                         : ""}
+                    </p>
+                    <motion.button
+                      onClick={followInstagram}
+                      whileTap={{ scale: 0.98 }}
+                      style={{
+                        width: "100%", marginTop: 20, padding: "13px 0",
+                        borderRadius: 12, border: "none",
+                        background: ACCENT, color: "#0B0E14",
+                        fontSize: 13.5, fontWeight: 700, letterSpacing: "0.02em",
+                        fontFamily: "system-ui, sans-serif",
+                        display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+                        cursor: "pointer", touchAction: "manipulation",
+                      }}
+                    >
+                      <Instagram size={16} aria-hidden="true" /> Follow us on Instagram
+                    </motion.button>
+                    <p style={{ fontSize: 11, color: MUTED, marginTop: 8, lineHeight: 1.5 }}>
+                      Tips, updates and new features first.
                     </p>
                   </motion.div>
                 )}
@@ -405,7 +440,7 @@ function Badge() {
         display: "flex", alignItems: "center", justifyContent: "center",
         background: "rgba(79,134,198,0.12)",
         border: "1px solid rgba(79,134,198,0.25)",
-        boxShadow: "0 0 26px rgba(79,134,198,0.18)",
+        boxShadow: "none",
       }}
     >
       <Star size={24} style={{ color: ACCENT }} />

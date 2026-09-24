@@ -27,6 +27,10 @@ export const KEYS = {
   customPads: "custom_pads",
   presetOverrides: "preset_overrides",
   posOverrides: "pos_overrides",
+  lastPc: "gp_last_confirmed_pc",
+  connectionMode: "gp_connection_mode",
+  selectedLayout: "gp_selected_layout",
+  dashboardTab: "gp_dashboard_tab",
 
   // Motion
   gyroOn: "gyro_on",
@@ -42,6 +46,8 @@ export const KEYS = {
   // Transport
   nativeInput: "gp_native_input",
   wiredPref: "gp_wired_pref",
+  // Appearance of Home/Connect only; gameplay and editor keep their own palette.
+  shellAppearance: "gp_shell_appearance",
 
   // Signed-in user, absent while a guest
   account: "gp_account",
@@ -64,6 +70,7 @@ export const KEYS = {
   // authoritative when reachable, but this is what governs offline and what
   // stops a clear-data wipe from restoring a spent quota.
   playtime: "gp_playtime",
+  guestTrial: "gp_guest_trial_preview",
 
   // Which one-off in-app notice has been dismissed, by id. A plain string so a
   // later announcement can use a new id and is not silenced by an old dismissal.
@@ -228,4 +235,3 @@ export function migrate(): number {
   }
   return from;
 }
-

@@ -116,14 +116,20 @@ def main():
     send(ts + 2, auth=0xDEADBEEF)
     check("no ACK for bad token", len([r for r in recv_all() if r[:3] == b"ACK"]) == 0)
 
-    print("\n[6] burst of 200 frames all ACK")
-    got = 0
+    print("\n[6] burst coalesces queued input and ACKs the newest frame")
+    echoed_burst = []
     for i in range(200):
         send(ts + 100 + i, buttons=(i & 0xFF))
     for r in recv_all(1.0):
-        if r[:3] == b"ACK":
-            got += 1
-    check("all 200 ACKed", got == 200, "got %d" % got)
+        if r[:3] == b"ACK" and len(r) == 11:
+            echoed_burst.append(struct.unpack("<Q", r[3:11])[0])
+    # main.rs drains to newest per peer, matching server.py. Dropping queued
+    # older input is deliberate; the final frame must still be acknowledged.
+    check("newest burst frame ACKed", ts + 299 in echoed_burst,
+          "%d replies" % len(echoed_burst))
+    check("burst echoes are unique and in order",
+          bool(echoed_burst) and echoed_burst == sorted(set(echoed_burst))
+          and all(ts + 100 <= t <= ts + 299 for t in echoed_burst))
 
     print("\n" + ("ALL CHECKS PASSED" if not failures else "FAILURES: %r" % failures))
     return 1 if failures else 0

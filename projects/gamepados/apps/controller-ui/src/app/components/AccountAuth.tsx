@@ -1,5 +1,6 @@
-import React, { useState } from "react";
-import { Gamepad2, Mail, Lock, User as UserIcon, Eye, EyeOff, ArrowLeft, KeyRound } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import { Eye, EyeOff, ArrowLeft, LoaderCircle } from "lucide-react";
+import { motion, useReducedMotion } from "framer-motion";
 import { signIn, createAccount, confirmEmail } from "../store/account";
 import { ApiError, forgotPassword, resetPassword, resendCode } from "../api/account";
 
@@ -24,8 +25,17 @@ type Mode = "signin" | "create" | "verify" | "forgot" | "reset";
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 const MIN_PASSWORD = 8;
 
-export function AccountAuth() {
+export function AccountAuth({ standalone = false }: { standalone?: boolean } = {}) {
+  const reduced = useReducedMotion();
+  const formId = React.useId();
   const [mode, setMode] = useState<Mode>("signin");
+  useEffect(() => {
+    (window as any).__authBack = () => {
+      if (mode === "signin") return false;
+      go("signin"); return true;
+    };
+    return () => { delete (window as any).__authBack; };
+  }, [mode]);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -115,155 +125,35 @@ export function AccountAuth() {
     : mode === "forgot" ? "We'll email you a code to set a new password."
     : "Enter the code from your email and a new password.";
 
-  return (
-    <div className="pt-2 pb-10">
-      {/* Brand */}
-      <div className="flex flex-col items-center mb-7">
-        <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-4"
-          style={{
-            background: "rgba(79,134,198,0.12)",
-            border: "1px solid rgba(79,134,198,0.25)",
-            boxShadow: "0 0 28px rgba(79,134,198,0.18)",
-          }}>
-          <Gamepad2 size={30} style={{ color: "#5D90CB" }} />
-        </div>
-        <h2 className="text-xl font-bold text-white text-center"
-          style={{ fontFamily: "'Space Grotesk',sans-serif" }}>{title}</h2>
-        <p className="text-xs mt-1.5 text-center px-4" style={{ color: "#7C8AA0" }}>{blurb}</p>
-      </div>
-
-      {mode !== "signin" && (
-        <button onClick={() => go(mode === "verify" || mode === "create" ? "signin" : "signin")}
-          className="flex items-center gap-1.5 text-xs font-semibold mb-4"
-          style={{ color: "#7C8AA0" }}>
-          <ArrowLeft size={13} /> Back to sign in
-        </button>
-      )}
-
-      <form onSubmit={submit} className="space-y-3">
-        {error && <Banner tone="error">{error}</Banner>}
-        {notice && !error && <Banner tone="info">{notice}</Banner>}
-
-        {mode === "create" && (
-          <Field icon={<UserIcon size={15} />}>
-            <input value={name} onChange={(e) => setName(e.target.value)}
-              placeholder="Display name" autoComplete="name" style={inputStyle} />
-          </Field>
-        )}
-
-        {(mode === "signin" || mode === "create" || mode === "forgot") && (
-          <Field icon={<Mail size={15} />}>
-            <input value={email} onChange={(e) => setEmail(e.target.value)}
-              type="email" inputMode="email" autoCapitalize="none" autoCorrect="off"
-              placeholder="Email address" autoComplete="email" style={inputStyle} />
-          </Field>
-        )}
-
-        {(mode === "verify" || mode === "reset") && (
-          <Field icon={<KeyRound size={15} />}>
-            <input value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-              inputMode="numeric" placeholder="6-digit code" autoComplete="one-time-code"
-              style={{ ...inputStyle, letterSpacing: "0.35em", fontWeight: 700 }} />
-          </Field>
-        )}
-
-        {(mode === "signin" || mode === "create" || mode === "reset") && (
-          <Field icon={<Lock size={15} />}>
-            <input value={password} onChange={(e) => setPassword(e.target.value)}
-              type={show ? "text" : "password"} autoCapitalize="none"
-              placeholder={mode === "signin" ? "Password" : `Password (${MIN_PASSWORD}+ characters)`}
-              autoComplete={mode === "signin" ? "current-password" : "new-password"}
-              style={{ ...inputStyle, paddingRight: 44 }} />
-            <button type="button" onClick={() => setShow(!show)} aria-label={show ? "Hide password" : "Show password"}
-              className="absolute right-1 top-1/2 -translate-y-1/2 p-3" style={{ color: "#7C8AA0" }}>
-              {show ? <EyeOff size={15} /> : <Eye size={15} />}
-            </button>
-          </Field>
-        )}
-
-        <button type="submit" disabled={!canSubmit || busy}
-          className="w-full py-3.5 rounded-xl font-bold text-sm tracking-wide transition-all active:scale-[0.99] disabled:opacity-45"
-          style={{
-            fontFamily: "'Space Grotesk',sans-serif",
-            background: "#5D90CB", color: "#0B0E14",
-            boxShadow: canSubmit && !busy ? "0 0 18px rgba(79,134,198,0.30)" : "none",
-          }}>
-          {busy ? "Please wait…"
-            : mode === "signin" ? "Sign in"
-            : mode === "create" ? "Create account"
-            : mode === "verify" ? "Confirm email"
-            : mode === "forgot" ? "Send reset code"
-            : "Change password"}
-        </button>
-      </form>
-
-      {/* Secondary actions */}
-      <div className="mt-5 space-y-2 text-center">
-        {mode === "signin" && (
-          <>
-            <button onClick={() => go("forgot")} className="text-xs font-semibold" style={{ color: "#7C8AA0" }}>
-              Forgot your password?
-            </button>
-            <p className="text-xs" style={{ color: "#7C8AA0" }}>
-              New here?{" "}
-              <button onClick={() => go("create")} className="font-bold" style={{ color: "#5D90CB" }}>
-                Create an account
-              </button>
-            </p>
-          </>
-        )}
-        {mode === "verify" && (
-          <button onClick={resend} disabled={busy} className="text-xs font-semibold disabled:opacity-50"
-            style={{ color: "#5D90CB" }}>
-            Didn't get it? Send a new code
-          </button>
-        )}
-        {mode === "create" && (
-          <p className="text-xs" style={{ color: "#7C8AA0" }}>
-            Already have an account?{" "}
-            <button onClick={() => go("signin")} className="font-bold" style={{ color: "#5D90CB" }}>Sign in</button>
-          </p>
-        )}
-      </div>
+  return <motion.section key={mode} className="calm-auth" data-testid={`auth-${mode}-form`} initial={{ opacity: 0, x: reduced ? 0 : 8 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: reduced ? 0 : .18 }}>
+    <div className="calm-auth-heading">{!standalone && <span className="console-eyebrow">YOUR PLAYER PROFILE</span>}<h2 data-testid="auth-heading">{standalone && mode === 'signin' ? 'Sign in. Game on.' : title}</h2><p>{blurb}</p></div>
+    {mode !== "signin" && <button data-testid="auth-back-signin-button" className="calm-text-button" onClick={() => go("signin")}><ArrowLeft size={17} aria-hidden="true" />Back to sign in</button>}
+    <form onSubmit={submit} className="calm-auth-form">
+      {error && <Banner tone="error">{error}</Banner>}
+      {notice && !error && <Banner tone="info">{notice}</Banner>}
+      {mode === "create" && <label className="calm-form-field" htmlFor={`${formId}-name`}><span>Display name</span>
+        <input data-testid="auth-name-input" id={`${formId}-name`} value={name} onChange={e=>setName(e.target.value)} autoComplete="name" /></label>}
+      {(mode === "signin" || mode === "create" || mode === "forgot") && <label className="calm-form-field" htmlFor={`${formId}-email`}><span>Email address</span>
+        <input data-testid="auth-email-input" id={`${formId}-email`} value={email} onChange={e=>setEmail(e.target.value)} type="email" inputMode="email" autoComplete="email" autoCapitalize="none" autoCorrect="off" /></label>}
+      {(mode === "verify" || mode === "reset") && <label className="calm-form-field" htmlFor={`${formId}-code`}><span>6-digit email code</span>
+        <input data-testid="auth-code-input" id={`${formId}-code`} value={code} onChange={e=>setCode(e.target.value.replace(/\D/g, "").slice(0,6))} inputMode="numeric" autoComplete="one-time-code" maxLength={6} /></label>}
+      {(mode === "signin" || mode === "create" || mode === "reset") && <div className="calm-form-field"><label htmlFor={`${formId}-password`}>{mode === "signin" ? "Password" : `New password (${MIN_PASSWORD}+ characters)`}</label>
+        <div className="calm-password-field"><input data-testid="auth-password-input" id={`${formId}-password`} value={password} onChange={e=>setPassword(e.target.value)} type={show ? "text" : "password"} autoCapitalize="none" autoComplete={mode === "signin" ? "current-password" : "new-password"} />
+          <button data-testid="auth-password-reveal-button" type="button" onClick={()=>setShow(!show)} aria-label={show ? "Hide password" : "Show password"}>{show ? <EyeOff size={18} /> : <Eye size={18} />}</button></div>
+      </div>}
+      <button data-testid="auth-submit-button" className="calm-primary" type="submit" disabled={!canSubmit || busy}>
+        {busy && <LoaderCircle size={17} className="animate-spin" aria-hidden="true" />}
+        {busy ? "Please wait…" : mode === "signin" ? "Sign in" : mode === "create" ? "Create account" : mode === "verify" ? "Confirm email" : mode === "forgot" ? "Send reset code" : "Change password"}
+      </button>
+    </form>
+    <div className="calm-auth-links">
+      {mode === "signin" && <><button data-testid="auth-forgot-password-button" className="calm-text-button" onClick={()=>go("forgot")}>Forgot your password?</button><button data-testid="auth-create-account-button" className="calm-text-button" onClick={()=>go("create")}>Create an account</button></>}
+      {mode === "verify" && <button className="calm-text-button" onClick={resend} disabled={busy}>Didn’t get it? Send a new code</button>}
+      {mode === "create" && <button className="calm-text-button" onClick={()=>go("signin")}>Already have an account? Sign in</button>}
     </div>
-  );
-}
-
-// ─── Pieces ───────────────────────────────────────────────────────────────────
-
-const inputStyle: React.CSSProperties = {
-  width: "100%",
-  background: "#1B2230",
-  border: "1px solid rgba(79,134,198,0.14)",
-  color: "#E2E8F0",
-  borderRadius: 12,
-  padding: "13px 14px 13px 40px",
-  fontSize: 14,
-  fontFamily: "'Inter',sans-serif",
-  outline: "none",
-};
-
-function Field({ icon, children }: { icon: React.ReactNode; children: React.ReactNode }) {
-  return (
-    <div className="relative">
-      <span className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: "#7C8AA0" }}>
-        {icon}
-      </span>
-      {children}
-    </div>
-  );
+  </motion.section>;
 }
 
 function Banner({ tone, children }: { tone: "error" | "info"; children: React.ReactNode }) {
-  const error = tone === "error";
-  return (
-    <div className="p-3 rounded-xl text-xs text-center leading-relaxed"
-      style={{
-        background: error ? "rgba(224,87,79,0.12)" : "rgba(79,134,198,0.10)",
-        border: `1px solid ${error ? "rgba(224,87,79,0.25)" : "rgba(79,134,198,0.22)"}`,
-        color: error ? "#E2645D" : "#93A2BB",
-      }}>
-      {children}
-    </div>
-  );
+  return <div className={`calm-form-message ${tone === "error" ? "calm-form-error" : ""}`} role={tone === "error" ? "alert" : "status"}>{children}</div>;
 }

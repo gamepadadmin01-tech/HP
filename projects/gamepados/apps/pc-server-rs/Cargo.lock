@@ -1926,7 +1926,7 @@ dependencies = [
 
 [[package]]
 name = "pc-server-rs"
-version = "2.1.2"
+version = "2.1.3"
 dependencies = [
  "aes-gcm",
  "ed25519-dalek",

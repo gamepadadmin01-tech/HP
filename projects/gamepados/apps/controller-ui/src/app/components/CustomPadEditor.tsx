@@ -1,6 +1,8 @@
 import React, { useState, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Plus, ArrowLeft, Settings, Trash2, X as XIcon } from "lucide-react";
+import { Plus, ArrowLeft, Settings, Trash2, X as XIcon, Pencil, TriangleAlert } from "lucide-react";
+import { useShellAppearance } from "./CalmShell";
+import { ShellMotion } from "./ShellMotion";
 import { CustomPad, CustomBtnDef, WidgetType } from "../types";
 
 // ── Custom pointer-driven slider ──────────────────────────────────────────────
@@ -326,6 +328,7 @@ export function CustomPadEditor({
   onCancel?: () => void;
 }) {
   const close = onClose || onCancel || (() => {});
+  const { appearance } = useShellAppearance();
   const [buttons, setButtons] = useState<CustomBtnDef[]>(pad.buttons || []);
   // Editable pad name (rename from inside the canvas).
   const [padName, setPadName] = useState<string>(pad.name || "My Custom Pad");
@@ -337,6 +340,21 @@ export function CustomPadEditor({
   const [showSettings, setShowSettings] = useState(false);
   const [showAddMenu, setShowAddMenu] = useState(false);
   const [showExitConfirm, setShowExitConfirm] = useState(false);
+  React.useEffect(() => {
+    (window as any).__editorBack = () => {
+      if (showExitConfirm) setShowExitConfirm(false);
+      else if (showSettings) setShowSettings(false);
+      else if (showAddMenu) setShowAddMenu(false);
+      else if (renaming) setRenaming(false);
+      else {
+        const clean = JSON.stringify(buttons) === initialButtonsJson.current
+          && (padName.trim() || pad.name) === (pad.name || "");
+        if (clean) close(); else setShowExitConfirm(true);
+      }
+      return true;
+    };
+    return () => { delete (window as any).__editorBack; };
+  }, [showExitConfirm, showSettings, showAddMenu, renaming, buttons, padName, pad.name, close]);
   const svgRef = useRef<SVGSVGElement>(null);
 
   // Snapshot of the pad as it was opened — the back button compares against it
@@ -509,8 +527,9 @@ export function CustomPadEditor({
       exit={{ opacity: 0, scale: 0.98 }}
       transition={{ duration: 0.34, ease: [0.16, 1, 0.3, 1] }}
       style={{ willChange: "transform, opacity", backfaceVisibility: "hidden" }}
-      className="fixed inset-0 z-50 bg-[#070910] overflow-hidden touch-none select-none"
+      data-testid="layout-editor-screen" className="fixed inset-0 z-50 bg-[#070910] overflow-hidden touch-none select-none"
     >
+      <ShellMotion />
       {/* Rotation layer — auto-rotates the whole editor (canvas + overlays) into
           landscape in portrait, mirroring the controller screen. No rotate-wall.
           MUST be a plain div: Framer Motion would drive the `transform` property
@@ -560,7 +579,7 @@ export function CustomPadEditor({
           </div>
 
       {/* Rename pill — top-left. Tap to edit the pad's name inline. */}
-      <div className="absolute top-2 left-3 z-20 pointer-events-auto">
+      <div data-calm-theme={appearance} className="gp-shell console-editor-rename absolute top-2 left-3 z-20 pointer-events-auto">
         {renaming ? (
           <input
             autoFocus
@@ -574,11 +593,12 @@ export function CustomPadEditor({
           />
         ) : (
           <button
+            data-testid="rename-layout-button"
             onClick={() => setRenaming(true)}
             className="bg-zinc-900/90 backdrop-blur-md border border-white/10 rounded-full px-3 py-1.5 flex items-center gap-1.5 text-xs font-semibold text-white/90 hover:text-white active:scale-95 transition-all shadow-lg max-w-[11rem]"
           >
             <span className="truncate">{padName || "My Custom Pad"}</span>
-            <span className="text-primary text-[10px] flex-shrink-0">✎</span>
+            <Pencil size={12} className="text-primary flex-shrink-0" />
           </button>
         )}
       </div>
@@ -587,12 +607,13 @@ export function CustomPadEditor({
       <div className="absolute top-1 left-0 right-0 flex justify-center pointer-events-none">
         <motion.div
           layout
-          className="bg-zinc-900/90 backdrop-blur-md border border-white/10 rounded-full flex items-center p-1.5 shadow-2xl pointer-events-auto overflow-hidden"
+          data-calm-theme={appearance} className="gp-shell console-editor-toolbar border flex items-center p-1.5 pointer-events-auto overflow-hidden"
           style={{ width: selectedId ? "280px" : "120px" }}
           transition={{ type: "spring", damping: 25, stiffness: 300 }}
         >
           <div className="w-full flex justify-between items-center relative">
             <button
+              data-testid="editor-back-button" aria-label="Exit layout editor"
               onClick={() => {
                 // Nothing changed → close silently; only a real edit earns the
                 // "save changes?" confirmation. A renamed pad also counts as dirty.
@@ -617,6 +638,7 @@ export function CustomPadEditor({
                       opens it, so a freshly selected widget can be dragged
                       without the panel covering it. */}
                   <button
+                    data-testid="widget-settings-button" aria-label="Widget settings"
                     onClick={() => setShowSettings((s) => !s)}
                     className={`w-10 h-10 rounded-full flex items-center justify-center active:scale-95 transition-all ${
                       showSettings ? "bg-primary text-black" : "bg-primary/20 text-primary"
@@ -627,7 +649,7 @@ export function CustomPadEditor({
                 </motion.div>
               )}
             </AnimatePresence>
-            <button onClick={() => { setShowAddMenu(true); setSelectedId(null); }} className="w-10 h-10 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center text-white active:scale-95 transition-all z-10">
+            <button data-testid="add-widget-button" aria-label="Add widget" onClick={() => { setShowAddMenu(true); setSelectedId(null); }} className="w-10 h-10 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center text-white active:scale-95 transition-all z-10">
               <Plus size={20} />
             </button>
           </div>
@@ -647,7 +669,7 @@ export function CustomPadEditor({
             transition={{ type: "spring", damping: 25, stiffness: 350 }}
             className="absolute top-16 left-0 right-0 bottom-4 flex justify-center pointer-events-none"
           >
-          <div className="w-[300px] max-h-full self-start bg-zinc-900 border border-white/10 rounded-3xl p-5 shadow-2xl pointer-events-auto overflow-y-auto overscroll-contain touch-pan-y">
+          <div data-calm-theme={appearance} className="gp-shell console-editor-panel w-[300px] max-h-full self-start border p-5 pointer-events-auto overflow-y-auto overscroll-contain touch-pan-y">
             <div className="flex items-center justify-between mb-4">
               <span className="text-white font-bold text-sm capitalize">{selectedBtn.type} settings</span>
               <button onClick={handleDelete} className="w-8 h-8 rounded-full bg-red-500/20 text-red-400 flex items-center justify-center hover:bg-red-500/30 active:scale-90 transition-all">
@@ -660,7 +682,7 @@ export function CustomPadEditor({
                 renders but sends nothing to the PC. */}
             {!SELF_MAPPED_TYPES.has(selectedBtn.type) && !KNOWN_BUTTON_LABELS.has(selectedBtn.label) && (
               <div className="mb-4 px-3 py-2 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-start gap-2">
-                <span className="text-amber-400 text-sm leading-none mt-0.5">⚠</span>
+                <TriangleAlert size={16} className="text-amber-400 flex-shrink-0 mt-0.5" />
                 <span className="text-[11px] text-amber-200 leading-snug">
                   “{selectedBtn.label}” isn’t a recognized gamepad input — this button
                   won’t register in games. Use a known label (A, B, X, Y, LB, RB, LT, RT, etc.).
@@ -765,10 +787,10 @@ export function CustomPadEditor({
             transition={{ type: "spring", damping: 26, stiffness: 340 }}
             className="absolute top-16 left-0 right-0 bottom-4 flex justify-center pointer-events-none"
           >
-            <div className="w-[360px] max-h-full self-start bg-zinc-900 border border-white/10 rounded-3xl p-5 shadow-2xl pointer-events-auto flex flex-col">
+            <div data-calm-theme={appearance} className="gp-shell console-editor-panel w-[360px] max-h-full self-start border p-5 pointer-events-auto flex flex-col">
               <div className="flex items-center justify-between mb-4 flex-shrink-0">
                 <span className="text-white font-bold text-sm">Add Widget</span>
-                <button onClick={() => setShowAddMenu(false)} className="text-zinc-400 hover:text-white p-1">
+                <button data-testid="close-widgets-button" aria-label="Close widget palette" onClick={() => setShowAddMenu(false)} className="text-zinc-400 hover:text-white p-1">
                   <XIcon size={16} />
                 </button>
               </div>
@@ -776,6 +798,7 @@ export function CustomPadEditor({
                 {ADD_ITEMS.map((it) => (
                   <button
                     key={it.tag}
+                    data-testid={`add-${it.tag.toLowerCase().replace(/\s/g, '-')}-widget-button`}
                     onClick={() => addWidget(it.type, it.label, it.r)}
                     className="bg-white/5 hover:bg-white/10 p-2 rounded-xl border border-white/5 transition-colors flex flex-col items-center justify-center gap-1"
                   >
@@ -811,7 +834,7 @@ export function CustomPadEditor({
               initial={{ scale: 0.95 }}
               animate={{ scale: 1 }}
               exit={{ scale: 0.95 }}
-              className="bg-zinc-900 border border-white/10 rounded-3xl p-6 shadow-2xl w-full max-w-[320px] pointer-events-auto"
+              data-calm-theme={appearance} role="dialog" aria-label="Unsaved changes" className="gp-shell console-editor-panel border p-6 w-full max-w-[320px] pointer-events-auto"
             >
               <h3 className="text-white font-bold text-lg mb-2">Unsaved Changes</h3>
               <p className="text-zinc-400 text-sm mb-6">Do you want to save your changes before leaving?</p>

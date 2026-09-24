@@ -279,9 +279,11 @@ class NativeInputEngine(private val activity: MainActivity) {
     }
 
     /** Zero the tilt at the current hold — native twin of useGyro's calibrate(). */
-    fun calibrate() {
-        gyroZeroX = activity.fusedRollDeg
-        gyroZeroY = activity.fusedPitchDeg
+    fun calibrate(): String = synchronized(lock) {
+        val sample = activity.gyroCalibrationSnapshot()
+        gyroZeroX = sample.first
+        gyroZeroY = sample.second
+        JSONObject().put("x", gyroZeroX.toDouble()).put("y", gyroZeroY.toDouble()).toString()
     }
 
     /**
@@ -617,7 +619,11 @@ class NativeInputEngine(private val activity: MainActivity) {
         // This is the correct fix for "phone set down walks the PC volume to
         // 100%": it never idles a HELD phone at any angle, only a resting one.
         if (gyroOn && !activity.gyroRestingFlat) {
-            val nx = activity.fusedRollDeg - gyroZeroX
+            val deltaX = activity.fusedRollDeg - gyroZeroX
+            // Normal tilt represents a pose, not accumulated revolutions. Keeping
+            // whole turns here pins the stick after rotating/putting down the phone.
+            // Wheel mode must retain its continuous multi-turn travel.
+            val nx = if (activity.wheelModeOn) deltaX else GyroAngle.shortest(deltaX)
             val ny = activity.fusedPitchDeg - gyroZeroY
             val gateX = if (kotlin.math.abs(nx) < gyroDzDeg) 0f else nx
             val gateY = if (kotlin.math.abs(ny) < gyroDzDeg) 0f else ny

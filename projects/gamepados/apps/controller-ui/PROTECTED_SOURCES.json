@@ -1,0 +1,15 @@
+{
+  "original_archive": "gamepados-ui-for-astra.zip",
+  "sha256": {
+    "src/app/components/Widgets.tsx": "7fa00fb94ee847f3c0dad08caa14290095368c86301501553fc13a5c864999df",
+    "src/app/platform/native.ts": "72fd220650f60f2af466039060a7fecd838edb715b47aef9097fcac027e96970",
+    "ControllerScreen_region": "4f8eb649cac78b1b33422d41119e64292f1a4f1680e6b2153a178977f40acb49"
+  },
+  "controller_region": {
+    "file": "src/app/App.tsx",
+    "start_inclusive": "function ControllerScreen(",
+    "end_exclusive": "function useNetworkTelemetry("
+  },
+  "also_unchanged": ["src/app/store/", "src/app/api/", "src/styles/theme.css", "src/styles/fonts.css", "src/app/motion.ts"],
+  "note": "Compare bytes, preserving the original mixed CRLF/LF line endings. Actual gameplay markup, rendering, mappings, transport and timers are unchanged."
+}

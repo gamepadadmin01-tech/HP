@@ -212,6 +212,7 @@ let busy = false;
  * backstop, not as the gate.
  */
 export async function purchase(plan: api.CataloguePlan): Promise<PurchaseOutcome> {
+  if (getAppInfo().channel === "playstore") return failed("Google Play billing will be available soon.");
   if (busy) return failed("A purchase is already in progress.");
   if (!plan.purchasable) return failed("This build cannot sell plans.");
 

@@ -51,6 +51,17 @@ use std::time::Duration;
 /// never meant to be. Patch-level because nothing about the wire protocol,
 /// pairing format or UI changed.
 ///
+/// **2.1.3** — broadcast replies on subnets narrower than /24. A directed
+/// broadcast on a /28, /27, /26 or /25 ends in .15/.31/.63/.127, not .255, and
+/// Winsock rejects it as a reply SOURCE (WSAEADDRNOTAVAIL / WSAEINVAL), so the
+/// discovery ACK never left on those tether/hotspot networks. The reply now
+/// retries from a real unicast address on the RECEIVING interface
+/// (`netdetect::reply_address`) and never falls back to the default route, which
+/// may be Wi-Fi or a VPN. Also: the server window is redesigned (calm palette
+/// matching the Android shell, scrolls at small sizes / high display scales,
+/// clearer status and a Feedback button). Patch-level: no wire-protocol,
+/// pairing-format or message change.
+///
 /// **2.1.1** — the reply-source pinning could not answer a BROADCAST datagram.
 /// `pktinfo::parse_pktinfo` took `ipi_addr` as the address to reply from, but
 /// that is the datagram's destination as seen on the wire — for a broadcast it
@@ -95,7 +106,7 @@ use std::time::Duration;
 /// the same number. One definition now feeds both; they cannot drift.
 macro_rules! app_version {
     () => {
-        "2.1.2"
+        "2.1.3"
     };
 }
 

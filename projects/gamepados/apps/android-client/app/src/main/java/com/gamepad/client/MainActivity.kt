@@ -59,6 +59,11 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback, android.hardwa
     private external fun initAccessoryNative(fd: Int)
     private external fun getNativePacketCount(): Long
     private external fun getNativeLatencyMs(): Float
+    private external fun getNativeLastRttMs(): Float
+    private external fun getNativeRttJitterMs(): Float
+    private external fun getNativePacketRateHz(): Float
+    private external fun getNativeAckCount(): Long
+    private external fun getNativeSendFailureCount(): Long
     private external fun getMsSinceLastAck(): Long
     private external fun getNativeRumble(): Long
 
@@ -168,6 +173,19 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback, android.hardwa
     // Which way round the driver last turned the controller with the rotate control.
     // Remembered so leaving and re-entering the controller keeps their mount orientation.
     @Volatile internal var wheelLandscapeReverse = false
+    private val sensorStateLock = Any()
+    private var lastSteeringRotation = -1
+    @Volatile private var guestTrialGuard = false
+    private val screenAwakePolicy = ScreenAwakePolicy()
+    private val guestTrial by lazy {
+        GuestTrial(this) {
+            try { setInputStreamingNative(false) } catch (_: Throwable) {}
+            screenAwakePolicy.controllerActive = false
+            updateScreenAwake()
+            if (::nativeInput.isInitialized) nativeInput.setActive(false)
+            evalJs("window.dispatchEvent(new Event('guest-trial-expired'))")
+        }
+    }
     private var rollPrevRaw = 0.0        // previous raw atan2 reading (deg, ±180)
     private var rollTurns = 0            // accumulated whole turns
     private var rollUnwrapInit = false   // false until the first sample seeds rollPrevRaw
@@ -199,10 +217,13 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback, android.hardwa
      * recentred or the mode changes — otherwise turns banked before a recalibration
      * would survive it and offset the new centre by whole revolutions.
      */
-    internal fun resetRollUnwrap() {
+    internal fun resetRollUnwrap() = synchronized(sensorStateLock) {
         rollTurns = 0
         rollUnwrapInit = false
         rollFilter.reset()
+    }
+    internal fun gyroCalibrationSnapshot(): Pair<Float, Float> = synchronized(sensorStateLock) {
+        fusedRollDeg to fusedPitchDeg
     }
     private var lastAnalysisTime = 0L
     @Volatile
@@ -461,21 +482,12 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback, android.hardwa
         val splashScreen = installSplashScreen()
         splashScreen.setKeepOnScreenCondition { !uiReady }
         splashScreen.setOnExitAnimationListener { provider ->
-            // One clean intro: the app-icon splash zoom-fades away to reveal the
-            // app beneath it (the React UI settles in at the same time). The logo
-            // eases up in scale while the whole splash fades out.
+            // A single fade reveals the already-painted Home page. Do not zoom
+            // the icon separately or follow this with another page entrance.
             val decel = android.view.animation.DecelerateInterpolator()
-            try {
-                provider.iconView.animate()
-                    .scaleX(1.18f).scaleY(1.18f)
-                    .alpha(0f)
-                    .setDuration(360L)
-                    .setInterpolator(decel)
-                    .start()
-            } catch (e: Exception) {}
             provider.view.animate()
                 .alpha(0f)
-                .setDuration(360L)
+                .setDuration(240L)
                 .setInterpolator(decel)
                 .withEndAction { provider.remove() }
                 .start()
@@ -501,8 +513,8 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback, android.hardwa
                 android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
         }
         
-        // 1. OLED Blackout & Thermal Optimization
-        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        // Keep-awake is controlled by controller activity, not app launch.
+        updateScreenAwake()
         // Brand-colored decor (matches the splash + JS splash) instead of pure black,
         // so any handoff frame between the native splash and the React UI is invisible.
         window.decorView.setBackgroundColor(Color.parseColor("#070910"))
@@ -573,7 +585,7 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback, android.hardwa
         // 2. CameraX PreviewView in the middle (starts invisible)
         previewView = PreviewView(this).apply {
             visibility = View.INVISIBLE
-            implementationMode = PreviewView.ImplementationMode.PERFORMANCE
+            implementationMode = PreviewView.ImplementationMode.COMPATIBLE
         }
         gameContainer.addView(previewView, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
 
@@ -608,7 +620,7 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback, android.hardwa
                 // Allow the WebView to open ws://127.0.0.1 (USB-debugging transport)
                 mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
             }
-            clearCache(true)
+            // Keep the WebView compilation/resource cache across launches.
 
             // Purchase results (Play Billing or Razorpay, depending on flavor)
             // reach JS through here. JSONObject.quote makes the payload a valid
@@ -692,7 +704,7 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback, android.hardwa
                 @android.webkit.JavascriptInterface
                 fun setNativeInputActive(active: Boolean) {
                     runOnUiThread {
-                        try { nativeInput.setActive(active) } catch (e: Exception) {}
+                        try { nativeInput.setActive(active && !(guestTrialGuard && guestTrial.exhausted())) } catch (e: Exception) {}
                     }
                 }
 
@@ -702,8 +714,8 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback, android.hardwa
                 }
 
                 @android.webkit.JavascriptInterface
-                fun nativeGyroCalibrate() {
-                    try { nativeInput.calibrate() } catch (e: Exception) {}
+                fun nativeGyroCalibrate(): String {
+                    return try { nativeInput.calibrate() } catch (e: Exception) { "{}" }
                 }
 
                 @android.webkit.JavascriptInterface
@@ -751,7 +763,7 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback, android.hardwa
                                 // Classify the link for the dashboard badge by the ACTUAL
                                 // active interface (works on every OEM/subnet), not a
                                 // hardcoded IP prefix. Explicit "usb" connect mode also counts.
-                                connectionType = if (key == "usb" || isUsbTetherActiveInternal()) "wired" else "wireless"
+                                connectionType = if (key == "usb") "wired" else "wireless"
                                 
                                 // Acquire MulticastLock for reliable UDP broadcasting on this device
                                 try {
@@ -853,7 +865,20 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback, android.hardwa
                 // Error), and input gating must never crash the app.
                 @android.webkit.JavascriptInterface
                 fun setInputStreaming(on: Boolean) {
-                    try { setInputStreamingNative(on) } catch (t: Throwable) {}
+                    try { setInputStreamingNative(on && !(guestTrialGuard && guestTrial.exhausted())) } catch (t: Throwable) {}
+                    runOnUiThread {
+                        screenAwakePolicy.controllerActive = on && !(guestTrialGuard && guestTrial.exhausted())
+                        updateScreenAwake()
+                    }
+                }
+
+                @android.webkit.JavascriptInterface
+                fun getGuestTrialState(): String = guestTrial.snapshot()
+
+                @android.webkit.JavascriptInterface
+                fun setGuestTrialActive(on: Boolean): String {
+                    guestTrialGuard = on
+                    return guestTrial.setActive(on)
                 }
 
                 /**
@@ -1036,9 +1061,16 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback, android.hardwa
                 @android.webkit.JavascriptInterface
                 fun getNetworkTelemetryJson(): String {
                     val count = if (isEngineRunning) getNativePacketCount() else 0L
-                    val hz = if (isEngineRunning) 1000 else 0
+                    // The engine is event-driven, so a fixed 1000 Hz value was
+                    // misleading. This is the real one-second send-rate window.
+                    val hz = if (isEngineRunning) getNativePacketRateHz() else 0f
                     // Real measured round-trip latency from the native engine (via PC ACK).
                     val latency = if (isEngineRunning) getNativeLatencyMs() else 0f
+                    val lastRtt = if (isEngineRunning) getNativeLastRttMs() else 0f
+                    // EWMA of consecutive RTT changes: a stability indicator, not loss.
+                    val jitter = if (isEngineRunning) getNativeRttJitterMs() else 0f
+                    val acks = if (isEngineRunning) getNativeAckCount() else 0L
+                    val sendFailures = if (isEngineRunning) getNativeSendFailureCount() else 0L
                     val conn = if (isEngineRunning) connectionType else "none"
                     // linkAlive = the PC actually responded recently (ACK within 2.5s).
                     // This is the true "connected" signal — packetCount only proves WE
@@ -1062,7 +1094,7 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback, android.hardwa
                     // Collapsing both into "disconnected" is what made the VPN bug of
                     // 2026-08-10 so confusing: the app said disconnected while the game
                     // was responding to the sticks. See linkState.ts.
-                    return "{\"packetCount\":$count,\"hz\":$hz,\"latency\":$latency,\"connectionType\":\"$conn\",\"linkAlive\":$linkAlive,\"engineRunning\":$isEngineRunning,\"sinceAck\":$sinceAck}"
+                    return "{\"packetCount\":$count,\"hz\":$hz,\"latency\":$latency,\"lastRtt\":$lastRtt,\"jitter\":$jitter,\"ackCount\":$acks,\"sendFailures\":$sendFailures,\"connectionType\":\"$conn\",\"linkAlive\":$linkAlive,\"engineRunning\":$isEngineRunning,\"sinceAck\":$sinceAck}"
                 }
 
                 // Latest Wi-Fi rumble from the native UDP engine, polled by the web UI.
@@ -1201,7 +1233,7 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback, android.hardwa
                 @android.webkit.JavascriptInterface
                 fun exitApp() {
                     runOnUiThread {
-                        finish()
+                        moveTaskToBack(true)
                     }
                 }
 
@@ -1855,16 +1887,22 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback, android.hardwa
         }
     }
 
+    private fun updateScreenAwake() {
+        if (screenAwakePolicy.keepAwake) {
+            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        } else {
+            window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
+    }
+
     override fun onResume() {
         super.onResume()
-        // Restore the keep-awake flag that onPause drops. Symmetric by design:
-        // the flag is scoped to "the user is looking at us", not to the process
-        // lifetime, which is what it used to be.
-        //
-        // Scoping it further — to the controller screen only, so browsing pads
-        // doesn't hold the display awake — is the next improvement, and needs
-        // the isActive signal plumbed through to native.
-        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        screenAwakePolicy.resumed = true
+        updateScreenAwake()
+        if (isEngineRunning) {
+            try { multicastLock?.let { if (!it.isHeld) it.acquire() } } catch (_: Exception) {}
+            try { wifiLock?.let { if (!it.isHeld) it.acquire() } } catch (_: Exception) {}
+        }
         // Register ONLY the fused rotation-vector sensor for steering. Raw accel/gyro
         // are no longer used (they had a gravity blind-spot at steep/vertical holds).
         // FASTEST = up to 200 Hz on this device (vs 50 Hz for GAME) → more samples
@@ -1891,6 +1929,7 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback, android.hardwa
 
     override fun onPause() {
         super.onPause()
+        screenAwakePolicy.resumed = false
         sensorManager.unregisterListener(this)
         mainHandler.removeCallbacks(usbWatchRunnable)
 
@@ -1906,7 +1945,7 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback, android.hardwa
         // FLAG_KEEP_SCREEN_ON is the worst of the three: it was added once,
         // under a comment reading "OLED Blackout & Thermal Optimization", and
         // never cleared. It did the exact opposite of what the comment claims.
-        window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        updateScreenAwake()
         releaseRadioLocks()
 
         // NOTE: the UDP engine is deliberately NOT stopped here. It holds the
@@ -1941,11 +1980,18 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback, android.hardwa
             t != android.hardware.Sensor.TYPE_ROTATION_VECTOR) return
 
         // Fused attitude → rotation matrix (device→world).
+        synchronized(sensorStateLock) {
         android.hardware.SensorManager.getRotationMatrixFromVector(fusionRotMatrix, event.values)
 
         // Remap into a consistent LANDSCAPE-VIEW frame so the zero + axes are identical in
         // either landscape orientation (app is SENSOR_LANDSCAPE → ROTATION_90 or _270).
-        val (axisX, axisY) = if (currentDisplayRotation() == android.view.Surface.ROTATION_270)
+        val rotation = currentDisplayRotation()
+        if (rotation != lastSteeringRotation) {
+            resetRollUnwrap()
+            pitchFilter.reset()
+            lastSteeringRotation = rotation
+        }
+        val (axisX, axisY) = if (rotation == android.view.Surface.ROTATION_270)
             android.hardware.SensorManager.AXIS_MINUS_Y to android.hardware.SensorManager.AXIS_X
         else
             android.hardware.SensorManager.AXIS_Y to android.hardware.SensorManager.AXIS_MINUS_X
@@ -1983,6 +2029,7 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback, android.hardwa
             stillSinceNs = event.timestamp
         }
         prevUx = ux; prevUy = uy; prevUz = uz
+        }
         // PHASE 3: while the native input path owns the payload, each ~200 Hz fused
         // sample rebuilds + injects it right here on the sensor thread — gyro cadence
         // is decoupled from the WebView AND the display refresh (the Phase 3a goal).
@@ -2212,6 +2259,7 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback, android.hardwa
         // Before anything else: a payment SDK can call back on its own thread
         // well after this point, and the sink it would reach is about to die.
         PurchaseRelay.detach()
+        guestTrial.setActive(false)
         cameraExecutor.shutdown()
         try { sensorManager.unregisterListener(this) } catch (e: Exception) {}
         sensorThread?.quitSafely(); sensorThread = null; sensorHandler = null

@@ -1,0 +1,64 @@
+import fs from 'node:fs';
+import http from 'node:http';
+import assert from 'node:assert/strict';
+import puppeteer from 'puppeteer';
+const html=fs.readFileSync(new URL('./dist/index.html',import.meta.url));
+const artifacts=new URL('../../docs/ui-redesign-research-2026-09-16/implementation/',import.meta.url);
+const server=http.createServer((q,r)=>{r.setHeader('Content-Type','text/html');r.end(html)});
+await new Promise(r=>server.listen(0,'127.0.0.1',r));
+const origin=`http://127.0.0.1:${server.address().port}`;
+let browser;const results=[],requests=[];
+const user={id:'fixture-account',displayName:'A very long player name to check wrapping',email:'player@example.test'};
+const catalogue={success:true,channel:'direct',currency:'INR',purchasable:true,plans:[{code:'THREE_DAY',displayName:'3 Days',currency:'INR',priceMinor:4900,unlimited:true,dailySeconds:null,durationHours:72,durationMonths:null,purchasable:true,priceFromStore:false}]};
+try {
+ browser=await puppeteer.launch({executablePath:'C:/Program Files/Google/Chrome/Application/chrome.exe',headless:true});
+ const p=await browser.newPage(),errors=[];p.on('pageerror',e=>errors.push(e.message));
+ await p.setRequestInterception(true);p.on('request',r=>{
+  if(r.url().startsWith(origin+'/'))return r.continue();
+  const path=new URL(r.url()).pathname;
+  const respond=body=>r.respond({status:200,contentType:'application/json',headers:{'Access-Control-Allow-Origin':'*','Access-Control-Allow-Headers':'*','Access-Control-Allow-Methods':'GET,POST,OPTIONS'},body:JSON.stringify(body)});
+  if(r.method()==='OPTIONS')return respond({});
+  requests.push({path,method:r.method()});
+  if(path==='/api/billing/plans')return respond(catalogue);
+  if(path==='/api/account/login'||path==='/api/account/verify')return respond({success:true,token:'fixture-token',user});
+  if(path==='/api/account/me')return respond({success:true,user});
+  if(['/api/account/register','/api/account/resend','/api/account/password/forgot','/api/account/password/reset','/api/account/logout'].includes(path))return respond({success:true});
+  return r.abort();
+ });
+ await p.evaluateOnNewDocument(()=>localStorage.setItem('feature_rated_v2','1'));
+ const settle=()=>new Promise(r=>setTimeout(r,500));
+ const click=async name=>{await p.evaluate(t=>{const b=[...document.querySelectorAll('button')].find(b=>b.textContent.trim()===t);if(!b)throw Error('Missing '+t);b.click()},name);await settle();};
+ const shot=async name=>p.screenshot({path:new URL(name+'.png',artifacts).pathname.replace(/^\/(\w:)/,'$1')});
+ const fits=async label=>assert.equal(await p.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false,label);
+ await p.setViewport({width:412,height:915});await p.goto(origin);await settle();await click('Settings');
+ await shot('settings-dark');
+ if(await p.$eval('[role="switch"][aria-labelledby]',e=>e.getAttribute('aria-checked')!=='true'))await p.click('[role="switch"][aria-labelledby]');await settle();
+ assert.ok(await p.$('input[type="range"]'));
+ await p.evaluate(()=>{const b=[...document.querySelectorAll('[role="switch"]')].find(b=>document.getElementById(b.getAttribute('aria-labelledby')).textContent==='Wheel mode');b.click()});await settle();
+ assert.ok(await p.$('[aria-label="Wheel range"]'));
+ await click('720°');assert.equal(await p.evaluate(()=>localStorage.getItem('gyro_wheel_range')),'720');
+ await p.click('[aria-label="Use light appearance"]');await settle();await shot('settings-light');
+ await click('Account');await shot('account-guest-light');assert.equal(await p.$('input[type="password"]'),null);
+ await click('Get 3 Days');await p.waitForSelector('.calm-auth');await shot('signin-light');
+ assert.ok(await p.$('input[autocomplete="email"]'));
+ await click('Forgot your password?');await p.type('input[type="email"]','player@example.test');await click('Send reset code');
+ await p.waitForSelector('input[autocomplete="one-time-code"]');await p.type('input[autocomplete="one-time-code"]','123456');await p.type('input[autocomplete="new-password"]','Fixture-pass-123');await click('Change password');
+ assert.ok(await p.evaluate(()=>document.body.innerText.includes('Password changed')));
+ await click('Create an account');await p.type('input[autocomplete="name"]','Fixture player');
+ await p.type('input[autocomplete="new-password"]','Fixture-pass-123');await click('Create account');await p.waitForSelector('input[autocomplete="one-time-code"]');
+ await p.type('input[autocomplete="one-time-code"]','123456');await click('Confirm email');
+ assert.ok(await p.evaluate(()=>localStorage.getItem('gp_account')?.includes('fixture-token')));
+ await click('Back to plans');await shot('account-signed-in-light');
+ assert.ok(await p.evaluate(()=>document.body.innerText.includes('Cloud backup')));
+ await click('Delete account');await shot('delete-confirm-light');
+ assert.ok(await p.$('input[aria-label="Confirm your password"]'));await click('Keep my account');
+ assert.equal(requests.some(r=>r.path==='/api/account/delete'),false);
+ results.push('Settings switches/range, guest plan selection, forgot/reset/register/verify, signed-in account and safe delete cancellation');
+ for(const [width,height] of [[320,640],[768,1024],[915,412]]) {
+  await p.setViewport({width,height});await fits('Account '+width);await click('Settings');await fits('Settings '+width);await click('Account');
+ }
+ results.push('Account and Settings fit narrow, tablet and landscape screens');
+ assert.deepEqual(errors,[]);
+ fs.writeFileSync(new URL('full-ui-validation.json',artifacts),JSON.stringify({testedAt:new Date().toISOString(),results,requests,errors,allRequestsIntercepted:true},null,2));
+ results.forEach(r=>console.log('PASS '+r));
+}finally{if(browser)await browser.close();server.closeAllConnections();await new Promise(r=>server.close(r));}

@@ -3,21 +3,22 @@ import { motion, AnimatePresence } from "framer-motion";
 import { SPRING, FADE } from "../motion";
 import { Edit3, ChevronRight, Vibrate, LogOut, Mail, RefreshCw, Cloud, CloudOff, Trash2 } from "lucide-react";
 import { getAppInfo, openUrl, testRumble } from "../platform/native";
+import { INSTAGRAM_URL } from "../social";
 import { getSession, onSessionChange, signOut, deleteAccount } from "../store/account";
 import { ApiError } from "../api/account";
 import { getSyncState, onSyncChange, syncNow, lastSyncedAt, cancelScheduledSync } from "../store/sync";
 import { autoSyncEnabled, setAutoSyncEnabled } from "../store/prefs";
-import { AccountAuth } from "./AccountAuth";
 import { PlanPanel } from "./PlanPanel";
+import { PlayBillingNotice } from "./PlayBillingNotice";
+import { GuestPlans } from "./GuestPlans";
+import { CalmSwitch } from "./CalmSettings";
 
 // ─── GamepadOS Account ────────────────────────────────────────────────────────
 //
-// Signed out, this tab is the sign-in screen and nothing else — no profile, no
-// settings, no pretend identity.
+// Signed out, this tab holds plans. The header shortcut has its own dedicated
+// sign-in destination. Signed in, this tab holds the player's real profile.
 //
-// The app-info block (version, update check, feedback) stays visible in both
-// states on purpose: it is not a setting, and someone who cannot sign in still
-// has to be able to update the app and report the problem.
+// Support and app information live in Settings and remain available to guests.
 
 export function TabAccount({
   customPadsCount,
@@ -25,64 +26,28 @@ export function TabAccount({
   gyroMode,
   gyroThrottle,
   rumbleOn,
-  privacyUrl,
   onOpenSystem,
-  updateChecker,
-  feedback,
+  onSignIn,
 }: {
   customPadsCount: number;
   gyroHaptic: boolean;
   gyroMode: string;
   gyroThrottle: boolean;
   rumbleOn: boolean;
-  privacyUrl: string;
   onOpenSystem: () => void;
-  updateChecker: React.ReactNode;
-  feedback: React.ReactNode;
+  onSignIn: () => void;
 }) {
-  const app = useMemo(() => getAppInfo(), []);
   const session = useSyncExternalStore(onSessionChange, getSession, getSession);
 
-  // Support and App are two panels, each built from the same rows as the rest of
-  // the page — no cards nested inside cards, one heading per section.
-  const support = (
-    <Section title="Support">
-      <Panel>{feedback}</Panel>
-    </Section>
-  );
-
-  const appPanel = (
-    <Section title="App">
-      <Panel>
-        <div className="p-4">
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-bold tracking-widest"
-              style={{ fontFamily: "'Space Grotesk',sans-serif", color: "#5D90CB" }}>GAMEPADOS</span>
-            {app.version && (
-              <span className="text-xs font-semibold" style={{ color: "#7C8AA0" }}>v{app.version}</span>
-            )}
-          </div>
-          <p className="text-xs leading-relaxed mt-2" style={{ color: "#7C8AA0" }}>
-            Turn your phone into a low-latency wireless or USB controller for your PC.
-          </p>
-        </div>
-        {updateChecker}
-        <button onClick={() => openUrl(privacyUrl)}
-          className="w-full flex items-center justify-between p-4 hover:bg-white/[0.03] transition-colors text-left">
-          <span className="text-sm font-medium text-white/90">Privacy policy</span>
-          <ChevronRight size={16} style={{ color: "#7C8AA0" }} />
-        </button>
-      </Panel>
-    </Section>
-  );
-
-  // ── Signed out: the sign-in screen, plus support and app info. Nothing else. ──
+  // Plans remain a separate destination; the header goes directly to sign-in.
   if (!session) {
     return (
-      <div className="space-y-6 pb-10">
-        <AccountAuth />
-        {support}
-        {appPanel}
+      <div className="calm-account space-y-6 pb-10">
+        <div className="calm-intro"><span className="console-eyebrow">GOOD GAMES DESERVE MORE TIME</span><h1 data-testid="account-heading">Stay in the game.</h1><p>Your playtime. Your pace. Your pick.</p></div>
+        <GuestPlans key="guest-plans" />
+        <button data-testid="account-signin-toggle-button" className="guest-back" onClick={onSignIn}>
+          Already have an account? Sign in
+        </button>
       </div>
     );
   }
@@ -90,23 +55,25 @@ export function TabAccount({
   const { user } = session;
 
   return (
-    <div className="space-y-6 pb-10">
+    <div data-testid="profile-screen" className="calm-account space-y-6 pb-10">
+      <div className="calm-intro"><span className="console-eyebrow">THE PLAYER BEHIND THE CONTROLLER</span><h1 data-testid="account-heading">Your player profile.</h1><p>All your play, in one place.</p></div>
+      <GuestPlans key="guest-plans" />
       {/* ── Identity ── */}
-      <section className="flex flex-col items-center pt-1">
+      <section className="calm-profile flex flex-col items-center pt-1">
         <div className="w-20 h-20 rounded-full flex items-center justify-center mb-3"
           style={{
-            background: "linear-gradient(135deg,#5D90CB 0%,#2A4B75 100%)",
+            background: "var(--calm-tint, #293944)",
             border: "2px solid rgba(79,134,198,0.40)",
-            boxShadow: "0 0 24px rgba(79,134,198,0.25)",
+            boxShadow: "none",
           }}>
-          <span className="text-3xl font-bold text-white"
-            style={{ fontFamily: "'Space Grotesk',sans-serif" }}>
+          <span className="text-3xl font-bold calm-ink"
+            style={{ fontFamily: "system-ui, sans-serif" }}>
             {user.displayName.trim().charAt(0).toUpperCase()}
           </span>
         </div>
-        <h2 className="text-xl font-bold text-white"
-          style={{ fontFamily: "'Space Grotesk',sans-serif" }}>{user.displayName}</h2>
-        <p className="text-xs mt-1 flex items-center gap-1.5" style={{ color: "#7C8AA0" }}>
+        <h2 className="text-xl font-bold calm-ink"
+          style={{ fontFamily: "system-ui, sans-serif" }}>{user.displayName}</h2>
+        <p className="text-xs mt-1 flex items-center gap-1.5" style={{ color: "var(--calm-muted, #a6b0b3)" }}>
           <Mail size={11} /> {user.email}
         </p>
       </section>
@@ -115,24 +82,25 @@ export function TabAccount({
           tab is opened to check, and because a limit the user cannot find is
           indistinguishable from a limit that appeared without warning. ── */}
       <PlanPanel />
+      <PlayBillingNotice />
 
       {/* ── The user's own layouts ── */}
       <Section title="Controller Library">
         <div className="p-4 rounded-xl flex items-center gap-4"
-          style={{ background: "rgba(0,0,0,0.20)", border: "1px solid rgba(255,255,255,0.05)" }}>
-          <div className="p-2.5 rounded-xl" style={{ background: "rgba(79,134,198,0.10)", color: "#5D90CB" }}>
+          style={{ background: "var(--calm-surface, #202527)", border: "1px solid var(--calm-line, #343c3f)" }}>
+          <div className="p-2.5 rounded-xl" style={{ background: "rgba(79,134,198,0.10)", color: "var(--calm-accent, #abc8db)" }}>
             <Edit3 size={18} />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-bold text-white/90">My layouts</p>
-            <p className="text-xs" style={{ color: "#7C8AA0" }}>
+            <p className="text-sm font-bold calm-ink">My layouts</p>
+            <p className="text-xs" style={{ color: "var(--calm-muted, #a6b0b3)" }}>
               {customPadsCount === 0
-                ? "None yet — create one from Home."
+                ? "None yet — create one from Play."
                 : `${customPadsCount} saved on this phone`}
             </p>
           </div>
-          <span className="text-2xl font-bold text-white/90"
-            style={{ fontFamily: "'Space Grotesk',sans-serif" }}>{customPadsCount}</span>
+          <span className="text-2xl font-bold calm-ink"
+            style={{ fontFamily: "system-ui, sans-serif" }}>{customPadsCount}</span>
         </div>
       </Section>
 
@@ -149,14 +117,12 @@ export function TabAccount({
           <RumbleTest on={rumbleOn} />
           <button onClick={onOpenSystem}
             className="w-full flex items-center justify-between p-4 hover:bg-white/[0.03] transition-colors text-left">
-            <span className="text-sm font-medium text-white/90">Change these in System</span>
-            <ChevronRight size={16} style={{ color: "#7C8AA0" }} />
+            <span className="text-sm font-medium calm-ink">Change these in Settings</span>
+            <ChevronRight size={16} style={{ color: "var(--calm-muted, #a6b0b3)" }} />
           </button>
         </Panel>
       </Section>
 
-      {support}
-      {appPanel}
 
       {/* ── Destructive actions, last ── */}
       <Section title="Session">
@@ -179,7 +145,7 @@ const Section = React.memo(function Section(
 ) {
   return (
     <section>
-      <h3 className="text-[10px] font-bold tracking-widest uppercase mb-2 px-1" style={{ color: "#7C8AA0" }}>
+      <h3 className="calm-account-section-title" style={{ color: "var(--calm-muted, #a6b0b3)" }}>
         {title}
       </h3>
       {children}
@@ -190,7 +156,7 @@ const Section = React.memo(function Section(
 function Panel({ children }: { children: React.ReactNode }) {
   return (
     <div className="rounded-xl overflow-hidden divide-y divide-white/5"
-      style={{ background: "rgba(0,0,0,0.20)", border: "1px solid rgba(255,255,255,0.05)" }}>
+      style={{ background: "var(--calm-surface, #202527)", border: "1px solid var(--calm-line, #343c3f)" }}>
       {children}
     </div>
   );
@@ -199,8 +165,8 @@ function Panel({ children }: { children: React.ReactNode }) {
 function Setting({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-center justify-between p-4">
-      <span className="text-sm font-medium text-white/90">{label}</span>
-      <span className="text-xs font-semibold" style={{ color: "#5D90CB" }}>{value}</span>
+      <span className="text-sm font-medium calm-ink">{label}</span>
+      <span className="text-xs font-semibold" style={{ color: "var(--calm-accent, #abc8db)" }}>{value}</span>
     </div>
   );
 }
@@ -238,26 +204,18 @@ function SyncPanel() {
         <div className="p-2.5 rounded-xl"
           style={{
             background: failed ? "rgba(224,87,79,0.10)" : "rgba(79,134,198,0.10)",
-            color: failed ? "#E2645D" : "#5D90CB",
+            color: failed ? "var(--calm-error, #ffaba6)" : "var(--calm-accent, #abc8db)",
           }}>
           {failed ? <CloudOff size={18} /> : <Cloud size={18} />}
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-bold text-white/90">Cloud backup</p>
-          <p className="text-xs truncate" style={{ color: failed ? "#E2645D" : "#7C8AA0" }}>{detail}</p>
+          <p className="text-sm font-bold calm-ink">Cloud backup</p>
+          <p className="text-xs truncate" style={{ color: failed ? "var(--calm-error, #ffaba6)" : "var(--calm-muted, #a6b0b3)" }}>{detail}</p>
         </div>
       </div>
 
       {/* Auto */}
-      <div className="flex items-center justify-between p-4 gap-4">
-        <div className="min-w-0">
-          <p className="text-sm font-medium text-white/90">Auto backup</p>
-          <p className="text-xs mt-0.5" style={{ color: "#7C8AA0" }}>
-            Save layouts to your account whenever you change one.
-          </p>
-        </div>
-        <Toggle on={auto} onChange={toggleAuto} />
-      </div>
+      <CalmSwitch label="Auto backup" detail="Save layouts to your account whenever you change one." on={auto} onChange={toggleAuto} />
 
       {/* Manual — always available, even with auto off */}
       <button
@@ -268,11 +226,11 @@ function SyncPanel() {
         <div className="flex items-center gap-3">
           <RefreshCw
             size={15}
-            style={{ color: "#5D90CB", animation: busy ? "gp-spin 900ms linear infinite" : undefined }}
+            style={{ color: "var(--calm-accent, #abc8db)", animation: busy ? "gp-spin 900ms linear infinite" : undefined }}
           />
-          <span className="text-sm font-medium text-white/90">{busy ? "Syncing…" : "Sync now"}</span>
+          <span className="text-sm font-medium calm-ink">{busy ? "Syncing…" : "Sync now"}</span>
         </div>
-        <ChevronRight size={16} style={{ color: "#7C8AA0" }} />
+        <ChevronRight size={16} style={{ color: "var(--calm-muted, #a6b0b3)" }} />
       </button>
       <style>{"@keyframes gp-spin{to{transform:rotate(360deg)}}"}</style>
     </>
@@ -326,10 +284,10 @@ function SignOutRow() {
           className="w-full flex items-center justify-between p-4 hover:bg-white/[0.03] text-left"
         >
           <div className="flex items-center gap-3">
-            <LogOut size={15} style={{ color: "#E2645D" }} />
-            <span className="text-sm font-medium" style={{ color: "#E2645D" }}>Sign out</span>
+            <LogOut size={15} style={{ color: "var(--calm-error, #ffaba6)" }} />
+            <span className="text-sm font-medium" style={{ color: "var(--calm-error, #ffaba6)" }}>Sign out</span>
           </div>
-          <ChevronRight size={16} style={{ color: "#7C8AA0" }} />
+          <ChevronRight size={16} style={{ color: "var(--calm-muted, #a6b0b3)" }} />
         </motion.button>
       ) : (
         <motion.div
@@ -344,19 +302,19 @@ function SignOutRow() {
           style={{ overflow: "hidden" }}
         >
           <div className="p-4 space-y-3">
-            <p className="text-xs" style={{ color: "#7C8AA0" }}>
+            <p className="text-xs" style={{ color: "var(--calm-muted, #a6b0b3)" }}>
               Your layouts stay on this phone. Sign in again any time.
             </p>
             <div className="flex gap-2">
               <button disabled={busy} onClick={() => setConfirming(false)}
                 className="flex-1 py-2.5 rounded-lg text-xs font-bold disabled:opacity-50"
-                style={{ background: "rgba(255,255,255,0.05)", color: "rgba(255,255,255,0.75)", border: "1px solid rgba(255,255,255,0.10)" }}>
+                style={{ background: "var(--calm-soft, #292f31)", color: "var(--calm-muted, #a6b0b3)", border: "1px solid var(--calm-line, #343c3f)" }}>
                 Cancel
               </button>
               <button disabled={busy}
                 onClick={async () => { setBusy(true); await signOut(); }}
                 className="flex-1 py-2.5 rounded-lg text-xs font-bold disabled:opacity-50"
-                style={{ background: "rgba(224,87,79,0.12)", color: "#E2645D", border: "1px solid rgba(224,87,79,0.30)" }}>
+                style={{ background: "rgba(224,87,79,0.12)", color: "var(--calm-error, #ffaba6)", border: "1px solid rgba(224,87,79,0.30)" }}>
                 {busy ? "Signing out…" : "Sign out"}
               </button>
             </div>
@@ -408,10 +366,10 @@ function DeleteAccountRow({ email }: { email: string }) {
           className="w-full flex items-center justify-between p-4 hover:bg-white/[0.03] text-left"
         >
           <div className="flex items-center gap-3">
-            <Trash2 size={15} style={{ color: "#E2645D" }} />
-            <span className="text-sm font-medium" style={{ color: "#E2645D" }}>Delete account</span>
+            <Trash2 size={15} style={{ color: "var(--calm-error, #ffaba6)" }} />
+            <span className="text-sm font-medium" style={{ color: "var(--calm-error, #ffaba6)" }}>Delete account</span>
           </div>
-          <ChevronRight size={16} style={{ color: "#7C8AA0" }} />
+          <ChevronRight size={16} style={{ color: "var(--calm-muted, #a6b0b3)" }} />
         </motion.button>
       ) : (
         <motion.div
@@ -439,36 +397,36 @@ function ConfirmBody({ email, password, setPassword, busy, error, confirm, cance
 }) {
   return (
     <div className="p-4 space-y-3">
-      <p className="text-sm font-bold" style={{ color: "#E2645D" }}>Delete this account permanently?</p>
-      <p className="text-xs leading-relaxed" style={{ color: "#7C8AA0" }}>
+      <p className="text-sm font-bold" style={{ color: "var(--calm-error, #ffaba6)" }}>Delete this account permanently?</p>
+      <p className="text-xs leading-relaxed" style={{ color: "var(--calm-muted, #a6b0b3)" }}>
         {email} and every layout backed up to it will be erased. This cannot be undone.
         <br /><br />
-        <span style={{ color: "#93A2BB" }}>Layouts saved on this phone are kept</span> — the app
+        <span style={{ color: "var(--calm-muted, #a6b0b3)" }}>Layouts saved on this phone are kept</span> — the app
         keeps working without an account.
       </p>
       {error && (
         <div className="p-2.5 rounded-lg text-xs text-center"
-          style={{ background: "rgba(224,87,79,0.12)", border: "1px solid rgba(224,87,79,0.25)", color: "#E2645D" }}>
+          style={{ background: "rgba(224,87,79,0.12)", border: "1px solid rgba(224,87,79,0.25)", color: "var(--calm-error, #ffaba6)" }}>
           {error}
         </div>
       )}
       <input
         type="password" value={password} onChange={(e) => setPassword(e.target.value)}
-        placeholder="Confirm your password" autoComplete="current-password" autoCapitalize="none"
+        aria-label="Confirm your password" placeholder="Confirm your password" autoComplete="current-password" autoCapitalize="none"
         className="w-full rounded-xl px-3.5 py-2.5 text-sm outline-none"
-        style={{ background: "#1B2230", border: "1px solid rgba(224,87,79,0.25)", color: "#E2E8F0" }}
+        style={{ background: "var(--calm-soft, #292f31)", border: "1px solid rgba(224,87,79,0.25)", color: "var(--calm-ink, #f0f2ed)" }}
       />
       <div className="flex gap-2">
         <button disabled={busy}
           onClick={cancel}
           className="flex-1 py-2.5 rounded-lg text-xs font-bold disabled:opacity-50"
-          style={{ background: "rgba(255,255,255,0.05)", color: "rgba(255,255,255,0.75)", border: "1px solid rgba(255,255,255,0.10)" }}>
+          style={{ background: "var(--calm-soft, #292f31)", color: "var(--calm-muted, #a6b0b3)", border: "1px solid var(--calm-line, #343c3f)" }}>
           Keep my account
         </button>
         <button disabled={busy || !password}
           onClick={confirm}
           className="flex-1 py-2.5 rounded-lg text-xs font-bold disabled:opacity-45"
-          style={{ background: "rgba(224,87,79,0.14)", color: "#E2645D", border: "1px solid rgba(224,87,79,0.35)" }}>
+          style={{ background: "rgba(224,87,79,0.14)", color: "var(--calm-error, #ffaba6)", border: "1px solid rgba(224,87,79,0.35)" }}>
           {busy ? "Deleting…" : "Delete forever"}
         </button>
       </div>
@@ -491,11 +449,11 @@ function RumbleTest({ on }: { on: boolean }) {
     <button onClick={fire} disabled={!on}
       className="w-full flex items-center justify-between p-4 transition-colors text-left disabled:opacity-50 hover:bg-white/[0.03]">
       <div className="flex items-center gap-3">
-        <Vibrate size={15} style={{ color: "#7C8AA0" }} />
-        <span className="text-sm font-medium text-white/90">Test rumble</span>
+        <Vibrate size={15} style={{ color: "var(--calm-muted, #a6b0b3)" }} />
+        <span className="text-sm font-medium calm-ink">Test rumble</span>
       </div>
       <span className="text-xs font-semibold"
-        style={{ color: state === "unavailable" ? "#E2645D" : "#5D90CB" }}>
+        style={{ color: state === "unavailable" ? "var(--calm-error, #ffaba6)" : "var(--calm-accent, #abc8db)" }}>
         {!on ? "Rumble off"
           : state === "buzzing" ? "Buzzing…"
           : state === "unavailable" ? "Not supported"
@@ -503,4 +461,48 @@ function RumbleTest({ on }: { on: boolean }) {
       </span>
     </button>
   );
+}
+
+/** App help is available in Settings, with or without an account. */
+export function AppSupport({ privacyUrl, updateChecker, feedback }: { privacyUrl: string; updateChecker: React.ReactNode; feedback: React.ReactNode }) {
+  const app = useMemo(() => getAppInfo(), []);
+  // Support and App are two panels, each built from the same rows as the rest of
+  // the page — no cards nested inside cards, one heading per section.
+  const support = (
+    <Section title="Support">
+      <Panel>{feedback}</Panel>
+    </Section>
+  );
+
+  const appPanel = (
+    <Section title="App">
+      <Panel>
+        <div className="p-4">
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-bold"
+              style={{ fontFamily: "system-ui, sans-serif", color: "var(--calm-accent, #abc8db)" }}>GAMEPADOS</span>
+            {app.version && (
+              <span className="text-xs font-semibold" style={{ color: "var(--calm-muted, #a6b0b3)" }}>v{app.version}</span>
+            )}
+          </div>
+          <p className="text-xs leading-relaxed mt-2" style={{ color: "var(--calm-muted, #a6b0b3)" }}>
+            Turn your phone into a low-latency wireless or USB controller for your PC.
+          </p>
+        </div>
+        {updateChecker}
+        <button onClick={() => openUrl(INSTAGRAM_URL)}
+          className="w-full flex items-center justify-between p-4 hover:bg-white/[0.03] transition-colors text-left">
+          <span className="text-sm font-medium calm-ink">Follow us on Instagram</span>
+          <ChevronRight size={16} style={{ color: "var(--calm-muted, #a6b0b3)" }} />
+        </button>
+        <button onClick={() => openUrl(privacyUrl)}
+          className="w-full flex items-center justify-between p-4 hover:bg-white/[0.03] transition-colors text-left">
+          <span className="text-sm font-medium calm-ink">Privacy policy</span>
+          <ChevronRight size={16} style={{ color: "var(--calm-muted, #a6b0b3)" }} />
+        </button>
+      </Panel>
+    </Section>
+  );
+
+  return <div className="calm-app-support">{support}{appPanel}</div>;
 }
