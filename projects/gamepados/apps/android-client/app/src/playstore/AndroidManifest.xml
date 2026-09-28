@@ -1,13 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools">
-    <application>
-        <!-- Preserve the owner's current Play configuration; other distributions
-             inherit resizability from main. This is NOT a Play policy requirement.
-             Android 16+ can ignore this restriction on large screens. -->
-        <activity
-            android:name=".MainActivity"
-            android:resizeableActivity="false"
-            tools:replace="android:resizeableActivity" />
-    </application>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- The Play build no longer overrides resizeableActivity to "false".
+         It inherits "true" from main, like every other distribution (owner's call,
+         2026-09-27). Android 16 ignores the restriction on tablets and foldables
+         anyway, and Play Console flagged it ("Remove resizability and orientation
+         restrictions"). MainActivity declares screenLayout in configChanges so a
+         window resize never recreates the activity mid-session: the controller's
+         orientation lock and the large-screen letterbox are applied at runtime
+         (setScreenOrientation / applyLetterboxing), not by this manifest. -->
+    <application />
 </manifest>

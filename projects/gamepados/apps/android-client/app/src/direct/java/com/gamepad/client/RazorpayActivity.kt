@@ -100,7 +100,7 @@ class RazorpayActivity : Activity(), PaymentResultWithDataListener {
         val subscriptionId = data?.optString("razorpay_subscription_id")?.takeIf { it.isNotBlank() }
 
         report(
-            PurchaseRelay.razorpay(
+            razorpayResult(
                 paymentId = paymentId,
                 orderId = paymentData?.orderId?.takeIf { it.isNotBlank() },
                 subscriptionId = subscriptionId,
@@ -108,6 +108,22 @@ class RazorpayActivity : Activity(), PaymentResultWithDataListener {
             )
         )
     }
+
+    // Lives here, in src/direct, and NOT in the shared PurchaseRelay: anything in
+    // src/main is compiled into the Play build too, and PurchaseRelay is kept
+    // whole by proguard-rules.pro, so Razorpay field names used to ship inside the
+    // Play AAB even though Play never calls them. The JSON shape is unchanged.
+    private fun razorpayResult(paymentId: String, orderId: String?, subscriptionId: String?, signature: String): String =
+        JSONObject()
+            .put("status", "ok")
+            .put("provider", "razorpay")
+            .put("razorpay_payment_id", paymentId)
+            .put("razorpay_signature", signature)
+            .apply {
+                if (orderId != null) put("razorpay_order_id", orderId)
+                if (subscriptionId != null) put("razorpay_subscription_id", subscriptionId)
+            }
+            .toString()
 
     override fun onPaymentError(code: Int, response: String?, paymentData: PaymentData?) {
         if (code == Checkout.PAYMENT_CANCELED) {

@@ -57,15 +57,6 @@ object PurchaseRelay {
             .apply { if (orderId != null) put("orderId", orderId) }
             .toString()
 
-    fun razorpay(paymentId: String, orderId: String?, subscriptionId: String?, signature: String): String =
-        JSONObject()
-            .put("status", "ok")
-            .put("provider", "razorpay")
-            .put("razorpay_payment_id", paymentId)
-            .put("razorpay_signature", signature)
-            .apply {
-                if (orderId != null) put("razorpay_order_id", orderId)
-                if (subscriptionId != null) put("razorpay_subscription_id", subscriptionId)
-            }
-            .toString()
+    // The Razorpay success payload is built in src/direct/RazorpayActivity, not
+    // here — this file ships in the Play build, and Play must carry no Razorpay code.
 }
