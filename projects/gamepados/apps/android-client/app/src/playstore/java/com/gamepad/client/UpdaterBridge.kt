@@ -13,7 +13,7 @@ import com.google.android.play.core.install.model.UpdateAvailability
 // single source of truth here; the other store flavors keep the listing-page
 // banner (src/store/java) and direct keeps the full self-updater (src/direct/java).
 // open: MainActivity's anonymous JS-interface object extends this class directly.
-open class UpdaterBridge(activity: MainActivity) : UpdaterBridgeBase(activity) {
+open class UpdaterBridge(activity: MainActivity) : AdsBridge(activity) {
     private val updateManager by lazy { AppUpdateManagerFactory.create(activity) }
 
     // JS (UpdateChecker) calls this instead of fetching /api/version; the answer

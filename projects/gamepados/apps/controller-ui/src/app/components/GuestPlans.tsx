@@ -10,6 +10,8 @@ import { getPlaytimeState, onPlaytimeChange } from "../store/playtime";
 import { AccountAuth } from "./AccountAuth";
 import { PlanCard } from "./PlanPanel";
 import { PlayBillingNotice } from "./PlayBillingNotice";
+import { AdRewardButton } from "./AdRewardButton";
+import { getAdState, onAdChange } from "../store/rewardedAd";
 
 /** Kept mounted across sign-in so the selected plan is not lost at checkout. */
 export function GuestPlans() {
@@ -20,6 +22,8 @@ export function GuestPlans() {
   const [attempt, setAttempt] = useState(0);
   const [loading, setLoading] = useState(true);
   const reduced = useReducedMotion();
+  // Re-render when an ad lands: the phone's clock (guestTrial) just grew.
+  useSyncExternalStore(onAdChange, getAdState, getAdState);
   const playComingSoon = getAppInfo().channel === "playstore";
   useEffect(() => {
     if (playComingSoon) { setLoading(false); return; }
@@ -42,8 +46,9 @@ export function GuestPlans() {
   if (playComingSoon) return <section className="guest-plans space-y-4">
     <div className="guest-trial-summary"><Clock size={22} aria-hidden="true" /><div>
       <h2 className="text-lg font-semibold calm-ink">30 minutes, every day</h2>
-      <p className="text-sm mt-1 calm-muted">{expired ? "Today's free time is used. Come back after midnight." : `${formatDuration(trial.remainingSeconds)} left today. No sign-in needed to play.`}</p>
+      <p className="text-sm mt-1 calm-muted">{expired ? "Today's free time is used. Watch an ad for 30 more minutes, or come back after midnight." : `${formatDuration(trial.remainingSeconds)} to play. No sign-in needed.`}</p>
     </div></div>
+    <div className="flex justify-center"><AdRewardButton /></div>
     <PlayBillingNotice />
   </section>;
 
@@ -54,11 +59,12 @@ export function GuestPlans() {
         <h2 className="text-lg font-semibold calm-ink">{selected ? "Your selected plan" : expired ? "Keep playing your way" : "30 minutes, every day"}</h2>
         <p className="text-sm mt-1 calm-muted">
           {selected ? chosen?.displayName || "Choose a plan below"
-            : expired ? "Today's free time is used. Choose a plan, or return after midnight."
-            : `${formatDuration(trial.remainingSeconds)} left today. No sign-in needed to play.`}
+            : expired ? "Today's free time is used. Watch an ad for 30 more minutes, choose a plan, or return after midnight."
+            : `${formatDuration(trial.remainingSeconds)} to play. No sign-in needed.`}
         </p>
       </div>
     </div>
+    {!selected && <div className="flex justify-center"><AdRewardButton /></div>}
     {selected && <button className="guest-back" onClick={() => setSelected(null)}>
       <ArrowLeft size={16} /> Back to plans
     </button>}

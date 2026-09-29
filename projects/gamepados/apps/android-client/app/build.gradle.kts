@@ -14,6 +14,18 @@ if (localPropertiesFile.exists()) {
     localProperties.load(FileInputStream(localPropertiesFile))
 }
 
+// ── AdMob: optional rewarded ads (playstore, direct, uptodown) ──────────────
+// Debug builds ALWAYS use Google's published test IDs: requesting live ads while
+// developing gets an AdMob account suspended. Release builds use the live IDs
+// below; while those are blank, release falls back to the test IDs too and the
+// build says so loudly (a release with test ads earns nothing, but breaks nothing).
+// These IDs are not secrets — they ship inside every APK.
+val admobTestAppId = "ca-app-pub-3940256099942544~3347511713"
+val admobTestRewardedId = "ca-app-pub-3940256099942544/5224354917"
+val admobLiveAppId = "ca-app-pub-5878015482565093~7268347358"        // ca-app-pub-XXXXXXXXXXXXXXXX~NNNNNNNNNN  (AdMob > Apps > App settings)
+val admobLiveRewardedId = "ca-app-pub-5878015482565093/2095058092"   // ca-app-pub-XXXXXXXXXXXXXXXX/NNNNNNNNNN  (AdMob > Ad units > the Rewarded unit)
+val admobLive = admobLiveAppId.isNotBlank() && admobLiveRewardedId.isNotBlank()
+
 android {
     namespace = "com.gamepad.client"
     // Play requires targeting the latest API level (36 as of this release) for new
@@ -234,8 +246,13 @@ android {
         // once billing is switched on, which is exactly why this was not left.
         // 56 = 1.4.2: guest daily trial, plan browsing and gyro lifecycle fixes.
         // 57 = 1.4.3: show the guest introduction only once per installation.
-        versionCode = 59
-        versionName = "1.4.5"
+        // 60 = 1.4.6: optional rewarded ads — "Watch an ad · +30 min" (playstore, direct, uptodown).
+        versionCode = 60
+        versionName = "1.4.6"
+
+        // AdMob test IDs by default; the release build type swaps in the live ones (see top of file).
+        buildConfigField("String", "ADMOB_REWARDED_ID", "\"$admobTestRewardedId\"")
+        manifestPlaceholders["admobAppId"] = admobTestAppId
 
         ndk {
             // Broad device coverage (universal APK for sideload + in-app updater):
@@ -327,6 +344,16 @@ android {
         getByName("playstore").kotlin.srcDir("src/playstore/java")
         getByName("direct").java.srcDir("src/direct/java")
         getByName("direct").kotlin.srcDir("src/direct/java")
+        // Rewarded ads: the real AdsBridge (src/ads/java) in the three builds that carry the
+        // AdMob SDK, the empty one (src/noads/java) everywhere else — see AdsBridge.kt.
+        listOf("playstore", "direct", "uptodown").forEach { flavor ->
+            getByName(flavor).java.srcDir("src/ads/java")
+            getByName(flavor).kotlin.srcDir("src/ads/java")
+        }
+        listOf("aptoide", "amazonstore", "indusstore", "apkpure").forEach { flavor ->
+            getByName(flavor).java.srcDir("src/noads/java")
+            getByName(flavor).kotlin.srcDir("src/noads/java")
+        }
     }
 
     signingConfigs {
@@ -353,6 +380,12 @@ android {
             isShrinkResources = true   // strip unused resources (smaller APK for users)
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             signingConfig = signingConfigs.getByName("release")
+            if (admobLive) {
+                buildConfigField("String", "ADMOB_REWARDED_ID", "\"$admobLiveRewardedId\"")
+                manifestPlaceholders["admobAppId"] = admobLiveAppId
+            } else {
+                println("WARNING: AdMob live IDs are blank in app/build.gradle.kts -- this RELEASE build shows Google TEST ads and earns nothing.")
+            }
         }
     }
     compileOptions {
@@ -457,4 +490,12 @@ dependencies {
     // fails only when an APK is actually assembled, so do not "upgrade" this
     // without assembling a direct build to check.
     add("directImplementation", "com.razorpay:checkout:1.6.38")
+
+    // AdMob rewarded ads + Google's consent form (UMP) — playstore, direct and uptodown ONLY
+    // (owner's call, 2026-09-29). The other store builds must not carry an ad SDK at all.
+    // Each of these flavours' manifests carries the APPLICATION_ID meta-data the SDK requires.
+    listOf("playstore", "direct", "uptodown").forEach { flavor ->
+        add("${flavor}Implementation", "com.google.android.gms:play-services-ads:25.5.0")
+        add("${flavor}Implementation", "com.google.android.ump:user-messaging-platform:4.0.0")
+    }
 }

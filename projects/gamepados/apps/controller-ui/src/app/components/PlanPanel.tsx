@@ -33,6 +33,7 @@ import { localUsedSeconds } from "../store/playtime";
 import { Collapse } from "./Collapse";
 import { FADE } from "../motion";
 import { getAppInfo } from "../platform/native";
+import { AdRewardButton } from "./AdRewardButton";
 
 const ACCENT = "var(--calm-accent, #abc8db)";
 const MUTED = "var(--calm-muted, #a6b0b3)";
@@ -134,7 +135,12 @@ export function PlanPanel() {
   const remainingSeconds = ent.unlimited || limitSeconds === null
     ? null
     : Math.max(0, limitSeconds - usedSeconds);
-  const exhausted = remainingSeconds !== null && remainingSeconds <= 0;
+  // Ad time (1.4.6): banked, never expires, spent once the free time is gone.
+  // "Out of time" means BOTH are gone; free time gone with a bank left is just
+  // playing from the bank.
+  const bankSeconds = ent.unlimited ? 0 : ent.adTime?.bankSeconds ?? 0;
+  const freeGone = remainingSeconds !== null && remainingSeconds <= 0;
+  const exhausted = freeGone && bankSeconds <= 0;
 
   // A granted entitlement borrows a plan's POLICY, not its identity. The launch
   // bonus is 24h of unlimited built on the 3-Day Pass policy, and calling it
@@ -207,7 +213,7 @@ export function PlanPanel() {
                 <span className="text-xs font-semibold" style={{ color: MUTED }}>Today</span>
                 <span className="text-sm font-bold tabular-nums"
                   style={{ fontFamily: "system-ui, sans-serif", color: exhausted ? DANGER : "var(--calm-ink, #f0f2ed)" }}>
-                  {formatDuration(remainingSeconds ?? 0)} left
+                  {formatDuration((remainingSeconds ?? 0) + bankSeconds)} left
                 </span>
               </div>
               <Meter
@@ -217,9 +223,12 @@ export function PlanPanel() {
               />
               <p className="text-xs mt-2" style={{ color: exhausted ? DANGER : MUTED }}>
                 {exhausted
-                  ? "You're out of time — upgrade to play more, or wait for your next quota."
-                  : formatResetsAt(ent.resetsAt)}
+                  ? "You're out of time — watch an ad for 30 more minutes, upgrade, or wait for your next quota."
+                  : freeGone
+                    ? `Today's free time is used — playing from your ad time. ${formatResetsAt(ent.resetsAt)}`
+                    : formatResetsAt(ent.resetsAt)}
               </p>
+              <div className="mt-4 flex justify-center"><AdRewardButton /></div>
             </div>
           )}
         </Panel>

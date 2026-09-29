@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- uptodown flavor only: the one store build (besides playstore and direct) that carries the
+     AdMob SDK for optional rewarded ads (owner's call, 2026-09-29). Its code is src/store/java
+     like the other stores, plus src/ads/java (build.gradle.kts). -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <!-- AdMob app id (rewarded ads). The SDK refuses to start without it. The admobAppId placeholder is
+             Google's test id in debug builds and the live one in release (build.gradle.kts). -->
+        <meta-data
+            android:name="com.google.android.gms.ads.APPLICATION_ID"
+            android:value="${admobAppId}" />
+    </application>
+</manifest>

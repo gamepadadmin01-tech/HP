@@ -8,7 +8,7 @@ import android.webkit.JavascriptInterface
 // compiled into a store-distributed build. See build.gradle.kts / AndroidManifest.xml
 // (src/direct overlay) for the other half of this split.
 // open: MainActivity's anonymous JS-interface object extends this class directly.
-open class UpdaterBridge(activity: MainActivity) : UpdaterBridgeBase(activity) {
+open class UpdaterBridge(activity: MainActivity) : AdsBridge(activity) {
     @JavascriptInterface
     fun startApkUpdate(url: String, sha256: String) {
         activity.beginApkUpdate(url, sha256)

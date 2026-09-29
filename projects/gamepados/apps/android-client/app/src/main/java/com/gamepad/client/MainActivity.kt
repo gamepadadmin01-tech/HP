@@ -186,6 +186,8 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback, android.hardwa
             evalJs("window.dispatchEvent(new Event('guest-trial-expired'))")
         }
     }
+    /** AdsBridge (ads flavours): a signed-out player finished a rewarded ad. Returns the new snapshot. */
+    internal fun creditGuestAdReward(): String = guestTrial.creditAd()
     private var rollPrevRaw = 0.0        // previous raw atan2 reading (deg, ±180)
     private var rollTurns = 0            // accumulated whole turns
     private var rollUnwrapInit = false   // false until the first sample seeds rollPrevRaw

@@ -10,6 +10,12 @@
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <application>
+        <!-- AdMob app id (rewarded ads). The SDK refuses to start without it. The admobAppId placeholder is
+             Google's test id in debug builds and the live one in release (build.gradle.kts). -->
+        <meta-data
+            android:name="com.google.android.gms.ads.APPLICATION_ID"
+            android:value="${admobAppId}" />
+
         <!-- Lets us hand the downloaded APK to the system installer via a content://
              URI (required on Android 7+; file:// URIs are blocked). -->
         <provider

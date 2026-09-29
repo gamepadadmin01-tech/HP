@@ -2,8 +2,9 @@
 //
 // Replaces the fake lockout that used to live in Dialogs.tsx, whose "upgrade"
 // button was a client-side boolean and whose other button granted 35 minutes for
-// watching an ad that did not exist. There are no ads in this product and the
-// client cannot grant anything.
+// watching an ad that did not exist. The client still cannot grant anything: the
+// real "Watch an ad" button (1.4.6) plays a rewarded ad whose 30 minutes the
+// SERVER banks from Google's signed callback. Once it has, play restarts here.
 //
 // What this says is deliberately short. The user came here to play and cannot;
 // the useful information is when they can again, and that there is a way out.
@@ -14,6 +15,8 @@ import { motion } from "framer-motion";
 import { Clock } from "lucide-react";
 import { formatResetsAt } from "../store/billing";
 import { requestDashboardTab } from "../store/navIntent";
+import { beginPlay, clearBlock } from "../store/playtime";
+import { AdRewardButton } from "./AdRewardButton";
 
 const MUTED = "#7C8AA0";
 const ACCENT = "#5D90CB";
@@ -59,12 +62,18 @@ export function PlaytimeLockout({
         <p className="text-xs mt-3" style={{ color: ACCENT }}>{resets}</p>
       )}
 
+      {/* The quickest way back in: 30 minutes for an ad, then play resumes
+          without leaving this screen. Absent where ads are (see AdRewardButton). */}
+      <div className="mt-7 w-full flex justify-center">
+        <AdRewardButton onCredited={() => { clearBlock(); void beginPlay(); }} />
+      </div>
+
       {/* Ask for the Account tab BEFORE leaving. onBack() alone returns to
           whichever tab was last open -- almost always Home -- which is why this
           button looked like it did nothing at all. */}
       <button
         onClick={() => { requestDashboardTab("account"); onBack(); }}
-        className="mt-7 w-full max-w-xs py-3.5 rounded-xl text-sm font-semibold"
+        className="mt-4 w-full max-w-xs py-3.5 rounded-xl text-sm font-semibold"
         style={{
           background: "rgba(79,134,198,0.14)",
           border: "1px solid rgba(79,134,198,0.35)",

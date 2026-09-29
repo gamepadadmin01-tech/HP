@@ -5,4 +5,4 @@ package com.gamepad.client
 // is undefined in JS and the existing UpdateChecker fallback (App.tsx) opens the
 // store's own listing page instead of downloading and installing an APK in-app.
 // open: MainActivity's anonymous JS-interface object extends this class directly.
-open class UpdaterBridge(activity: MainActivity) : UpdaterBridgeBase(activity)
+open class UpdaterBridge(activity: MainActivity) : AdsBridge(activity)

@@ -83,6 +83,15 @@ export interface AndroidBridge {
   getGuestTrialState?(): string;
   setGuestTrialActive?(active: boolean): string;
 
+  /** Rewarded ads (AdsBridge.kt) — playstore, direct and uptodown builds only;
+   *  absent everywhere else, so always feature-detect. showRewardedAd answers on
+   *  `window.onRewardedAdResult`. userId "" = signed out (the phone banks it). */
+  adsAvailable?(): boolean;
+  showRewardedAd?(userId: string): void;
+  preloadRewardedAd?(): void;
+  adPrivacyOptionsRequired?(): boolean;
+  showAdPrivacyOptions?(): void;
+
   // System
   openUrl(url: string): void;
   exitApp(): void;
@@ -101,7 +110,12 @@ export function isNative(): boolean {
   return bridge() !== null;
 }
 
-export type GuestTrialSnapshot = { remainingSeconds: number; limitSeconds: number; resetsAt: number };
+/** remainingSeconds = today's free time + the ad bank (what can be played now).
+ *  The two extra fields are absent from APKs older than 1.4.6. */
+export type GuestTrialSnapshot = {
+  remainingSeconds: number; limitSeconds: number; resetsAt: number;
+  freeRemainingSeconds?: number; bankSeconds?: number;
+};
 export function nativeGuestTrial(active?: boolean): GuestTrialSnapshot | null {
   const b = bridge();
   if (!b?.getGuestTrialState || !b.setGuestTrialActive) return null;
@@ -182,6 +196,40 @@ export function openUrl(url: string): void {
 }
 
 // ─── Billing ──────────────────────────────────────────────────────────────────
+
+// ─── Rewarded ads ─────────────────────────────────────────────────────────────
+
+/** True only in a build that carries the AdMob SDK (playstore, direct, uptodown). */
+export function adsSupported(): boolean {
+  return call("adsAvailable", (b) => b.adsAvailable!() === true, false);
+}
+
+/** Show a rewarded ad (loading one first if needed). False = this build has no
+ *  ads, so the caller must not wait for `window.onRewardedAdResult`. */
+export function showRewardedAd(userId: string): boolean {
+  const b = bridge();
+  if (!b || typeof b.showRewardedAd !== "function") return false;
+  try {
+    b.showRewardedAd(userId);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Warm an ad so the tap is instant. Native ignores it until consent exists. */
+export function preloadRewardedAd(): void {
+  call("preloadRewardedAd", (b) => b.preloadRewardedAd!(), undefined);
+}
+
+/** EEA/UK: whether "Ad privacy choices" must be offered. */
+export function adPrivacyOptionsRequired(): boolean {
+  return call("adPrivacyOptionsRequired", (b) => b.adPrivacyOptionsRequired!() === true, false);
+}
+
+export function showAdPrivacyOptions(): void {
+  call("showAdPrivacyOptions", (b) => b.showAdPrivacyOptions!(), undefined);
+}
 
 /** Launch Google Play's purchase sheet. Returns false when this build has no
  *  Play Billing in it, so the caller can say so rather than hang on a callback

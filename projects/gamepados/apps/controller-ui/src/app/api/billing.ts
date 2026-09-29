@@ -59,8 +59,19 @@ export type Entitlement = {
     /** null when the plan is unlimited. */
     limitSeconds: number | null;
     usedSeconds: number;
-    /** null when unlimited. */
+    /** null when unlimited. Includes the ad bank (server 2026-09-29+). */
     remainingSeconds: number | null;
+    /** Today's free allowance alone, without the ad bank. Absent on older servers. */
+    freeRemainingSeconds?: number | null;
+  };
+  /** Rewarded-ad time. Absent on servers older than the ad bank. */
+  adTime?: {
+    /** Banked seconds still available: stack, never expire, spent after the free time. */
+    bankSeconds: number;
+    /** What one ad adds (1800). */
+    rewardSeconds: number;
+    /** false on Lifetime: no button at all. */
+    canEarn: boolean;
   };
   resetsAt: string;
   resetTimezone: string;

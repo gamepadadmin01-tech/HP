@@ -8,5 +8,11 @@
          window resize never recreates the activity mid-session: the controller's
          orientation lock and the large-screen letterbox are applied at runtime
          (setScreenOrientation / applyLetterboxing), not by this manifest. -->
-    <application />
+    <application>
+        <!-- AdMob app id (rewarded ads). The SDK refuses to start without it. The admobAppId placeholder is
+             Google's test id in debug builds and the live one in release (build.gradle.kts). -->
+        <meta-data
+            android:name="com.google.android.gms.ads.APPLICATION_ID"
+            android:value="${admobAppId}" />
+    </application>
 </manifest>

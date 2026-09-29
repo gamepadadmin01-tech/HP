@@ -14,6 +14,7 @@ internal class GuestTrial(context: Context, private val onExpired: () -> Unit) {
         prefs.getLong("usedMs", 0), prefs.getLong("resetsAt", 0),
         prefs.getString("zone", null) ?: java.util.TimeZone.getDefault().id,
         prefs.getLong("lastWall", 0),
+        prefs.getLong("bankMs", 0),
     )
     private val ticker = object : Runnable {
         override fun run() {
@@ -35,7 +36,8 @@ internal class GuestTrial(context: Context, private val onExpired: () -> Unit) {
     private fun advance() {
         quota.advance(System.currentTimeMillis(), SystemClock.elapsedRealtime())
         prefs.edit().putLong("usedMs", quota.usedMs).putLong("resetsAt", quota.resetsAt)
-            .putLong("lastWall", quota.lastWall).putString("zone", quota.zoneId).apply()
+            .putLong("lastWall", quota.lastWall).putString("zone", quota.zoneId)
+            .putLong("bankMs", quota.bankMs).apply()
     }
 
     @Synchronized fun setActive(on: Boolean): String {
@@ -48,9 +50,22 @@ internal class GuestTrial(context: Context, private val onExpired: () -> Unit) {
     @Synchronized fun snapshot(): String {
         advance()
         return JSONObject().put("remainingSeconds", quota.remainingMs() / 1000.0)
+            .put("freeRemainingSeconds", quota.freeRemainingMs() / 1000.0)
+            .put("bankSeconds", quota.bankMs / 1000.0)
             .put("limitSeconds", GuestQuota.LIMIT_MS / 1000)
             .put("resetsAt", quota.resetsAt).toString()
     }
 
     @Synchronized fun exhausted(): Boolean { advance(); return quota.remainingMs() == 0L }
+
+    /** A rewarded ad finished while signed out (AdsBridge): bank [AD_REWARD_MS]. Signed-in players are
+     *  credited by the server instead, from Google's signed callback, never from here. */
+    @Synchronized fun creditAd(): String {
+        advance()
+        quota.credit(AD_REWARD_MS)
+        prefs.edit().putLong("bankMs", quota.bankMs).apply()
+        return snapshot()
+    }
+
+    companion object { const val AD_REWARD_MS = 30 * 60 * 1000L }
 }
