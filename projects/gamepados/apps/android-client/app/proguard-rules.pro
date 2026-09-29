@@ -30,3 +30,11 @@
 
 # The result channel both flavors post into, called from SDK threads.
 -keep class com.gamepad.client.PurchaseRelay { *; }
+
+# ── AdMob → WorkManager → Room (1.4.6) ─────────────────────────────────────
+# The ads SDK pulls in WorkManager, which keeps a Room database. Room creates it
+# by reflection (WorkDatabase_Impl's no-argument constructor). R8 full mode keeps
+# a class named by an old `-keep class X` rule but NOT its constructor, so the
+# first 1.4.6 build crashed at launch: "Failed to create an instance of
+# androidx.work.impl.WorkDatabase". Keep every Room database's constructor.
+-keep class * extends androidx.room.RoomDatabase { <init>(); }

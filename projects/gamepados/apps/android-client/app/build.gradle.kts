@@ -497,5 +497,8 @@ dependencies {
     listOf("playstore", "direct", "uptodown").forEach { flavor ->
         add("${flavor}Implementation", "com.google.android.gms:play-services-ads:25.5.0")
         add("${flavor}Implementation", "com.google.android.ump:user-messaging-platform:4.0.0")
+        // The ads SDK asks for WorkManager 2.7.0 (2021), whose Room rules predate R8 full mode and
+        // crashed the first 1.4.6 build at launch; the current release has correct rules (see proguard-rules.pro).
+        add("${flavor}Implementation", "androidx.work:work-runtime:2.12.0")
     }
 }
