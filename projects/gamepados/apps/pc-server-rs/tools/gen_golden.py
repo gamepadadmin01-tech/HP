@@ -30,8 +30,13 @@ import struct
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 RS_ROOT = os.path.dirname(HERE)
-# Prefer the LIVE server; fall back to the verified 2026-07-21 preserved snapshot.
+# Prefer the LATEST Python server; fall back to the verified 2026-07-21 snapshot.
+# The Python server was retired and archived on 2026-09-30 (it is no longer at
+# apps/pc-server). The archived copy includes the 2026-08-28 centre-snap change
+# (+/-4 -> +/-1) that the 07-21 snapshot LACKS, so it must be tried first.
 CANDIDATES = [
+    os.path.join(RS_ROOT, "..", "..", "..", "..", "context", "archive",
+                 "dead-code-2026-09-30", "apps", "pc-server", "server.py"),
     os.path.join(RS_ROOT, "..", "pc-server", "server.py"),
     os.path.join(RS_ROOT, "..", "..", "releases", "archive",
                  "pc-server-python-2026-07-21", "server.py"),
