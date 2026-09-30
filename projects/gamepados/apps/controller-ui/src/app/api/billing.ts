@@ -243,20 +243,6 @@ export function verifyRazorpay(token: string, planCode: PlanCode, result: Razorp
   );
 }
 
-// ─── Google Play (playstore build only) ───────────────────────────────────────
-
-/** Called straight after onPurchasesUpdated. The server verifies the token with
- *  Play and acknowledges it there; acknowledging client-side would be a lie. */
-export function confirmPlayPurchase(
-  token: string,
-  purchase: { purchaseToken: string; productId: string; orderId?: string },
-) {
-  return request<{
-    success: true; alreadyCredited: boolean; plan: PlanCode;
-    unlimited: boolean; endsAt: string | null;
-  }>("/api/billing/google/purchase", { body: purchase, token });
-}
-
 // ─── Play session lifecycle ───────────────────────────────────────────────────
 //
 // One call before play, one per minute during, one after. Never on the input

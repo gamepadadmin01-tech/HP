@@ -22,10 +22,6 @@ export const API_ORIGIN = (
 
 const BASE = `${API_ORIGIN}/api/account`;
 
-export function createWebsiteLogin(token: string): Promise<{ code: string }> {
-  return request('/website-login', {}, token);
-}
-
 export type User = { id: string; email: string; displayName: string };
 
 /** Thrown for every failure — network, validation or server. `message` is safe

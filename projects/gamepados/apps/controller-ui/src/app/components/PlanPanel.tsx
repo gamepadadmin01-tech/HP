@@ -28,7 +28,7 @@ import {
   getBillingState, onBillingChange, refresh, redeemPromo,
   formatDuration, formatPrice, formatResetsAt,
 } from "../store/billing";
-import { purchase, restorePurchases, canRestore } from "../store/purchase";
+import { purchase } from "../store/purchase";
 import { localUsedSeconds } from "../store/playtime";
 import { Collapse } from "./Collapse";
 import { FADE } from "../motion";
@@ -250,13 +250,6 @@ export function PlanPanel() {
         <Panel><PromoRow /></Panel>
       </Section>}
 
-      {/* Play only. A purchase can complete while the app is dead -- Play holds
-          it and re-delivers on the next query, which is what this asks for. */}
-      {canRestore() && (
-        <Section title="Bought already?">
-          <Panel><RestoreRow /></Panel>
-        </Section>
-      )}
     </>
   );
 }
@@ -423,30 +416,6 @@ export function PlanCard({ plan, onChoose }: { plan: CataloguePlan; onChoose?: (
   );
 }
 
-/** Ask Google Play to hand back anything this account already owns.
- *
- *  Results arrive on the same callback the purchase flow uses and are credited
- *  by the store, so this reports only that the request went out -- the plan row
- *  above updates by itself when the entitlement lands. */
-function RestoreRow() {
-  const [asked, setAsked] = useState(false);
-
-  return (
-    <button
-      onClick={() => { restorePurchases(); setAsked(true); void refresh(); }}
-      className="w-full flex items-center justify-between p-4 text-left">
-      <div className="min-w-0">
-        <p className="text-sm font-medium calm-ink">Restore purchases</p>
-        <p className="text-xs mt-0.5" style={{ color: MUTED }}>
-          {asked
-            ? "Asked Google Play — your plan will appear here if it finds one."
-            : "Bring back a plan bought on another device or before a reinstall."}
-        </p>
-      </div>
-      <RefreshCw size={15} style={{ color: MUTED }} />
-    </button>
-  );
-}
 
 /** Promo redemption. Also the surface the admin portal's hand-granted free
  *  trials arrive through, which is why it is shown on every channel — a granted

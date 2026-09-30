@@ -86,8 +86,10 @@ account system lives in the main tree. Its 3 unpushed commits are preserved as p
   **This has silently broken the build twice before.**
 - **Always copy `apps/controller-ui/dist/index.html` → `apps/android-client/app/src/main/assets/dist/`
   before building the APK**, or it silently ships the previous UI.
-- **Pillow ≥ 12 needs `PIL.ImageFont` and `PIL._imagingft` bundled** in the PyInstaller spec, or
-  the PC server exe crashes at startup.
+- **The PC server is the Rust one, `apps/pc-server-rs`.** The old Python server (`apps/pc-server`)
+  was retired and moved to `context/archive/dead-code-2026-09-30/apps/pc-server` on 2026-09-30
+  (owner-approved). Its PyInstaller notes (Pillow ≥ 12 needs `PIL.ImageFont`/`PIL._imagingft`)
+  apply only if it is ever revived. Comments that say "mirrors apps/pc-server/…" now point there.
 - Five Android flavours: `direct`, `playstore`, `aptoide`, `uptodown`, `amazonstore`.
 - Full commands: **`context/REBUILD.md`**. Release process: `projects/gamepados/RELEASE.md`.
 - After any significant change: `projects/gamepados/docs/REGRESSION_CHECKLIST.md`.

@@ -1,13 +1,14 @@
 // ─── Buying a plan ────────────────────────────────────────────────────────────
 //
-// One function, two providers, and a hard rule underneath both: **the client
+// One provider — Razorpay, in the website and Uptodown builds (the Play build
+// sells nothing since 2026-09-30) — and a hard rule underneath: **the client
 // never grants anything**. A purchase here ends in a server call that verifies
 // the payment independently, and the entitlement only exists once that call
 // succeeds. Nothing in this file can make the app think it is Premium.
 //
-// The shape is the same either way:
+// The shape:
 //
-//   1. ask the server to start it (Razorpay) or read the product id (Play)
+//   1. ask the server to create the order
 //   2. hand off to the native sheet through the bridge
 //   3. wait for `window.onPurchaseResult`
 //   4. send the receipt back for verification
@@ -24,19 +25,11 @@ import * as api from "../api/billing";
 import { ApiError } from "../api/account";
 import { getSession } from "./account";
 import { refresh } from "./billing";
-import {
-  getAppInfo,
-  startPlayPurchase,
-  startRazorpayCheckout,
-  restorePurchases as bridgeRestore,
-  canRestorePurchases,
-  acknowledgePlayPurchase,
-} from "../platform/native";
+import { getAppInfo, startRazorpayCheckout } from "../platform/native";
 import { clearBlock } from "./playtime";
 
 /** What the native side posts back to `window.onPurchaseResult`. */
 type NativeResult =
-  | { status: "ok"; provider: "play"; purchaseToken: string; productId: string; orderId?: string }
   | { status: "ok"; provider: "razorpay"; razorpay_payment_id: string; razorpay_order_id?: string;
       razorpay_subscription_id?: string; razorpay_signature: string }
   | { status: "cancelled" }
@@ -84,13 +77,9 @@ function installCallback() {
     }
     const waiter = pending;
     pending = null;
-    // No waiter means Play handed us a purchase we did not ask for in this
-    // session — a restore, or a payment that completed after the app was
-    // killed. Credit it anyway; the user paid.
-    if (!waiter) {
-      if (parsed.status === "ok" && parsed.provider === "play") void creditPlay(parsed);
-      return;
-    }
+    // No waiter: a late answer after the wait timed out. Nothing to settle here —
+    // Razorpay's webhook credits the payment server-side regardless.
+    if (!waiter) return;
     waiter(parsed);
   };
 }
@@ -113,37 +102,6 @@ function awaitResult(timeoutMs = 10 * 60 * 1000): Promise<NativeResult> {
       resolve(r);
     };
   });
-}
-
-// ─── Google Play ──────────────────────────────────────────────────────────────
-
-async function creditPlay(r: Extract<NativeResult, { provider: "play" }>): Promise<PurchaseOutcome> {
-  const session = getSession();
-  if (!session) return failed("Sign in to finish this purchase.");
-  try {
-    const out = await api.confirmPlayPurchase(session.token, {
-      purchaseToken: r.purchaseToken,
-      productId: r.productId,
-      orderId: r.orderId,
-    });
-    // The server acknowledges on Play as part of crediting. This is the
-    // fallback for the case where it credited but its own call to Play failed:
-    // Play auto-refunds anything unacknowledged after three days, which would
-    // silently reverse a purchase the user is already using. Safe to call
-    // unconditionally -- it is a no-op once acknowledged.
-    acknowledgePlayPurchase(r.purchaseToken);
-    await refresh();
-    // Someone who just bought their way out of a lockout should not have to
-    // back out of the controller and come in again.
-    clearBlock();
-    return { ok: true, plan: out.plan };
-  } catch (e) {
-    // The money is already gone at this point, so this must never read as
-    // "purchase failed" — Play will re-deliver an unacknowledged purchase and
-    // the reconciler picks up the rest.
-    const msg = e instanceof ApiError ? e.message : "Could not confirm the purchase.";
-    return failed(`${msg} Your payment is safe — reopen the app in a minute and it will appear.`);
-  }
 }
 
 // ─── Razorpay ─────────────────────────────────────────────────────────────────
@@ -188,12 +146,14 @@ async function buyWithRazorpay(plan: api.CataloguePlan): Promise<PurchaseOutcome
       razorpay_signature: r.razorpay_signature,
     });
     await refresh();
+    // Someone who just bought their way out of a lockout should not have to
+    // back out of the controller and come in again.
     clearBlock();
     return { ok: true, plan: out.plan };
   } catch (e) {
     const msg = e instanceof ApiError ? e.message : "Payment could not be verified.";
-    // Same reasoning as Play: the webhook settles this even if the client call
-    // never lands, so do not tell the user they were not charged.
+    // The money may already be gone: the webhook settles this even if the
+    // client call never lands, so do not tell the user they were not charged.
     return failed(`${msg} If you were charged, it will appear within a few minutes.`);
   }
 }
@@ -203,9 +163,8 @@ async function buyWithRazorpay(plan: api.CataloguePlan): Promise<PurchaseOutcome
 let busy = false;
 
 /**
- * Buy `plan`. Routes by the build's own distribution channel — a playstore
- * build must go through Play Billing and a direct build through Razorpay, and
- * neither may offer the other.
+ * Buy `plan`. Routes by the build's own distribution channel: Razorpay in the
+ * website and Uptodown builds, nothing anywhere else.
  *
  * The caller is still responsible for only showing a button when the SERVER
  * said the channel is purchasable. This function refuses anything else as a
@@ -236,24 +195,4 @@ export async function purchase(plan: api.CataloguePlan): Promise<PurchaseOutcome
   } finally {
     busy = false;
   }
-}
-
-/**
- * Ask Play to re-deliver anything already owned. Worth offering because a
- * purchase can complete while the app is dead — Play holds it and hands it over
- * on the next connection, which is what this triggers.
- *
- * Results arrive on the same callback and are credited by `creditPlay`, so this
- * returns only whether the request could be made at all.
- */
-export function restorePurchases(): boolean {
-  installCallback();
-  return bridgeRestore();
-}
-
-/** Whether offering a restore button makes sense at all. False on Razorpay
- *  builds, where an entitlement lives on the ACCOUNT rather than in a store, so
- *  signing in already restores it and a button would imply otherwise. */
-export function canRestore(): boolean {
-  return canRestorePurchases();
 }
