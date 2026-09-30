@@ -17,6 +17,7 @@ import { formatResetsAt } from "../store/billing";
 import { requestDashboardTab } from "../store/navIntent";
 import { beginPlay, clearBlock } from "../store/playtime";
 import { AdRewardButton } from "./AdRewardButton";
+import { getAppInfo } from "../platform/native";
 
 const MUTED = "#7C8AA0";
 const ACCENT = "#5D90CB";
@@ -80,7 +81,8 @@ export function PlaytimeLockout({
           color: ACCENT,
         }}
       >
-        See plans in Account
+        {/* The Play build sells nothing -- "plans" would point at nothing there. */}
+        {getAppInfo().channel === "playstore" ? "More time in Account" : "See plans in Account"}
       </button>
     </motion.div>
   );

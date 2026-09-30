@@ -354,6 +354,20 @@ android {
             getByName(flavor).java.srcDir("src/noads/java")
             getByName(flavor).kotlin.srcDir("src/noads/java")
         }
+        // Payments (owner's call, 2026-09-30). BillingBridge comes from exactly ONE of:
+        //  - src/razorpay/java: the Razorpay checkout (BillingBridge + RazorpayActivity) — direct
+        //    (website) and uptodown. It extends whichever UpdaterBridge that flavour has.
+        //  - src/nobilling/java: the empty class — playstore (Play sells NOTHING: time comes only
+        //    from rewarded ads; the old Play Billing bridge is archived in context/archive/) and
+        //    the four stores that mandate their own billing or have not confirmed ours.
+        listOf("direct", "uptodown").forEach { flavor ->
+            getByName(flavor).java.srcDir("src/razorpay/java")
+            getByName(flavor).kotlin.srcDir("src/razorpay/java")
+        }
+        listOf("playstore", "aptoide", "amazonstore", "indusstore", "apkpure").forEach { flavor ->
+            getByName(flavor).java.srcDir("src/nobilling/java")
+            getByName(flavor).kotlin.srcDir("src/nobilling/java")
+        }
     }
 
     signingConfigs {
@@ -481,7 +495,10 @@ dependencies {
     // and none of the APIs 8.0.0 deleted (queryPurchaseHistory,
     // querySkuDetailsAsync, the no-arg enablePendingPurchases, the skuType
     // queryPurchasesAsync overload) were ever used here.
-    add("playstoreImplementation", "com.android.billingclient:billing-ktx:9.1.0")
+    // (2026-09-30) The Play Billing library is GONE from the playstore build: Play sells nothing
+    // now, so there is no billing code, no BILLING permission, and no more "update your Billing
+    // Library by <date>" deadlines. Bring it back together with the archived BillingBridge
+    // (context/archive/play-billing-bridge-2026-09-30/) if Play purchases ever return.
     // Razorpay Checkout — direct flavor only (our own site's build, no store cut).
     // 1.6.38, NOT 1.6.40. From 1.6.40 the SDK is split into
     // com.razorpay:checkout + com.razorpay:core, and both artifacts declare the
@@ -490,6 +507,8 @@ dependencies {
     // fails only when an APK is actually assembled, so do not "upgrade" this
     // without assembling a direct build to check.
     add("directImplementation", "com.razorpay:checkout:1.6.38")
+    // Uptodown sells Lifetime with the same checkout since 2026-09-30 (owner's call).
+    add("uptodownImplementation", "com.razorpay:checkout:1.6.38")
 
     // AdMob rewarded ads + Google's consent form (UMP) — playstore, direct and uptodown ONLY
     // (owner's call, 2026-09-29). The other store builds must not carry an ad SDK at all.

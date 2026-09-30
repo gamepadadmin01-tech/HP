@@ -9,7 +9,6 @@ import { formatDuration } from "../store/billing";
 import { getPlaytimeState, onPlaytimeChange } from "../store/playtime";
 import { AccountAuth } from "./AccountAuth";
 import { PlanCard } from "./PlanPanel";
-import { PlayBillingNotice } from "./PlayBillingNotice";
 import { AdRewardButton } from "./AdRewardButton";
 import { getAdState, onAdChange } from "../store/rewardedAd";
 
@@ -48,8 +47,9 @@ export function GuestPlans() {
       <h2 className="text-lg font-semibold calm-ink">30 minutes, every day</h2>
       <p className="text-sm mt-1 calm-muted">{expired ? "Today's free time is used. Watch an ad for 30 more minutes, or come back after midnight." : `${formatDuration(trial.remainingSeconds)} to play. No sign-in needed.`}</p>
     </div></div>
+    {/* Play build: rewarded ads are the ONLY way to more time -- no plans, no
+        Lifetime, no link to buy on the website (owner's decision, 2026-09-30). */}
     <div className="flex justify-center"><AdRewardButton /></div>
-    <PlayBillingNotice />
   </section>;
 
   return <section className="guest-plans space-y-4">

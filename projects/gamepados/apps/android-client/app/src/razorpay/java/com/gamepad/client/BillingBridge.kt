@@ -4,12 +4,13 @@ import android.content.Intent
 import android.webkit.JavascriptInterface
 import com.razorpay.Checkout
 
-// direct flavor only: payments go through Razorpay, our own channel with no
-// store cut. Google Play forbids this path for digital goods, so this class —
-// and the Razorpay dependency it needs — must never be compiled into a
-// store-distributed build. The playstore flavor gets Play Billing instead
-// (src/playstore/java) and the remaining five stores get neither
-// (src/store/java).
+// direct (website) and uptodown only: payments go through Razorpay, our own
+// channel with no store cut. Google Play forbids this path for digital goods,
+// so this class — and the Razorpay dependency it needs — must NEVER be compiled
+// into the playstore build (which sells nothing since 2026-09-30) or the other
+// store builds; those all get the empty class in src/nobilling/java.
+// It extends whichever UpdaterBridge the flavour has (direct: website updater,
+// uptodown: store listing) — see sourceSets in build.gradle.kts.
 //
 // The checkout sheet itself is hosted by RazorpayActivity, because the SDK
 // reports its result to the Activity that opened it and MainActivity is shared

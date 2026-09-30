@@ -7,7 +7,7 @@ import { Home, Usb, Activity, Gamepad2, X, Settings, User, Check, ArrowUpRight, 
 import { QRScanOverlay } from "./components/Dialogs";
 import { PlaytimeLockout } from "./components/PlaytimeLockout";
 import { PlaytimeToast } from "./components/PlaytimeToast";
-import { GuestTrialPill } from "./components/GuestPlans";
+import { PlaytimeChip, NX_CHANGED } from "./components/PlaytimeChip";
 import { beginPlay, endPlay, getPlaytimeState, isBlocked, onPlaytimeChange } from "./store/playtime";
 import { onDashboardTabRequest, requestDashboardTab } from "./store/navIntent";
 import { LaunchNotice } from "./components/LaunchNotice";
@@ -1523,30 +1523,37 @@ function ControllerScreen({ onBack, isActive: screenActive, activeMapping, custo
         setLtFill(0); setRtFill(0);
       } catch {}
     };
+    // The geometry payload, built in ONE place. Activation sends it, and so does
+    // a moved data-nx element (the draggable time chip, PlaytimeChip.tsx): the
+    // native layer only knows the exclusion rects it was last sent. Re-sending
+    // mid-play is safe -- setGeometry swaps the maps and keeps held fingers.
+    const geometryJson = (m: DOMMatrix) => {
+      const exclusions = Array.from(document.querySelectorAll("[data-nx]")).map((el) => {
+        const r = (el as HTMLElement).getBoundingClientRect();
+        return { x: r.left, y: r.top, w: r.width, h: r.height };
+      });
+      return JSON.stringify({
+        matrix: [m.a, m.b, m.c, m.d, m.e, m.f],
+        dpr: window.devicePixelRatio || 1,
+        exclusions,
+        widgets: buildNativeGeometry(activePad),
+        stickMode: stickModeRef.current,
+        // Stick feel — the native engine applies these itself, so both paths
+        // agree. Omitting them would leave the native path on its own defaults
+        // while the JS path used the user's, which is exactly the drift that
+        // caused 26d5368.
+        stickFollow: stickFeel.follow,
+        curveExp: stickFeel.curveExp,
+        hapticsEnabled: (window as any).hapticsEnabled !== false,
+      });
+    };
     const tryActivate = () => {
       if (cancelled || usbWS.isOpen()) return;
       const svg = svgRef.current;
       const m = svg && svg.getScreenCTM();
       if (!m) return;
-      const exclusions = Array.from(document.querySelectorAll("[data-nx]")).map((el) => {
-        const r = (el as HTMLElement).getBoundingClientRect();
-        return { x: r.left, y: r.top, w: r.width, h: r.height };
-      });
       try {
-        bridge.setNativeInputGeometry(JSON.stringify({
-          matrix: [m.a, m.b, m.c, m.d, m.e, m.f],
-          dpr: window.devicePixelRatio || 1,
-          exclusions,
-          widgets: buildNativeGeometry(activePad),
-          stickMode: stickModeRef.current,
-          // Stick feel — the native engine applies these itself, so both paths
-          // agree. Omitting them would leave the native path on its own defaults
-          // while the JS path used the user's, which is exactly the drift that
-          // caused 26d5368.
-          stickFollow: stickFeel.follow,
-          curveExp: stickFeel.curveExp,
-          hapticsEnabled: (window as any).hapticsEnabled !== false,
-        }));
+        bridge.setNativeInputGeometry(geometryJson(m));
         // Visual override starts EMPTY so any stale JS held-state can't linger.
         lastVisKeyRef.current = "";
         setNativeVis({ held: new Set(), stdHeld: new Set() });
@@ -1556,6 +1563,13 @@ function ControllerScreen({ onBack, isActive: screenActive, activeMapping, custo
     };
     // Double-rAF so the svg's CTM is read after layout has settled.
     raf1 = requestAnimationFrame(() => { raf2 = requestAnimationFrame(tryActivate); });
+    const onNxChanged = () => {
+      if (cancelled || !nativeActiveRef.current) return;
+      const m = svgRef.current && svgRef.current.getScreenCTM();
+      if (!m) return;
+      try { bridge.setNativeInputGeometry(geometryJson(m)); } catch {}
+    };
+    window.addEventListener(NX_CHANGED, onNxChanged);
     const transportPoll = setInterval(() => {
       if (cancelled) return;
       if (usbWS.isOpen()) deactivate();
@@ -1565,6 +1579,7 @@ function ControllerScreen({ onBack, isActive: screenActive, activeMapping, custo
       cancelled = true;
       cancelAnimationFrame(raf1); cancelAnimationFrame(raf2);
       clearInterval(transportPoll);
+      window.removeEventListener(NX_CHANGED, onNxChanged);
       deactivate();
     };
   }, [isActive, nativeFlag, activePad, windowSize, hasSession, outOfTime, stickFeelNonce]);
@@ -2137,7 +2152,10 @@ function ControllerScreen({ onBack, isActive: screenActive, activeMapping, custo
         )}
       </AnimatePresence>
 
-      {!hasSession && !outOfTime && <GuestTrialPill onPlans={() => {
+      {/* Time left (free + ad bank), for everyone on a time limit -- hidden on
+          Lifetime. Draggable anywhere; a tap goes where more time is. Replaced
+          the signed-out-only GuestTrialPill (2026-09-30). */}
+      {!outOfTime && <PlaytimeChip onTap={() => {
         requestDashboardTab("account"); onBack();
       }} />}
     </div>

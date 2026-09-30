@@ -48,6 +48,8 @@ export const KEYS = {
   wiredPref: "gp_wired_pref",
   // Appearance of Home/Connect only; gameplay and editor keep their own palette.
   shellAppearance: "gp_shell_appearance",
+  // Where the player dragged the on-controller time chip (fractions of the screen).
+  timeChipPos: "gp_time_chip_pos",
 
   // Signed-in user, absent while a guest
   account: "gp_account",

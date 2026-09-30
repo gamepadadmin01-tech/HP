@@ -1,9 +1,10 @@
 package com.gamepad.client
 
-// aptoide / uptodown / amazonstore / indusstore / apkpure: deliberately empty.
+// playstore / aptoide / amazonstore / indusstore / apkpure: deliberately empty.
 //
-// These stores mandate their own billing (or, on uptodown, have not confirmed
-// otherwise), so this build must contain no purchase surface at all — not even a
+// Play sells nothing since 2026-09-30 (rewarded ads are the only way to more
+// time there); the other four mandate their own billing or have not confirmed
+// ours. So these builds contain no purchase surface at all — not even a
 // "manage your plan at gamepad.space" link, which is already a policy breach on
 // Amazon. Because WebView's @JavascriptInterface reflection walks the whole class
 // hierarchy of the bound object, a method absent from this chain is genuinely

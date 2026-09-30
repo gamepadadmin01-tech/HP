@@ -9,5 +9,14 @@
         <meta-data
             android:name="com.google.android.gms.ads.APPLICATION_ID"
             android:value="${admobAppId}" />
+
+        <!-- Razorpay checkout host: Uptodown sells Lifetime with the website build's
+             checkout since 2026-09-30 (src/razorpay/java). Same declaration as the
+             direct manifest — see RazorpayActivity.kt for why it exists. -->
+        <activity
+            android:name=".RazorpayActivity"
+            android:exported="false"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar"
+            android:configChanges="orientation|screenSize|keyboardHidden" />
     </application>
 </manifest>

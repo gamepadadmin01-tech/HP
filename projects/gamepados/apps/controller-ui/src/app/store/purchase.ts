@@ -212,7 +212,8 @@ let busy = false;
  * backstop, not as the gate.
  */
 export async function purchase(plan: api.CataloguePlan): Promise<PurchaseOutcome> {
-  if (getAppInfo().channel === "playstore") return failed("Google Play billing will be available soon.");
+  // The Play build sells nothing (2026-09-30) — time comes from rewarded ads.
+  if (getAppInfo().channel === "playstore") return failed("Nothing is sold in this version of the app.");
   if (busy) return failed("A purchase is already in progress.");
   if (!plan.purchasable) return failed("This build cannot sell plans.");
 
@@ -222,23 +223,15 @@ export async function purchase(plan: api.CataloguePlan): Promise<PurchaseOutcome
     const session = getSession();
     if (!session) return failed("Sign in to buy a plan.");
 
-    if (channel === "playstore") {
-      if (!plan.playProductId) return failed("That plan is not available here yet.");
-      installCallback();
-      if (!startPlayPurchase(plan.playProductId, session.user.id)) {
-        return failed("Google Play billing is unavailable on this device.");
-      }
-      const r = await awaitResult();
-      if (r.status === "cancelled") return CANCELLED;
-      if (r.status === "error") return failed(r.message || "The purchase was not completed.");
-      if (r.provider !== "play") return failed("The store answered unexpectedly.");
-      return creditPlay(r);
-    }
+    // (The Play Billing path that stood here was removed on 2026-09-30 along with
+    // the Play Billing library itself; see git history if Play purchases return.)
 
-    if (channel === "direct") return buyWithRazorpay(plan);
+    // Razorpay: the website build, and Uptodown since 2026-09-30 (owner's
+    // decision — its build now carries the same checkout, see build.gradle.kts).
+    if (channel === "direct" || channel === "uptodown") return buyWithRazorpay(plan);
 
-    // amazonstore, aptoide, uptodown, indusstore, apkpure — the store's own
-    // billing is mandatory, so there is nothing to launch and nothing to link.
+    // amazonstore, aptoide, indusstore, apkpure — the store's own billing is
+    // mandatory (or unconfirmed), so there is nothing to launch and nothing to link.
     return failed("Plans cannot be bought in this version of the app.");
   } finally {
     busy = false;

@@ -9,7 +9,6 @@ import { ApiError } from "../api/account";
 import { getSyncState, onSyncChange, syncNow, lastSyncedAt, cancelScheduledSync } from "../store/sync";
 import { autoSyncEnabled, setAutoSyncEnabled } from "../store/prefs";
 import { PlanPanel } from "./PlanPanel";
-import { PlayBillingNotice } from "./PlayBillingNotice";
 import { GuestPlans } from "./GuestPlans";
 import { CalmSwitch } from "./CalmSettings";
 
@@ -82,7 +81,6 @@ export function TabAccount({
           tab is opened to check, and because a limit the user cannot find is
           indistinguishable from a limit that appeared without warning. ── */}
       <PlanPanel />
-      <PlayBillingNotice />
 
       {/* ── The user's own layouts ── */}
       <Section title="Controller Library">
