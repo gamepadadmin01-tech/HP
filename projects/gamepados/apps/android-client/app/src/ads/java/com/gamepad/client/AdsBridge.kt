@@ -30,7 +30,7 @@ import org.json.JSONObject
 //     the server banks the time. This class grants nothing for a signed-in player — a patched app
 //     that claims a reward gets nothing, because only Google's signature counts.
 //   * Signed out: there is no account to credit, so the phone banks it itself (GuestTrial.creditAd),
-//     exactly like the daily 30 free minutes, which are also counted on the phone.
+//     exactly like the one-time 30 free minutes, which are also counted on the phone.
 //
 // ## Consent (Google's User Messaging Platform)
 //
@@ -58,8 +58,8 @@ open class AdsBridge(activity: MainActivity) : UpdaterBridgeBase(activity) {
     @JavascriptInterface
     fun showRewardedAd(userId: String) {
         activity.runOnUiThread {
-            gatherConsent { ok ->
-                if (!ok) { report("consent", "Ads could not be shown without your ad choices."); return@gatherConsent }
+            gatherConsent { problem ->
+                if (problem != null) { report("consent", problem); return@gatherConsent }
                 startSdk()
                 val ready = ad
                 if (ready != null) show(ready, userId)
@@ -88,14 +88,36 @@ open class AdsBridge(activity: MainActivity) : UpdaterBridgeBase(activity) {
         activity.runOnUiThread { UserMessagingPlatform.showPrivacyOptionsForm(activity) { } }
     }
 
-    private fun gatherConsent(done: (Boolean) -> Unit) {
+    /** Answers null when ads may be requested, otherwise the sentence to show the player.
+     *
+     *  Until 2026-10-01 every failure said "Ads could not be shown without your ad choices." — which
+     *  sounds like the player refused something. Outside the EEA/UK nobody is ever asked, so the
+     *  real cause was almost always that Google's consent server could not be reached (Private DNS,
+     *  an ad blocker, a VPN, or no internet) on an install that had no saved answer yet. The message
+     *  now says that, and carries Google's error code so a player's screenshot tells us why. */
+    private fun gatherConsent(done: (String?) -> Unit) {
         val params = ConsentRequestParameters.Builder().build()
         consent.requestConsentInfoUpdate(activity, params, {
-            UserMessagingPlatform.loadAndShowConsentFormIfRequired(activity) { _ -> done(consent.canRequestAds()) }
-        }, { _ ->
-            // No network for the consent check: fall back to what was decided last time.
-            done(consent.canRequestAds())
+            UserMessagingPlatform.loadAndShowConsentFormIfRequired(activity) { formError ->
+                when {
+                    consent.canRequestAds() -> done(null)
+                    formError != null -> done(consentProblem(formError.errorCode))
+                    // The form was shown (EEA/UK) and closed without an answer.
+                    else -> done("Ads need your OK first. Tap Watch an ad again and choose an option on Google's form.")
+                }
+            }
+        }, { error ->
+            // The consent check failed. An answer saved on an earlier launch still counts.
+            done(if (consent.canRequestAds()) null else consentProblem(error.errorCode))
         })
+    }
+
+    /** UMP FormError codes: 1 internal, 2 internet, 3 invalid operation (setup), 4 timeout. */
+    private fun consentProblem(code: Int): String = when (code) {
+        2, 4 -> "Couldn't reach Google to check ad settings. Check your internet, or turn off " +
+            "Private DNS, VPN or ad blockers, then try again. (Error $code)"
+        else -> "Couldn't check ad settings with Google right now. Turn off Private DNS, VPN or " +
+            "ad blockers and try again in a minute. (Error $code)"
     }
 
     private fun startSdk() {
