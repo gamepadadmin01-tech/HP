@@ -1,4 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
-<inset xmlns:android="http://schemas.android.com/apk/res/android"
-    android:drawable="@drawable/app_icon"
-    android:inset="16%" />
+<!-- Launcher icon foreground (2026-10-01): the brand "G" from CalmBrand, near-black on the
+     orange @color/icon_bg. 108dp canvas; the launcher shows the middle 72dp through its mask,
+     so the glyph (36dp) sits well inside the 66dp safe circle on every icon shape.
+     Same mark as marketing/brand/new-logo/gamepados-mark-dark.svg. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group
+        android:translateX="27"
+        android:translateY="27"
+        android:scaleX="2.25"
+        android:scaleY="2.25">
+        <path android:fillColor="#09090B" android:pathData="M4,4h7v4H8v8h8v-3h-4V9h8v11H4V4Z" />
+        <path android:fillColor="#09090B" android:pathData="M15,4h5v3h-5z" />
+    </group>
+</vector>

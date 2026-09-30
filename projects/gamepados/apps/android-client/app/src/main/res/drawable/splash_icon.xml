@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Launch splash icon (2026-10-01): the full orange mark, drawn whole because the splash has
+     no icon background of its own. 288dp canvas, of which the splash shows a 192dp circle: the
+     128dp rounded square (diagonal 181dp) fits inside it. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="288dp"
+    android:height="288dp"
+    android:viewportWidth="288"
+    android:viewportHeight="288">
+    <path
+        android:fillColor="#FF5500"
+        android:pathData="M112,80h64a32,32 0,0 1,32 32v64a32,32 0,0 1,-32 32h-64a32,32 0,0 1,-32 -32v-64a32,32 0,0 1,32 -32z" />
+    <group
+        android:translateX="101.76"
+        android:translateY="101.76"
+        android:scaleX="3.52"
+        android:scaleY="3.52">
+        <path android:fillColor="#09090B" android:pathData="M4,4h7v4H8v8h8v-3h-4V9h8v11H4V4Z" />
+        <path android:fillColor="#09090B" android:pathData="M15,4h5v3h-5z" />
+    </group>
+</vector>

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="icon_bg">#0C0C0C</color>
+    <!-- Launch splash background. Matches the JS splash overlay (App.tsx #070910)
+         exactly so the native SplashScreen dissolves seamlessly into the React
+         splash with no color jump and no black flash on cold start. -->
+    <color name="splash_bg">#070910</color>
+</resources>

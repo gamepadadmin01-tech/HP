@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Android 12+ SplashScreen (backported to API 24 via androidx core-splashscreen).
+         Paints the brand background + app logo INSTANTLY at process launch, covering
+         the WebView cold-start so the user never sees the old black window. The
+         activity keeps this splash on screen (MainActivity.setKeepOnScreenCondition)
+         until the React UI has painted, then cross-fades out into the identical JS
+         splash — one continuous, butter-smooth opening animation. -->
+    <style name="Theme.App.Splash" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/splash_bg</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground</item>
+        <!-- After the splash, swap to the app's real (no action bar) theme. -->
+        <item name="postSplashScreenTheme">@style/Theme.AppCompat.NoActionBar</item>
+    </style>
+</resources>
