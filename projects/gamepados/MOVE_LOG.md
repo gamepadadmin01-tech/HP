@@ -152,3 +152,13 @@ Moves only, nothing deleted. releases/ was reorganised separately: see releases/
 - `projects/gamepados/tools/rustup-init.exe` -> `installers/rustup-init.exe` (1 file(s))
 - `projects/gamepados/tools/vs_BuildTools.exe` -> `installers/vs_BuildTools.exe` (1 file(s))
 - `projects/gamepados/apps/android-client.zip` -> `context/archive/dead-code-2026-09-30/apps/android-client-snapshot-2026-08-20.zip` (1 file(s))
+
+## 2026-09-30 — releases split, and caches deleted (owner request)
+
+- releases/ split into `releases/mobile/<version>/` and `releases/pc/<version>/` (was `app-<v>` /
+  `pc-<v>`), one CHANGELOG.txt per product. Every move is in releases/_MOVE_LOG_2026-09-30.json.
+- DELETED on the owner's explicit instruction ("delete the rust cache and reel renders"), ~11 GB:
+  `apps/pc-server-rs/target` (Rust build cache — rebuilt by the next `cargo build`, which will be
+  slow once), `marketing/instagram/reel-mg/renders` and `marketing/instagram/reel-web/renders`
+  (PNG frame sequences + render logs; no videos — the finished reels in instagram/*.mp4 are kept,
+  and the render scripts regenerate the frames). None of it was in git.

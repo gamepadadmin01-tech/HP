@@ -16,9 +16,10 @@ gamepados/
 ├── website/                 gamepad.space — its OWN git repo (frontend on Vercel, backend on Railway).
 │   └── backend/downloads/   Files the website serves to users. Do not move.
 │
-├── releases/                One folder per version: app-<ver>/ and pc-<ver>/, each with
-│                            actual/ (released), test/ (test builds) and CHANGES.txt.
-│                            CHANGELOG.txt = every version on one page. See releases/README.md.
+├── releases/                mobile/ and pc/ kept separate; inside each, one folder per version
+│                            (mobile/1.4.6/, pc/2.1.3/) with actual/ (released), test/ (test
+│                            builds) and CHANGES.txt, plus a CHANGELOG.txt per product.
+│                            See releases/README.md.
 │
 ├── docs/
 │   ├── handoffs/            The project diary — newest file = latest state. Start here.
