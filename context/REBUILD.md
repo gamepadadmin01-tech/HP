@@ -94,7 +94,8 @@ cargo build --release
 automatically on the first build. The first build is slow (it recompiles every crate); subsequent
 ones are fast.
 
-If `cargo` is missing on a new machine, `tools\rustup-init.exe` is present.
+If `cargo` is missing on a new machine, `D:\AKHIL\HP\installers\rustup-init.exe` is present
+(moved there from `projects\gamepados\tools\` on 2026-09-30, next to `vs_BuildTools.exe`).
 
 ---
 
