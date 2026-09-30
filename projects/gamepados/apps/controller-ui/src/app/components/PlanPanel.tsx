@@ -3,7 +3,7 @@
 // What plan you are on, how much of today is left, and how to change it.
 //
 // The copy leads with the free hour as a TRIAL rather than as a restriction —
-// "1 hour free, every day" is the offer; "you have 42m left" is the status. A
+// "30 free minutes to start" is the offer; "you have 42m left" is the status. A
 // panel that opens with what the user cannot do reads as a paywall even to
 // someone who was never going to hit the limit.
 //
@@ -138,9 +138,19 @@ export function PlanPanel() {
   // Ad time (1.4.6): banked, never expires, spent once the free time is gone.
   // "Out of time" means BOTH are gone; free time gone with a bank left is just
   // playing from the bank.
+  //
+  // Since 2026-09-30 FREE has no daily time at all (limitSeconds 0): the bank --
+  // the one-time 30 minutes plus ads -- is everything. The server's
+  // remainingSeconds already includes it; take off whatever this phone has
+  // counted that the server has not heard about yet.
+  const noDaily = limitSeconds === 0;
   const bankSeconds = ent.unlimited ? 0 : ent.adTime?.bankSeconds ?? 0;
-  const freeGone = remainingSeconds !== null && remainingSeconds <= 0;
-  const exhausted = freeGone && bankSeconds <= 0;
+  const serverLeft = ent.today.remainingSeconds;
+  const totalLeft = typeof serverLeft === "number"
+    ? Math.max(0, serverLeft - Math.max(0, deviceUsed - serverUsed))
+    : (remainingSeconds ?? 0) + bankSeconds;
+  const freeGone = !noDaily && remainingSeconds !== null && remainingSeconds <= 0;
+  const exhausted = totalLeft <= 0;
 
   // A granted entitlement borrows a plan's POLICY, not its identity. The launch
   // bonus is 24h of unlimited built on the 3-Day Pass policy, and calling it
@@ -194,8 +204,8 @@ export function PlanPanel() {
                   ? (ent.endsAt
                       ? `${isGift ? "Gift · unlimited until" : "Unlimited until"} ${formatDate(ent.endsAt)}`
                       : "Unlimited playtime")
-                  : ent.plan === "FREE"
-                    ? "1 hour free, every day"
+                  : noDaily
+                    ? "30 free minutes to start, then 30 more per ad"
                     : `${formatDuration(ent.today.limitSeconds || 0)} a day`}
               </p>
             </div>
@@ -210,20 +220,23 @@ export function PlanPanel() {
           {!ent.unlimited && ent.today.limitSeconds !== null && (
             <div className="p-4">
               <div className="flex items-baseline justify-between mb-2">
-                <span className="text-xs font-semibold" style={{ color: MUTED }}>Today</span>
+                <span className="text-xs font-semibold" style={{ color: MUTED }}>{noDaily ? "Play time" : "Today"}</span>
                 <span className="text-sm font-bold tabular-nums"
                   style={{ fontFamily: "system-ui, sans-serif", color: exhausted ? DANGER : "var(--calm-ink, #f0f2ed)" }}>
-                  {formatDuration((remainingSeconds ?? 0) + bankSeconds)} left
+                  {formatDuration(totalLeft)} left
                 </span>
               </div>
-              <Meter
+              {/* A bar needs a daily limit to be a fraction of; the bank has none. */}
+              {!noDaily && <Meter
                 used={usedSeconds}
                 limit={limitSeconds}
                 exhausted={exhausted}
-              />
+              />}
               <p className="text-xs mt-2" style={{ color: exhausted ? DANGER : MUTED }}>
                 {exhausted
-                  ? "You're out of time — watch an ad for 30 more minutes, upgrade, or wait for your next quota."
+                  ? "You're out of play time — watch an ad for 30 more minutes."
+                  : noDaily
+                    ? "Your time never expires. Ads add 30 minutes while under an hour is left."
                   : freeGone
                     ? `Today's free time is used — playing from your ad time. ${formatResetsAt(ent.resetsAt)}`
                     : formatResetsAt(ent.resetsAt)}
@@ -313,7 +326,7 @@ function PlansDisclosure({ title, offers }: { title: string; offers: CataloguePl
             {offers.map((p) => <PlanCard key={p.code} plan={p} />)}
             <p className="text-xs leading-relaxed px-1" style={{ color: MUTED }}>
               Prices include GST. Access starts immediately, so purchases are final
-              and non-refundable — try the free hour a day first.
+              and non-refundable — try your free 30 minutes first.
             </p>
           </div>
         </Collapse>

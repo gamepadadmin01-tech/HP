@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Privacy policy — GamepadOS</title>
+  <meta name="description" content="GamepadOS privacy policy: controller input stays on your network, accounts are optional, the apps show no ads, and exactly what we store when you sign in, buy a plan or visit this website.">
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <link rel="canonical" href="https://www.gamepad.space/privacy">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body class="page-privacy">
+
+  <nav class="nav">
+    <div class="nav-inner">
+      <a class="logo" href="/"><span class="logo-mark"></span>GamepadOS</a>
+      <button class="nav-burger" aria-label="Menu"><span></span></button>
+      <div class="nav-links">
+        <a href="/#features">Features</a>
+        <a href="/#how">Setup</a>
+        <a href="/support">Support</a>
+        <a href="/contact">Contact</a>
+      <a href="/#download">Download</a>
+      <a class="btn btn-dark btn-sm nav-cta" href="/account" data-nav-auth>Sign in</a>
+      </div>
+    </div>
+  </nav>
+
+  <main>
+    <section class="page-hero">
+      <div class="container">
+        <span class="eyebrow">Legal</span>
+        <h1 class="mt-2">Privacy policy</h1>
+        <p class="lead">The short version: your input stays on your network, and we only know what you choose to tell us.</p>
+        <p class="meta mt-2">Last updated: September 28, 2026</p>
+      </div>
+    </section>
+
+    <section class="section-tight">
+      <div class="container">
+        <article class="prose">
+          <div class="callout">
+            <p><strong>Our promise:</strong> Controller input never leaves your own network. The GamepadOS apps show no ads and contain no analytics or advertising SDKs, and we never sell your data. An account is optional — you can play without one — and if you create one, we store only what this page lists. This website shows Google ads on its home and support pages; see <a href="#ads">Advertising on this website</a>.</p>
+          </div>
+
+          <h2>The product</h2>
+          <p>GamepadOS is two pieces of software: an Android app that turns your phone into a game controller, and a Windows server that receives its input and presents it to games as a standard Xbox 360 controller. Both work entirely on your local network — they need no internet connection to function.</p>
+
+          <h2 id="data">What stays on your device</h2>
+          <ul>
+            <li><strong>Controller input</strong> (sticks, buttons, gyro) travels directly from your phone to your PC over your local network (Wi-Fi/UDP) or over the USB cable in wired mode. It is never uploaded anywhere.</li>
+            <li><strong>Layouts and settings</strong> are stored locally on your phone. If you sign in and leave backup on, your layouts are also copied to your account — see <a href="#accounts">Accounts</a>.</li>
+            <li><strong>The pairing key</strong> is stored locally on your PC and phone so you don't have to re-scan the QR every time.</li>
+          </ul>
+          <p>The apps show no advertising and contain no analytics or advertising SDKs. Signing in is optional and changes nothing about how controller input travels. Without an account, your free daily play time is counted on your phone only.</p>
+
+          <h2 id="accounts">Accounts (optional)</h2>
+          <p>You can use GamepadOS without an account: every controller feature — touch layouts, gyro steering, the custom editor, wired and wireless play — works signed out, within the free daily play time. An account lets the layouts you build survive losing, wiping or replacing your phone, and is needed to buy or use a plan.</p>
+          <p>If you choose to create one, we store:</p>
+          <ul>
+            <li><strong>Your email address</strong> — to identify the account, confirm it with a 6-digit code, and let you reset your password.</li>
+            <li><strong>Your password, hashed</strong> — stored as a scrypt hash with a per-password random salt. We cannot read it, and it is never stored or logged in plain text.</li>
+            <li><strong>A display name</strong> — whatever you choose to type; it does not need to be your real name.</li>
+            <li><strong>A session token</strong> — a random value held on your phone so you stay signed in. Signing out deletes it; changing your password invalidates every one.</li>
+            <li><strong>Your controller layouts</strong>, if backup is on — the widget positions, labels, colours and names you created. Nothing about your gameplay, and no controller input, is ever included.</li>
+            <li><strong>Play time</strong> — when you play signed in, the app tells our server when a play session starts, keeps running and ends, so your daily allowance and plan work across devices. We store session start and end times, seconds played per day, your time zone (so your day resets at your midnight) and a random ID the app creates to tell your devices apart. We never record which games you play or any controller input.</li>
+            <li><strong>Your plan</strong> — which plan you have, when it starts and ends, and how you got it (a purchase, a promo code, or a grant from us). Payment records are described under <a href="#payments">Plans and payments</a>.</li>
+          </ul>
+          <p>Backup can be switched off at any time in <strong>Account → Backup</strong>, and you can run it manually instead. We do not sell or share this data, use it for advertising, or send you marketing email — account email is limited to confirmation and password-reset codes.</p>
+          <p><strong>Deleting your account:</strong> in the app, go to <strong>Account → Danger zone → Delete account</strong> and confirm with your password. The account, its sessions, every layout backed up to it, and its plan, payment and play-time records are erased immediately and permanently — we keep no copy. Layouts already saved on your phone stay on your phone, and the app carries on working without an account. If you can no longer sign in, email <a href="mailto:support@gamepad.space">support@gamepad.space</a> from the address you signed up with and we will do it for you.</p>
+
+          <h2 id="payments">Plans and payments</h2>
+          <p>Plans are optional. Payments are handled by payment providers — we never see or store your full card number, CVV, UPI PIN or bank password.</p>
+          <ul>
+            <li><strong>On this website and in the website version of the app</strong>, payments go through <strong>Razorpay</strong>. Razorpay sends us a record of each payment, which we keep: the amount, currency and status, the payment method used (for example card, UPI or wallet, and the UPI ID if you paid by UPI), and the email address and phone number entered at checkout. The Razorpay checkout may collect information about your device for payment security, under <a href="https://razorpay.com/privacy/" target="_blank" rel="noopener">Razorpay's privacy policy</a>.</li>
+            <li><strong>In the Google Play version</strong>, purchases go through <strong>Google Play</strong> when they are available. Google handles the payment; we receive and keep the purchase token, product and order ID so we can unlock your plan.</li>
+          </ul>
+          <p>We use payment records only to give you your plan, to handle refunds and support requests, and to prevent fraud. See also our <a href="/refunds">refund policy</a>.</p>
+
+          <h2 id="age">Who can use GamepadOS</h2>
+          <p><strong>Anyone.</strong> GamepadOS is a controller for your PC with no content of its own, and the apps show no ads. Every controller feature works without signing in, and used that way we collect nothing about you: no email, no name, nothing. Buying a plan needs an account and a payment method.</p>
+          <p>An account is optional and exists only to back up your layouts. If you or a family member want an account and its data removed, do it in the app under <strong>Account → Danger zone</strong>, or email <a href="mailto:support@gamepad.space">support@gamepad.space</a> and we will remove it for you.</p>
+
+          <h2 id="website">What the website sees</h2>
+          <p>Our hosting providers keep standard web server logs (IP address, requested page, timestamp), as virtually all hosting does. We run no analytics scripts of our own.</p>
+          <ul>
+            <li><strong>Ads</strong> — the home and support pages show Google ads, which use cookies. See <a href="#ads">Advertising on this website</a>.</li>
+            <li><strong>Fonts</strong> — pages load their fonts from Google Fonts, so your browser contacts Google's servers.</li>
+            <li><strong>Signing in</strong> — if you sign in on the account page, your browser stores a session token so you stay signed in. The app can also sign you in to the website with a one-time code that expires after one minute.</li>
+            <li><strong>Download counts</strong> — to count unique downloads, we store a one-way hash of your IP address for that day, never the address itself.</li>
+          </ul>
+
+          <h2>Support tickets</h2>
+          <p>If you contact us, we store what you submit — your name, email address, subject and message — so we can answer you. That data is used only to handle your request. Ask us to delete it at any time and we will. In-app feedback and star ratings arrive the same way, and include your app version, phone model and Android version so we can reproduce problems, plus a random ID created on your phone so ratings from different people are not mixed up.</p>
+
+          <h2>Downloads</h2>
+          <p>The Android APK and the Windows server are served from our backend; downloads may appear in ordinary server logs. The PC server installs the ViGEmBus driver locally on your machine. Neither app updates itself silently or sends us any personal data. Both do a lightweight <strong>update check</strong>: on launch (and when you tap "Check for updates") they fetch a small version file from our backend and compare it to your installed version — if a newer one exists, you're shown a Download button. That request reaches our backend like any web request (and may appear in ordinary server logs), but carries no account, device, or usage information, and nothing is installed without your action.</p>
+
+          <h2>Where your data lives</h2>
+          <p>Accounts, backed-up layouts, plans, payment records, play time and support tickets are stored in our Postgres database (hosted on Supabase, in the AWS Asia Pacific — Mumbai region). Our backend runs on Railway, the website on Vercel, and transactional email goes through Brevo. Payments are processed by Razorpay and Google Play, and ads on this website are served by Google AdSense. Layouts shared by code are stored without any link to an account.</p>
+
+          <h2 id="ads">Advertising on this website</h2>
+          <p>The home and support pages of gamepad.space show ads from <strong>Google AdSense</strong>. The account, payment, refund and contact pages and this policy show no ads.</p>
+          <ul>
+            <li>Third-party vendors, including Google, use cookies to serve ads based on your prior visits to this website or other websites.</li>
+            <li>Google's use of advertising cookies enables it and its partners to serve ads to you based on your visits to this site and/or other sites on the internet.</li>
+            <li>You can opt out of personalised advertising in Google's <a href="https://adssettings.google.com" target="_blank" rel="noopener">Ads Settings</a>, or opt out of some third-party vendors' use of cookies for personalised advertising at <a href="https://www.aboutads.info/choices/" target="_blank" rel="noopener">aboutads.info</a>.</li>
+            <li>Visitors in the European Economic Area, the UK and Switzerland are asked for their consent before personalised ads are shown.</li>
+          </ul>
+          <p>Learn more about <a href="https://policies.google.com/technologies/partner-sites" target="_blank" rel="noopener">how Google uses information from sites that use its services</a>.</p>
+
+          <h2>No selling, no profiling</h2>
+          <p>The GamepadOS apps show no advertising and contain no analytics or advertising SDKs. We never sell your data, and we do not profile you or build audience segments. Account, play-time and payment data is used only to run your account and your plan, and whatever you send us through the contact form is used only to answer you.</p>
+
+          <h2>Changes</h2>
+          <p>If this policy changes, we'll update this page and the date at the top. Significant changes will also be noted on the homepage.</p>
+
+          <h2>Contact</h2>
+          <p>Privacy questions? Use the <a href="/contact">contact form</a> (pick "Business inquiry" or "Something else") or email <a href="mailto:support@gamepad.space">support@gamepad.space</a>.</p>
+
+          <h2 id="attributions">Attributions</h2>
+          <p>GamepadOS stands on excellent open-source work:</p>
+          <ul>
+            <li><strong>ViGEmBus</strong> virtual gamepad driver — Nefarius Software Solutions (BSD-3-Clause)</li>
+            <li><strong>GSAP</strong> animation platform — Webflow</li>
+            <li><strong>Vite</strong> build tooling</li>
+            <li><strong>Inter</strong> and <strong>Inter Tight</strong> typefaces — Google Fonts</li>
+            <li><strong>Express, Prisma</strong> and the wider open-source Node.js ecosystem powering the support backend</li>
+          </ul>
+        </article>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-inner">
+      <div class="footer-top">
+        <div>
+          <a class="logo" href="/"><span class="logo-mark"></span>GamepadOS</a>
+          <p class="footer-tag">Your phone is the controller. Free, no account needed, your input never leaves your network.</p>
+        </div>
+        <div class="footer-cols">
+          <div class="footer-col">
+            <h4>Product</h4>
+            <a href="/#features">Features</a>
+            <a href="/#how">Setup</a>
+            <a href="/#download">Download</a>
+          </div>
+          <div class="footer-col">
+            <h4>Help</h4>
+            <a href="/support">Support center</a>
+            <a href="/support#troubleshooting">Troubleshooting</a>
+            <a href="/support#faq">FAQ</a>
+            <a href="/contact">Contact us</a>
+          </div>
+          <div class="footer-col">
+            <h4>Legal</h4>
+            <a href="/privacy">Privacy policy</a>
+            <a href="/privacy#data">Local data policy</a>
+            <a href="/privacy#attributions">Attributions</a>
+          </div>
+          <div class="footer-col">
+            <h4>Follow</h4>
+            <a href="https://www.instagram.com/gamepados_official/" target="_blank" rel="noopener">Instagram</a>
+          </div>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <span>© 2026 GamepadOS. All rights reserved.</span>
+        <span>Windows 10/11 · Android 9+ · Free</span>
+      </div>
+    </div>
+  </footer>
+
+  <div class="dlbar">
+    <div class="dlbar-inner">
+      <span class="dlbar-label"><span class="dot"></span>GamepadOS <span class="dim">— free on Android &amp; Windows</span></span>
+      <div class="dlbar-btns">
+        <a class="btn btn-dark btn-sm" data-dl="android" href="https://supportportal.gamepad.space/api/download/app">Android APK</a>
+        <a class="btn btn-ghost btn-sm" data-dl="windows" href="https://supportportal.gamepad.space/api/download/pc">PC Server</a>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="/js/main.js"></script>
+<script type="module" src="/js/nav-auth.js"></script>
+</body>
+</html>

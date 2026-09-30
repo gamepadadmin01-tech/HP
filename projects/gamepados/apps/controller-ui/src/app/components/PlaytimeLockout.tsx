@@ -13,7 +13,6 @@
 import React from "react";
 import { motion } from "framer-motion";
 import { Clock } from "lucide-react";
-import { formatResetsAt } from "../store/billing";
 import { requestDashboardTab } from "../store/navIntent";
 import { beginPlay, clearBlock } from "../store/playtime";
 import { AdRewardButton } from "./AdRewardButton";
@@ -24,15 +23,14 @@ const ACCENT = "#5D90CB";
 
 export function PlaytimeLockout({
   message,
-  resetsAt,
   onBack,
 }: {
   message: string;
-  resetsAt: string | null;
+  /** Unused since 2026-09-30: free time no longer renews, so there is no
+   *  "back at midnight" to show. Kept so the caller's props still fit. */
+  resetsAt?: string | null;
   onBack: () => void;
 }) {
-  const resets = resetsAt ? formatResetsAt(resetsAt) : "";
-
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -52,16 +50,12 @@ export function PlaytimeLockout({
 
       <h2 className="text-lg font-bold text-white text-center"
         style={{ fontFamily: "'Space Grotesk',sans-serif" }}>
-        That&rsquo;s your time for today
+        You&rsquo;re out of play time
       </h2>
 
       <p className="text-sm text-center mt-2 max-w-xs leading-relaxed" style={{ color: MUTED }}>
-        {message || "You're out of time — upgrade to play more, or wait for your next quota."}
+        {message || "You're out of play time. Watch an ad for 30 more minutes."}
       </p>
-
-      {resets && (
-        <p className="text-xs mt-3" style={{ color: ACCENT }}>{resets}</p>
-      )}
 
       {/* The quickest way back in: 30 minutes for an ad, then play resumes
           without leaving this screen. Absent where ads are (see AdRewardButton). */}

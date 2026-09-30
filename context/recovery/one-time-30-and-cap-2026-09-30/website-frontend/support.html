@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Support — GamepadOS</title>
+  <meta name="description" content="Set up GamepadOS in three steps, fix connection problems, and get answers — setup guide, troubleshooting and FAQ.">
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <link rel="canonical" href="https://www.gamepad.space/support">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/style.css">
+  <style>
+    body.page-support .setup-list { max-width: 800px; display: flex; flex-direction: column; gap: 20px; }
+    body.page-support .setup-list .card { display: flex; gap: 22px; align-items: flex-start; }
+    body.page-support .setup-list .step-num { margin-bottom: 0; flex: none; margin-top: 4px; }
+    body.page-support .setup-body h3 { margin-bottom: 10px; }
+    body.page-support .setup-body p { margin-bottom: 8px; }
+    body.page-support .setup-body .callout { margin: 16px 0 0; }
+    body.page-support .setup-body a[data-dl], body.page-support .setup-body a.inline-link { color: var(--orange); font-weight: 600; }
+    @media (max-width: 560px) { body.page-support .setup-list .card { flex-direction: column; gap: 14px; } }
+    body.page-support .ts-card h3 { font-size: 17.5px; }
+    body.page-support .ts-card p a { color: var(--orange); font-weight: 600; }
+    body.page-support .store-card { display: flex; flex-direction: column; }
+    body.page-support .store-card h3 { font-size: 17px; margin-bottom: 8px; }
+    body.page-support .store-card p { font-size: 14.5px; margin-bottom: 14px; }
+    body.page-support .store-card .link-more { margin-top: auto; }
+  </style>
+  <!-- Google AdSense. Home and support pages ONLY — never account, payment,
+       refunds, contact or privacy. Disclosed in /privacy#ads. -->
+  <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-5878015482565093"
+     crossorigin="anonymous"></script>
+</head>
+<body class="page-support">
+
+  <nav class="nav">
+    <div class="nav-inner">
+      <a class="logo" href="/"><span class="logo-mark"></span>GamepadOS</a>
+      <button class="nav-burger" aria-label="Menu"><span></span></button>
+      <div class="nav-links">
+        <a href="/#features">Features</a>
+        <a href="/#how">Setup</a>
+        <a href="/support" class="active">Support</a>
+        <a href="/contact">Contact</a>
+      <a href="/#download">Download</a>
+      <a class="btn btn-dark btn-sm nav-cta" href="/account" data-nav-auth>Sign in</a>
+      </div>
+    </div>
+  </nav>
+
+  <main>
+    <!-- ════ PAGE HERO ════ -->
+    <section class="page-hero">
+      <div class="container">
+        <span class="eyebrow">Support</span>
+        <h1 class="mt-2">How can we help<span class="o">?</span></h1>
+        <p class="lead">Most problems are solved in under a minute. Start with the guide that fits.</p>
+        <div class="btn-row mt-4">
+          <a class="pill" href="#setup"><span class="dot"></span>Setup guide</a>
+          <a class="pill" href="#troubleshooting"><span class="dot"></span>Troubleshooting</a>
+          <a class="pill" href="#faq"><span class="dot"></span>FAQ</a>
+          <a class="pill" href="#stores"><span class="dot"></span>Official stores</a>
+        </div>
+      </div>
+    </section>
+
+    <!-- ════ SETUP GUIDE ════ -->
+    <section class="section" id="setup">
+      <div class="container">
+        <div class="section-head" data-reveal>
+          <span class="eyebrow">Getting started</span>
+          <h2>Set up in three steps</h2>
+        </div>
+        <div class="setup-list" data-reveal-group>
+          <div class="card" data-liquid data-reveal>
+            <span class="step-num">1</span>
+            <div class="setup-body">
+              <h3>Install the PC server</h3>
+              <p><a data-dl="windows" href="https://supportportal.gamepad.space/api/download/pc">Download the Gamepad Server installer</a> and run it. It installs the <strong>ViGEmBus</strong> virtual-gamepad driver (so games see a real Xbox 360 controller) and the Windows Firewall rule for you — one permission prompt during setup, then it starts silently every time with nothing left to configure.</p>
+              <div class="callout"><p>Windows SmartScreen may warn because the app is unsigned. Choose <strong>More info → Run anyway</strong>. Some antivirus tools flag new unsigned apps — allow it or add an exclusion.</p></div>
+            </div>
+          </div>
+          <div class="card" data-liquid data-reveal>
+            <span class="step-num">2</span>
+            <div class="setup-body">
+              <h3>Install the app and pair</h3>
+              <p><a data-dl="android" href="https://supportportal.gamepad.space/api/download/app">Install the Android APK</a>, open it, tap <strong>Scan</strong> and point the camera at the QR code in the server window. Both devices must be on the <strong>same Wi-Fi network</strong> — pairing is instant and remembered for next time.</p>
+              <div class="callout"><p>Prefer a cable? Enable <strong>Developer options → USB debugging</strong> on the phone, plug it in and accept the prompt. The server handles the USB connection automatically — no Wi-Fi needed.</p></div>
+            </div>
+          </div>
+          <div class="card" data-liquid data-reveal>
+            <span class="step-num">3</span>
+            <div class="setup-body">
+              <h3>Pick a layout and play</h3>
+              <p>Choose a preset — racing, shooter or emulator — or build your own in the layout editor: drag, resize and place every control. Turn on gyro steering per layout if your game wants it. Rumble comes back from the game automatically.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <hr class="divider">
+
+    <!-- ════ TROUBLESHOOTING ════ -->
+    <section class="section" id="troubleshooting">
+      <div class="container">
+        <div class="section-head" data-reveal>
+          <span class="eyebrow">Troubleshooting</span>
+          <h2>When it doesn't connect</h2>
+          <p class="lead">Almost every connection problem is one of these six. Work top to bottom.</p>
+        </div>
+        <div class="grid-2" data-reveal-group>
+          <div class="card ts-card" data-liquid data-reveal>
+            <h3>Phone can't reach the PC</h3>
+            <p>Make sure both devices are on the <strong>same Wi-Fi network</strong>. Guest and hotel networks often block device-to-device traffic (client isolation) — and phone hotspots usually block it too. A normal home router works.</p>
+          </div>
+          <div class="card ts-card" data-liquid data-reveal>
+            <h3>Using a VPN?</h3>
+            <p>VPNs (Surfshark, NordVPN and friends) reroute or block local traffic. Fully <strong>quit the VPN app on the PC</strong> — not just disconnect — then restart the server and scan the fresh QR.</p>
+          </div>
+          <div class="card ts-card" data-liquid data-reveal>
+            <h3>Firewall blocked it</h3>
+            <p>The installer adds a Windows Firewall rule that allows Gamepad Server on any network, so this is handled for you. If you used the standalone .exe instead and declined the prompt, just run the installer — or allow inbound <strong>UDP 7777–7786</strong> for GamepadServer manually.</p>
+          </div>
+          <div class="card ts-card" data-liquid data-reveal>
+            <h3>QR scans but nothing happens</h3>
+            <p>The QR encodes your PC's network address. If the PC switched networks, <strong>restart the server</strong> to get a fresh QR. Also check Windows isn't treating your network as "Public" with device isolation turned on.</p>
+          </div>
+          <div class="card ts-card" data-liquid data-reveal>
+            <h3>Driver didn't install</h3>
+            <p>ViGEmBus needs that one-time Windows permission. Re-run the server and accept it, or install the driver manually from the official <a href="https://github.com/nefarius/ViGEmBus/releases" target="_blank" rel="noopener">ViGEmBus releases page</a>, then start the server again.</p>
+          </div>
+          <div class="card ts-card" data-liquid data-reveal>
+            <h3>"Smart App Control blocked an app that may be unsafe"</h3>
+            <p>This is Windows 11 refusing to run the server because we haven't bought a code-signing certificate yet — not a virus warning, and nothing is wrong with your PC. Smart App Control only trusts software from publishers who pay for a certificate, and we're a one-person project that can't justify that cost yet. It's on our list.</p>
+            <p>Most people never see this: Smart App Control is only switched on by default on <em>fresh</em> Windows 11 installations. If you do see it, the honest options are to wait until we're signed, or to turn Smart App Control off in <strong>Windows Security → App &amp; browser control → Smart App Control</strong>. <strong>Be aware that turning it off is permanent</strong> — Windows can only switch it back on by resetting the PC, so please don't do it on our account unless you're comfortable with that trade.</p>
+          </div>
+          <div class="card ts-card" data-liquid data-reveal>
+            <h3>Game doesn't see the controller</h3>
+            <p>The pad shows up as an Xbox 360 controller. Verify Windows sees it: press <span class="kbd">Win</span>+<span class="kbd">R</span>, run <code>joy.cpl</code>. On Steam, enable Xbox controller support under Settings → Controller.</p>
+          </div>
+        </div>
+        <div class="callout mt-4" data-reveal>
+          <p>Still stuck? Send us a ticket — we read every one. <a class="link-more" href="/contact" style="margin-left:6px;">Contact support</a></p>
+        </div>
+      </div>
+    </section>
+
+    <hr class="divider">
+
+    <!-- ════ FAQ ════ -->
+    <section class="section" id="faq">
+      <div class="container">
+        <div class="section-head" data-reveal>
+          <span class="eyebrow">FAQ</span>
+          <h2>Frequently asked</h2>
+        </div>
+        <div class="faq" data-reveal>
+          <div class="faq-item">
+            <button class="faq-q" aria-expanded="false">How much does it cost?<span class="faq-x">+</span></button>
+            <div class="faq-a"><div class="faq-a-inner">Both the Android app and the PC server are free to download, and you get free play time every day — no account needed. If you want to play longer, optional plans are available from your <a href="/account">account page</a>. Creating an account is free; it backs up your custom layouts and is needed to buy or use a plan. The apps show no ads.</div></div>
+          </div>
+          <div class="faq-item">
+            <button class="faq-q" aria-expanded="false">What platforms are supported?<span class="faq-x">+</span></button>
+            <div class="faq-a"><div class="faq-a-inner">Android 9+ on the phone side and Windows 10/11 on the PC side. iOS, macOS and Linux aren't supported yet.</div></div>
+          </div>
+          <div class="faq-item">
+            <button class="faq-q" aria-expanded="false">What latency should I expect?<span class="faq-x">+</span></button>
+            <div class="faq-a"><div class="faq-a-inner">As low as 2.5 ms over a USB cable — below what most people can perceive. Over a good 5 GHz Wi-Fi network it's a little higher (low double-digit milliseconds) but still very responsive. A busy 2.4 GHz network adds lag; switch bands or use USB if input feels mushy.</div></div>
+          </div>
+          <div class="faq-item">
+            <button class="faq-q" aria-expanded="false">Can I connect more than one phone?<span class="faq-x">+</span></button>
+            <div class="faq-a"><div class="faq-a-inner">One phone per server today. Multi-controller support is on the roadmap — <a href="/contact">tell us</a> if you need it; it helps us prioritize.</div></div>
+          </div>
+          <div class="faq-item">
+            <button class="faq-q" aria-expanded="false">Is my input private?<span class="faq-x">+</span></button>
+            <div class="faq-a"><div class="faq-a-inner">Yes. Controller input travels directly from your phone to your PC over your own network — it is never uploaded, and there are no analytics in the apps. Signing in is optional and changes none of that; an account only stores your email and the custom layouts you choose to back up. Details in the <a href="/privacy">privacy policy</a>.</div></div>
+          </div>
+          <div class="faq-item">
+            <button class="faq-q" aria-expanded="false">Which games work with gyro steering?<span class="faq-x">+</span></button>
+            <div class="faq-a"><div class="faq-a-inner">Any game with analog stick steering — the gyro maps to a stick axis. It shines in racing games; tune sensitivity in the layout editor.</div></div>
+          </div>
+          <div class="faq-item">
+            <button class="faq-q" aria-expanded="false">How do updates work?<span class="faq-x">+</span></button>
+            <div class="faq-a"><div class="faq-a-inner">Download the newest installer and APK from the <a href="/#download">download section</a> and install over the old ones. Your layouts and pairing survive updates.</div></div>
+          </div>
+          <div class="faq-item">
+            <button class="faq-q" aria-expanded="false">How do I uninstall?<span class="faq-x">+</span></button>
+            <div class="faq-a"><div class="faq-a-inner">Uninstall "Gamepad Server" from Windows Settings → Apps (this also removes its firewall rule), and uninstall the Android app. If you also want the driver gone, remove "ViGEm Bus Driver" from Settings → Apps too.</div></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <hr class="divider">
+
+    <!-- ════ OFFICIAL STORES ════ -->
+    <section class="section" id="stores">
+      <div class="container">
+        <div class="section-head" data-reveal>
+          <span class="eyebrow">Availability</span>
+          <h2>Get it from your favourite store</h2>
+          <p class="lead">Beyond the direct download on this site, GamepadOS is officially published on the marketplaces below. Every listing is uploaded and maintained by our team, so whichever storefront you choose, you always receive the genuine app — with updates delivered through that store.</p>
+        </div>
+        <div class="grid-4" data-reveal-group>
+          <div class="card store-card" data-liquid data-reveal>
+            <h3>Google Play</h3>
+            <p>The recommended way to install — Play keeps the app updated for you.</p>
+            <a class="link-more" href="https://play.google.com/store/apps/details?id=com.gamepad.client" target="_blank" rel="noopener">View listing</a>
+          </div>
+          <div class="card store-card" data-liquid data-reveal>
+            <h3>APKPure</h3>
+            <p>Global APK marketplace with automatic in-store updates.</p>
+            <a class="link-more" href="https://apkpure.com/gamepados/com.gamepad.client" target="_blank" rel="noopener">View listing</a>
+          </div>
+          <div class="card store-card" data-liquid data-reveal>
+            <h3>Amazon Appstore</h3>
+            <p>For Android phones and Amazon Fire devices with the Appstore.</p>
+            <a class="link-more" href="https://www.amazon.com/gp/mas/dl/android?p=com.gamepad.client" target="_blank" rel="noopener">View listing</a>
+          </div>
+          <div class="card store-card" data-liquid data-reveal>
+            <h3>Indus Appstore</h3>
+            <p>Verified listing on India's homegrown Android app store.</p>
+            <a class="link-more" href="https://www.indusappstore.com/apps/tools/gamepados/com.gamepad.client/?page=details&amp;id=com.gamepad.client" target="_blank" rel="noopener">View listing</a>
+          </div>
+        </div>
+        <div class="callout mt-4" data-reveal>
+          <p>Prefer to install directly? The latest APK and PC server are always available from the <a class="inline-link" href="/#download">download section</a> — no store account required.</p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-inner">
+      <div class="footer-top">
+        <div>
+          <a class="logo" href="/"><span class="logo-mark"></span>GamepadOS</a>
+          <p class="footer-tag">Your phone is the controller. Free, no account needed, your input never leaves your network.</p>
+        </div>
+        <div class="footer-cols">
+          <div class="footer-col">
+            <h4>Product</h4>
+            <a href="/#features">Features</a>
+            <a href="/#how">Setup</a>
+            <a href="/#download">Download</a>
+          </div>
+          <div class="footer-col">
+            <h4>Help</h4>
+            <a href="/support">Support center</a>
+            <a href="/support#troubleshooting">Troubleshooting</a>
+            <a href="/support#faq">FAQ</a>
+            <a href="/contact">Contact us</a>
+          </div>
+          <div class="footer-col">
+            <h4>Legal</h4>
+            <a href="/privacy">Privacy policy</a>
+            <a href="/privacy#data">Local data policy</a>
+            <a href="/privacy#attributions">Attributions</a>
+          </div>
+          <div class="footer-col">
+            <h4>Follow</h4>
+            <a href="https://www.instagram.com/gamepados_official/" target="_blank" rel="noopener">Instagram</a>
+          </div>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <span>© 2026 GamepadOS. All rights reserved.</span>
+        <span>Windows 10/11 · Android 9+ · Free</span>
+      </div>
+    </div>
+  </footer>
+
+  <div class="dlbar">
+    <div class="dlbar-inner">
+      <span class="dlbar-label"><span class="dot"></span>GamepadOS <span class="dim">— free on Android &amp; Windows</span></span>
+      <div class="dlbar-btns">
+        <a class="btn btn-dark btn-sm" data-dl="android" href="https://supportportal.gamepad.space/api/download/app">Android APK</a>
+        <a class="btn btn-ghost btn-sm" data-dl="windows" href="https://supportportal.gamepad.space/api/download/pc">PC Server</a>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="/js/main.js"></script>
+<script type="module" src="/js/nav-auth.js"></script>
+</body>
+</html>

@@ -1,8 +1,10 @@
 // ─── Rewarded ads: "Watch an ad · +30 min" ────────────────────────────────────
 //
 // The app's only ads, and only ever on a tap. Owner's rules (2026-09-28): one
-// ad = 30 minutes, they stack and never expire, the day's free time is used
-// first, Lifetime never sees the button, signed in or out makes no difference.
+// ad = 30 minutes, they stack and never expire, Lifetime never sees the button,
+// signed in or out makes no difference. Since 2026-09-30: no daily free time
+// (a one-time 30 minutes instead), and the button shows only while under an
+// hour is left -- one ad still adds the full 30, so up to 89 minutes.
 //
 // Who grants the time is the whole design:
 //   • Signed in — the SERVER, from Google's signed callback
@@ -10,7 +12,7 @@
 //     /api/billing/me, so after the ad this polls until the bank grows. Nothing
 //     here can add a second to an account.
 //   • Signed out — the phone (GuestTrial.creditAd), because there is no account
-//     to credit; the daily 30 free minutes are counted on the phone too.
+//     to credit; the one-time 30 free minutes are counted on the phone too.
 //
 // Android shows the ad and answers on window.onRewardedAdResult. A build
 // without the AdMob SDK has no showRewardedAd at all, and the button never
@@ -68,13 +70,27 @@ function bankNow(): number {
 /** Whether the button belongs on screen at all. */
 export function canShowAdButton(): boolean {
   if (!adsSupported()) return false;
-  if (!getSession()) return true;
+  // Ads only while under an hour is left (2026-09-30). The phone says so; an
+  // older native side without the field falls back to the same sum here.
+  if (!getSession()) {
+    const t = guestTrial();
+    return t.canEarnAd ?? t.remainingSeconds < 3600;
+  }
   const ent = getBillingState().entitlement;
   // Until the plan is known, say nothing: offering an ad to a Lifetime holder
   // for the half-second before /billing/me answers would be wrong.
   if (!ent) return false;
   if (ent.unlimited) return false;
   return ent.adTime?.canEarn !== false;
+}
+
+/** Ads exist here and this player could earn, but already holds an hour or
+ *  more: the button is hidden and a short note says why. */
+export function adCapReached(): boolean {
+  if (!adsSupported() || canShowAdButton()) return false;
+  if (!getSession()) return true;
+  const ent = getBillingState().entitlement;
+  return !!ent && !ent.unlimited && ent.adTime?.canEarn === false;
 }
 
 /** The tap. Returns false when nothing will happen (no ads in this build, or

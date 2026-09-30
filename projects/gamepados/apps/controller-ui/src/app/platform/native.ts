@@ -103,10 +103,12 @@ export function isNative(): boolean {
 }
 
 /** remainingSeconds = today's free time + the ad bank (what can be played now).
- *  The two extra fields are absent from APKs older than 1.4.6. */
+ *  The two extra fields are absent from APKs older than 1.4.6. Since 2026-09-30
+ *  there is no daily free time (limitSeconds 0) and canEarnAd says whether an
+ *  ad may be offered (only while under an hour is left). */
 export type GuestTrialSnapshot = {
   remainingSeconds: number; limitSeconds: number; resetsAt: number;
-  freeRemainingSeconds?: number; bankSeconds?: number;
+  freeRemainingSeconds?: number; bankSeconds?: number; canEarnAd?: boolean;
 };
 export function nativeGuestTrial(active?: boolean): GuestTrialSnapshot | null {
   const b = bridge();

@@ -1,11 +1,15 @@
 import { nativeGuestTrial, type GuestTrialSnapshot } from "../platform/native";
 import { readJson, writeJson, KEYS } from "./storage";
 
+// Rules of 2026-09-30 (the same as the phone's GuestQuota): no daily free time,
+// a ONE-TIME 30 minutes, ads add 30 more each and are offered only while under
+// an hour is left.
 export const GUEST_SECONDS = 30 * 60;
-type BrowserUsage = { used: number; resetsAt: number };
+export const AD_CAP_SECONDS = 60 * 60;
+type BrowserUsage = { bank: number; welcome: boolean };
 let browserActive = false;
 let lastTick = performance.now();
-let usage = readJson<BrowserUsage>(KEYS.guestTrial, { used: 0, resetsAt: 0 });
+let usage = readJson<BrowserUsage>(KEYS.guestTrial, { bank: 0, welcome: false });
 
 /** Android owns the real allowance. This fallback makes the browser preview usable. */
 export function guestTrial(active?: boolean): GuestTrialSnapshot {
@@ -14,21 +18,17 @@ export function guestTrial(active?: boolean): GuestTrialSnapshot {
     if (native) return native;
   } catch {
     // A broken native response must not create a second, fresh allowance.
-    return { remainingSeconds: 0, limitSeconds: GUEST_SECONDS, resetsAt: Date.now() };
+    return { remainingSeconds: 0, limitSeconds: 0, resetsAt: Date.now(), canEarnAd: true };
   }
-  const now = Date.now();
   const elapsed = performance.now();
   const delta = Math.max(0, elapsed - lastTick) / 1000;
   lastTick = elapsed;
-  if (!Number.isFinite(usage.used) || !Number.isFinite(usage.resetsAt)) usage = { used: 0, resetsAt: 0 };
-  if (now >= usage.resetsAt) {
-    const midnight = new Date(now); midnight.setHours(0, 0, 0, 0);
-    usage.used = browserActive ? Math.min(delta, (now - midnight.getTime()) / 1000) : 0;
-    midnight.setDate(midnight.getDate() + 1);
-    usage.resetsAt = midnight.getTime();
-  } else if (browserActive) usage.used += delta;
-  usage.used = Math.max(0, Math.min(GUEST_SECONDS, usage.used));
+  // An older preview stored { used, resetsAt }: start it over under the new shape.
+  if (typeof usage.bank !== "number" || !Number.isFinite(usage.bank)) usage = { bank: 0, welcome: false };
+  if (!usage.welcome) { usage.bank += GUEST_SECONDS; usage.welcome = true; }
+  if (browserActive) usage.bank = Math.max(0, usage.bank - delta);
   if (active !== undefined) browserActive = active;
   writeJson(KEYS.guestTrial, usage);
-  return { remainingSeconds: GUEST_SECONDS - usage.used, limitSeconds: GUEST_SECONDS, resetsAt: usage.resetsAt };
+  return { remainingSeconds: usage.bank, limitSeconds: 0, resetsAt: 0,
+    freeRemainingSeconds: 0, bankSeconds: usage.bank, canEarnAd: usage.bank < AD_CAP_SECONDS };
 }

@@ -350,7 +350,7 @@ function tick() {
   saveLocal(local);
   const left = remaining();
   if (left !== null && left <= 0) {
-    block("You're out of time — upgrade to play more, or wait for your next quota.");
+    block("You're out of play time. Watch an ad for 30 more minutes.");
     return;
   }
   checkWarnings(left);
@@ -387,7 +387,7 @@ async function beat(myGeneration: number) {
       // so, which is why this is terminal rather than retried.
       const payload = (err as ApiError & { payload?: { usedSeconds?: number; resetsAt?: string } }).payload;
       if (payload?.resetsAt) reconcile(payload.usedSeconds ?? local.usedSeconds, payload.resetsAt);
-      block(err.message || "Daily playtime used up.");
+      block(err.message || "You're out of play time. Watch an ad for 30 more minutes.");
       return;
     }
 
@@ -451,11 +451,17 @@ export async function beginPlay(): Promise<void> {
   const ent = getBillingState().entitlement;
   unlimited = ent?.unlimited ?? false;
   limitSeconds = ent?.today.limitSeconds ?? null;
+  // The cap is used + remaining, NOT today.limitSeconds: remaining includes the
+  // ad bank and the one-time 30 minutes, and since 2026-09-30 limitSeconds is 0
+  // for every free player -- reading it alone locked them all out before play.
+  if (ent && !ent.unlimited && typeof ent.today.remainingSeconds === "number") {
+    limitSeconds = ent.today.usedSeconds + ent.today.remainingSeconds;
+  }
   if (ent) {
     reconcile(Math.max(local.usedSeconds, ent.today.usedSeconds), ent.resetsAt);
     const left = remaining();
     if (left !== null && left <= 0) {
-      publish("blocked", "You're out of time — upgrade to play more, or wait for your next quota.");
+      publish("blocked", "You're out of play time. Watch an ad for 30 more minutes.");
       return;
     }
   }
@@ -473,7 +479,7 @@ export async function beginPlay(): Promise<void> {
     const err = e instanceof ApiError ? e : null;
 
     if (err && err.code === "QUOTA_EXHAUSTED") {
-      publish("blocked", err.message || "Daily playtime used up.");
+      publish("blocked", err.message || "You're out of play time. Watch an ad for 30 more minutes.");
       return;
     }
     if (err && err.code === "SESSION_EXISTS") {
@@ -513,7 +519,7 @@ export async function beginPlay(): Promise<void> {
   // server had recorded.
   const leftNow = remaining();
   if (leftNow !== null && leftNow <= 0) {
-    block("You're out of time — upgrade to play more, or wait for your next quota.");
+    block("You're out of play time. Watch an ad for 30 more minutes.");
     return;
   }
 
@@ -574,8 +580,8 @@ function publishGuest() {
     // Play sells nothing (2026-09-30): an ad is the only way to more time there.
     message: blocked
       ? (getAppInfo().channel === "playstore"
-        ? "Your 30 free minutes are used for today. Watch an ad for 30 more minutes, or come back tomorrow."
-        : "Your 30 free minutes are used for today. Choose a plan to keep playing, or come back tomorrow.")
+        ? "Your play time is used up. Watch an ad for 30 more minutes."
+        : "Your play time is used up. Watch an ad for 30 more minutes, or get Lifetime.")
       : "",
   });
 }

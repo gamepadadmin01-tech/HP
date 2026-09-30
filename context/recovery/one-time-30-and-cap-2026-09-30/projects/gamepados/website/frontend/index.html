@@ -1,0 +1,617 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GamepadOS — Your phone is the controller</title>
+  <meta name="description" content="Turn your Android phone into a PC game controller. Touch sticks, gyro steering, custom layouts — paired over Wi-Fi or USB with as low as 2.5 ms wired. Free, no account needed.">
+  <link rel="canonical" href="https://www.gamepad.space/">
+
+  <!-- Open Graph (Facebook, Reddit, Discord, WhatsApp, LinkedIn…) -->
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Gamepad OS">
+  <meta property="og:title" content="Gamepad OS — Turn your phone into a PC game controller">
+  <meta property="og:description" content="Wi-Fi or USB, gyro steering, custom layouts, as low as 2.5 ms wired. Free, no account needed — your phone is the controller.">
+  <meta property="og:url" content="https://www.gamepad.space/">
+  <meta property="og:image" content="https://www.gamepad.space/og-image.jpg">
+  <meta property="og:image:width" content="1024">
+  <meta property="og:image:height" content="500">
+  <meta property="og:image:alt" content="Gamepad OS — turn your phone into a PC game controller">
+
+  <!-- Twitter / X -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Gamepad OS — Turn your phone into a PC game controller">
+  <meta name="twitter:description" content="Wi-Fi or USB, gyro steering, custom layouts, as low as 2.5 ms wired. Free, no account needed.">
+  <meta name="twitter:image" content="https://www.gamepad.space/og-image.jpg">
+
+  <!-- Structured data: app + promo video -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "Gamepad OS",
+    "operatingSystem": "Android 9+",
+    "applicationCategory": "GameApplication",
+    "description": "Turn your Android phone into a full PC game controller — Wi-Fi or USB, gyro steering, custom layouts, as low as 2.5 ms wired.",
+    "url": "https://www.gamepad.space/",
+    "image": "https://www.gamepad.space/og-image.jpg",
+    "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+  }
+  </script>
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "VideoObject",
+    "name": "GamepadOS — Play any game with your phone as controller",
+    "description": "Turn your phone into a wireless controller for PC gaming — no extra hardware, no pairing hassle. Low latency, fully customisable, works with any game that supports a controller.",
+    "thumbnailUrl": "https://i.ytimg.com/vi/-HLxd8_atmw/maxresdefault.jpg",
+    "uploadDate": "2026-08-23",
+    "duration": "PT36S",
+    "embedUrl": "https://www.youtube.com/embed/-HLxd8_atmw",
+    "contentUrl": "https://youtu.be/-HLxd8_atmw"
+  }
+  </script>
+
+  <link rel="icon" href="/favicon.png" type="image/png">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/style.css">
+  <style>
+    /* ── Hero ── */
+    body.page-home .hero { padding: calc(var(--nav-h) + clamp(40px, 7vw, 88px)) 0 clamp(48px, 6vw, 80px); }
+    body.page-home .hero-grid { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); gap: clamp(32px, 5vw, 64px); align-items: center; }
+    body.page-home .hero-copy .eyebrow { display: block; margin-bottom: 18px; }
+    body.page-home .hero-copy .lead { margin: 22px 0 28px; max-width: 460px; }
+    body.page-home .hero-meta { margin-top: 18px; }
+    body.page-home .privacy-note { margin-top: 6px; font-size: 12.5px; }
+    body.page-home .privacy-note a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
+
+    /* Hero stage — monitor + phone vignette */
+    body.page-home .stage { position: relative; height: clamp(380px, 38vw, 470px); }
+    /* Was a white bloom to lift the hardware off paper. On the dark stage it
+       becomes a warm halo — same job (separate the hardware from the page),
+       opposite direction. */
+    body.page-home .stage::before { content: ""; position: absolute; inset: -8%; background: radial-gradient(58% 52% at 52% 40%, rgba(255,120,40,0.16), rgba(255,120,40,0) 70%); pointer-events: none; }
+    body.page-home .monitor { position: absolute; right: 4%; top: 0; width: min(78%, 430px); }
+    body.page-home .bezel { background: #0C0D10; border-radius: 16px; padding: 10px 10px 13px; box-shadow: var(--shadow-2); }
+    body.page-home .screen { position: relative; height: clamp(150px, 16vw, 210px); border-radius: 9px; overflow: hidden; background: linear-gradient(168deg, #2C3947 0%, #1A2029 52%, #10141B 100%); }
+    body.page-home .screen-glow { position: absolute; inset: 0; background: radial-gradient(130% 75% at 50% 100%, rgba(255, 92, 0, 0.42), rgba(255, 92, 0, 0) 58%); }
+    body.page-home .crosshair { position: absolute; left: 50%; top: 44%; width: 18px; height: 18px; transform: translate(-50%, -50%); }
+    body.page-home .crosshair::before, body.page-home .crosshair::after { content: ""; position: absolute; background: rgba(255,255,255,0.85); }
+    body.page-home .crosshair::before { left: 50%; top: 0; width: 2px; height: 100%; transform: translateX(-50%); }
+    body.page-home .crosshair::after { top: 50%; left: 0; height: 2px; width: 100%; transform: translateY(-50%); }
+    body.page-home .fps { position: absolute; top: 10px; right: 12px; font-family: var(--font-m); font-size: 9px; letter-spacing: 0.14em; font-weight: 700; color: rgba(255,255,255,0.55); }
+    body.page-home .hp { position: absolute; left: 12px; bottom: 11px; width: 56px; height: 4px; border-radius: 2px; background: rgba(255,255,255,0.2); }
+    body.page-home .hp::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 70%; border-radius: 2px; background: var(--orange); }
+    /* Real glass: the crosshair, orange glow, FPS and HP bar behind this all
+       smear through it. Fill dropped 0.85 → 0.62 so the blur is visible; the
+       .glass-blur utility supplies backdrop-filter + saturate and the opaque
+       fallbacks. Kept above 0.6 so the white copy stays legible over the glow. */
+    body.page-home .monitor-banner { position: absolute; inset: 0; z-index: 10; background: rgba(16, 20, 27, 0.62); display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; color: #fff; opacity: 0; visibility: hidden; }
+    body.page-home .mb-content { padding: 0 12px; display: flex; flex-direction: column; align-items: center; }
+    body.page-home .mb-content h4 { font-size: clamp(14px, 2vw, 17px); margin: 4px 0; line-height: 1.1; color: #fff; }
+    body.page-home .mb-content p { font-size: clamp(9px, 1.2vw, 11px); color: rgba(255,255,255,0.75); line-height: 1.4; margin-bottom: 10px; max-width: 200px; }
+    body.page-home .mb-content strong { color: #fff; font-weight: 700; }
+    body.page-home .mb-content .eyebrow { font-size: clamp(8px, 1vw, 9px); margin-bottom: 0; display: inline-block; }
+    body.page-home .mb-content .btn { padding: 5px 12px; font-size: 10px; min-height: unset; height: auto; border-radius: 6px; }
+    body.page-home .mb-close { position: absolute; top: 6px; right: 6px; background: none; border: none; color: rgba(255,255,255,0.5); font-size: 10px; cursor: pointer; padding: 4px; line-height: 1; border-radius: 50%; transition: 0.2s; }
+    body.page-home .mb-close:hover { color: #fff; background: rgba(255,255,255,0.15); }
+    /* Monitor stand: was light-grey plastic for a paper page. Now brushed dark
+       metal, lit from the left so it reads as a real object on the dark stage. */
+    body.page-home .neck { width: 16px; height: 24px; margin: 0 auto; background: linear-gradient(90deg, #2A2D36, #454A57 45%, #23262E); }
+    body.page-home .foot { width: 120px; height: 9px; margin: 0 auto; border-radius: 5px; background: linear-gradient(180deg, #3B404C, #22252C); box-shadow: 0 14px 22px -9px rgba(0,0,0,0.8), inset 0 1px 0 rgba(255,255,255,0.10); }
+
+    body.page-home .pairing { position: absolute; inset: 0; pointer-events: none; }
+    body.page-home .pairing path { stroke: var(--orange); stroke-width: 2; fill: none; stroke-dasharray: 3 7; stroke-linecap: round; }
+    /* NOW a real glass candidate: it floats over the dark stage with the warm
+       halo behind it, so the blur has actual colour to pick up. On the old
+       paper stage this was solid white on purpose. */
+    body.page-home .ms-pill { position: absolute; left: 6%; top: 52%; display: flex; align-items: center; gap: 6px; background: rgba(255,255,255,0.10); -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat)); backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat)); border: 1px solid var(--border); border-radius: var(--r-pill); padding: 7px 13px; font-size: 12.5px; font-weight: 700; color: var(--ink); box-shadow: var(--lit), var(--shadow-1); z-index: 4; }
+    body.page-home .ms-pill .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--orange); }
+
+    body.page-home .phone { position: absolute; left: 0; bottom: 6%; width: min(62%, 330px); aspect-ratio: 2.15 / 1; border-radius: 26px; background: linear-gradient(145deg, #1C1D22, #0A0B0E); padding: 9px; transform: rotate(-5deg); box-shadow: 0 30px 44px -22px rgba(15,15,20,0.55), inset 0 0 0 1px rgba(255,255,255,0.07); z-index: 3; }
+    body.page-home .pscreen { position: relative; width: 100%; height: 100%; border-radius: 18px; background: #101117; overflow: hidden; }
+    body.page-home .pscreen::after { content: ""; position: absolute; inset: 0; background: linear-gradient(115deg, rgba(255,255,255,0.06), rgba(255,255,255,0) 45%); }
+    /* Phone interior sits on .pscreen's flat #101117 — nothing behind to blur, so
+       these take the glass FILL + lit top edge only (see "Glass" in style.css).
+       Same look as a frosted control, none of the backdrop-filter cost. */
+    body.page-home .gyro-pill { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 5px; background: var(--glass-fill); border: 1px solid var(--glass-edge); box-shadow: inset 0 1px 0 var(--glass-top); border-radius: var(--r-pill); padding: 4px 11px; font-size: 8.5px; letter-spacing: 0.2em; color: rgba(255,255,255,0.7); font-weight: 700; }
+    body.page-home .gyro-pill .gdot { width: 5px; height: 5px; border-radius: 50%; background: var(--orange); }
+    body.page-home .stick { position: absolute; left: 9%; top: 50%; transform: translateY(-50%); width: 30%; max-width: 64px; aspect-ratio: 1; border-radius: 50%; background: var(--glass-fill); border: 2px solid var(--glass-edge); box-shadow: inset 0 1px 0 var(--glass-top); }
+    body.page-home .knob { position: absolute; left: 13%; top: 11%; width: 52%; aspect-ratio: 1; border-radius: 50%; background: var(--orange); box-shadow: 0 0 18px rgba(255,77,0,0.55); }
+    body.page-home .abxy { position: absolute; right: 8%; top: 50%; transform: translateY(-50%); width: 30%; max-width: 76px; aspect-ratio: 1; }
+    body.page-home .ab { position: absolute; width: 30%; aspect-ratio: 1; border-radius: 50%; background: var(--glass-fill); border: 2px solid var(--glass-edge); box-shadow: inset 0 1px 0 var(--glass-top); color: rgba(255,255,255,0.6); font-size: 9px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+    body.page-home .abY { top: 0; left: 50%; transform: translateX(-50%); }
+    body.page-home .abX { left: 0; top: 50%; transform: translateY(-50%); }
+    body.page-home .abB { right: 0; top: 50%; transform: translateY(-50%); }
+    body.page-home .abA { bottom: 0; left: 50%; transform: translateX(-50%); background: var(--orange); border-color: var(--orange); color: #17181C; box-shadow: 0 0 14px rgba(255,77,0,0.55); }
+    body.page-home .tilt-arc { position: absolute; border: 2px solid transparent; border-radius: 50%; border-left-color: rgba(255,255,255,0.30); }
+    body.page-home .arc1 { width: 34px; height: 52px; left: 56%; bottom: 30%; transform: rotate(18deg); }
+    body.page-home .arc2 { width: 46px; height: 66px; left: 57%; bottom: 28%; transform: rotate(18deg); border-left-color: rgba(255,255,255,0.18); }
+
+    @media (max-width: 900px) {
+      body.page-home .hero-grid { grid-template-columns: 1fr; }
+      body.page-home .stage { height: clamp(300px, 64vw, 420px); max-width: 540px; margin: 0 auto; width: 100%; }
+      /* Single column: the stage spans the whole container, so a glow wider than it pushed the page
+         7 px past the screen edge on phones (sideways scroll, and the fixed nav stretched with it). */
+      body.page-home .stage::before { inset: -8% 0; }
+    }
+
+    /* ── Hero Download Cards ── */
+    body.page-home .hero-download-cards { display: flex; background: var(--surface); border: 1px solid var(--border); border-radius: 20px; margin-top: 32px; -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat)); backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat)); box-shadow: var(--lit), var(--shadow-1); }
+    body.page-home .hd-col { flex: 1; padding: 24px; display: flex; flex-direction: column; }
+    body.page-home .hd-divider { width: 1px; background: var(--border-2); }
+    body.page-home .hd-icon { width: 42px; height: 42px; border-radius: 12px; display: flex; align-items: center; justify-content: center; margin-bottom: 16px; }
+    body.page-home .hd-icon-orange { background: rgba(255,92,0,0.12); color: var(--orange); }
+    body.page-home .hd-icon-blue { background: rgba(59,130,246,0.12); color: #3b82f6; }
+    body.page-home .hd-text { margin-bottom: 24px; flex: 1; }
+    body.page-home .hd-text h4 { font-size: 16px; font-weight: 700; margin-bottom: 6px; color: var(--ink); line-height: 1.1; }
+    body.page-home .hd-text p { font-size: 13px; color: var(--text-2); margin: 0; line-height: 1.4; }
+    body.page-home .hd-actions { display: flex; flex-direction: column; gap: 10px; }
+    body.page-home .hd-actions .btn { width: 100%; justify-content: space-between; padding: 12px 18px; border-radius: 99px; font-weight: 600; font-size: 13.5px; }
+    body.page-home .hd-actions .btn svg.ext { opacity: 0.4; }
+    @media (max-width: 640px) {
+      body.page-home .hero-download-cards { flex-direction: column; }
+      body.page-home .hd-divider { width: 100%; height: 1px; }
+    }
+
+
+    /* ── Watch / promo video ── */
+    body.page-home .video-frame { max-width: 920px; margin: clamp(28px, 4vw, 44px) auto 0; aspect-ratio: 16 / 9; border-radius: var(--r-lg); overflow: hidden; border: 1px solid var(--border); background: #0A0B0E; box-shadow: var(--shadow-2); }
+    body.page-home .video-frame iframe { width: 100%; height: 100%; border: 0; display: block; }
+    /* The facade: a button that looks like a player until it becomes one. */
+    body.page-home .video-play { display: block; width: 100%; height: 100%; padding: 0; border: 0; background: #0A0B0E; cursor: pointer; position: relative; }
+    body.page-home .video-play img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    body.page-home .video-play-btn {
+      position: absolute; inset: 0; margin: auto; width: 68px; height: 68px;
+      display: grid; place-items: center; border-radius: 999px;
+      background: var(--orange, #FF5A14); color: #fff;
+      box-shadow: 0 8px 30px rgba(0,0,0,.45);
+      transition: transform .18s ease;
+    }
+    body.page-home .video-play:hover .video-play-btn,
+    body.page-home .video-play:focus-visible .video-play-btn { transform: scale(1.08); }
+    body.page-home .video-play-btn svg { margin-left: 3px; }  /* optically centre the triangle */
+    @media (prefers-reduced-motion: reduce) {
+      body.page-home .video-play-btn { transition: none; }
+      body.page-home .video-play:hover .video-play-btn { transform: none; }
+    }
+
+    /* ── Trust strip ── */
+    body.page-home .trust-row { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
+
+    /* ── Latency band ── */
+    body.page-home .lat-card { text-align: center; padding: clamp(40px, 6vw, 72px) 24px; }
+    body.page-home .lat-num { font-family: var(--font-h); font-weight: 800; letter-spacing: -0.04em; font-size: clamp(72px, 12vw, 132px); line-height: 1; color: var(--ink); }
+    body.page-home .lat-num .unit { color: var(--orange); font-size: 0.42em; font-weight: 800; margin-left: 6px; }
+    body.page-home .lat-cap { margin-top: 14px; color: var(--text-2); font-size: 15px; }
+    body.page-home .lat-pills { margin-top: 26px; display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+
+    /* ── Download cards ── */
+    body.page-home .dl-card { display: flex; flex-direction: column; align-items: flex-start; }
+    body.page-home .dl-card ul { list-style: none; margin: 18px 0 26px; }
+    body.page-home .dl-card li { display: flex; gap: 9px; align-items: baseline; color: var(--text-2); font-size: 14.5px; padding: 4px 0; }
+    body.page-home .dl-card li::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: var(--orange); flex: none; transform: translateY(-2px); }
+    body.page-home .dl-card .btn { margin-top: auto; }
+    body.page-home .dl-icon { width: 48px; height: 48px; border-radius: 14px; background: var(--surface-2); border: 1px solid var(--border); box-shadow: var(--lit); color: var(--ink); display: grid; place-items: center; margin-bottom: 18px; }
+  </style>
+  <!-- Google AdSense. Home and support pages ONLY — never account, payment,
+       refunds, contact or privacy. Disclosed in /privacy#ads. -->
+  <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-5878015482565093"
+     crossorigin="anonymous"></script>
+</head>
+<body class="page-home">
+
+  <nav class="nav">
+    <div class="nav-inner">
+      <a class="logo" href="/"><span class="logo-mark"></span>GamepadOS</a>
+      <button class="nav-burger" aria-label="Menu"><span></span></button>
+      <div class="nav-links">
+        <a href="/#features">Features</a>
+        <a href="/#how">Setup</a>
+        <a href="/support">Support</a>
+        <a href="/contact">Contact</a>
+      <a href="/#download">Download</a>
+      <a class="btn btn-dark btn-sm nav-cta" href="/account" data-nav-auth>Sign in</a>
+      </div>
+    </div>
+  </nav>
+
+  <main>
+    <!-- ════ HERO ════ -->
+    <section class="hero">
+      <div class="container hero-grid">
+        <div class="hero-copy">
+          <span class="eyebrow">Touch + gyro · Wi-Fi or USB</span>
+          <h1>Your phone is the controller<span class="o">.</span></h1>
+          <p class="lead">Your phone is literally the controller now — zero lag, works with Steam, Xbox Cloud, emulators, whatever. No need to cop a gamepad fr.</p>
+          <div class="hero-download-cards" data-liquid data-hero-ctas>
+            <!-- Mobile App Column -->
+            <div class="hd-col hd-mobile">
+              <div class="hd-icon hd-icon-orange">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+              </div>
+              <div class="hd-text">
+                <h4>Mobile App</h4>
+                <p>Get GamepadOS on your phone</p>
+              </div>
+              <div class="hd-actions">
+                <a class="btn btn-dark" href="https://play.google.com/store/apps/details?id=com.gamepad.client" target="_blank" rel="noopener">
+                  <span style="display:flex;align-items:center;gap:8px;">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3.6 2.3a1 1 0 00-.5.9v17.6a1 1 0 00.5.9l9.3-9.7L3.6 2.3zm10.6 8.1l2.9-3-9.8-5.6 6.9 8.6zm0 3.2l-6.9 8.6 9.8-5.6-2.9-3zm4.2-1.6l2.5-1.4c.8-.5.8-1.7 0-2.2l-2.4-1.4-3 3.1 2.9 1.9z"/></svg>
+                    Get it on Google Play
+                  </span>
+                  <svg class="ext" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+                </a>
+                <a class="btn btn-ghost" data-dl="android" href="https://supportportal.gamepad.space/api/download/app">
+                  <span style="display:flex;align-items:center;gap:8px;color:var(--orange);">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                    <span style="color:var(--ink);">Early Release</span>
+                  </span>
+                  <svg class="ext" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+                </a>
+              </div>
+            </div>
+            
+            <div class="hd-divider"></div>
+            
+            <!-- PC Server Column -->
+            <div class="hd-col hd-pc">
+              <div class="hd-icon hd-icon-blue">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
+              </div>
+              <div class="hd-text">
+                <h4>PC Server</h4>
+                <p>Run the server on your PC</p>
+              </div>
+              <div class="hd-actions">
+                <a class="btn btn-ghost" data-dl="windows" href="https://supportportal.gamepad.space/api/download/pc">
+                  <span style="display:flex;align-items:center;gap:8px;">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 5.7l7.6-1v7.5H3V5.7zm0 12.6l7.6 1v-7.4H3v6.4zm8.4 1.2L21 21v-8.1h-9.6v6.6zm0-15.3v6.9H21V3l-9.6 1.2z"/></svg>
+                    PC Server · Windows
+                  </span>
+                  <svg class="ext" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+                </a>
+              </div>
+            </div>
+          </div>
+          <p class="meta hero-meta">Free · No account needed · Android 9+ · Windows 10/11</p>
+          <!-- The privacy policy's "Changes" section promises significant changes are
+               noted here. Remove once it has been up for a few weeks. -->
+          <p class="meta privacy-note">Privacy policy updated 28 Sep 2026 — this site now shows Google ads on the home and support pages; the apps still show none. <a href="/privacy#ads">What changed</a></p>
+        </div>
+
+        <div class="stage" aria-hidden="true">
+          <div class="monitor">
+            <div class="bezel">
+              <div class="screen">
+                <div class="screen-glow"></div>
+                <div class="crosshair"></div>
+                <span class="fps">240 FPS</span>
+                <div class="hp"></div>
+                
+                <!-- Monitor Intro Banner -->
+                <div class="monitor-banner glass-blur" id="monitorBanner">
+                  <div class="mb-content">
+                    <span class="eyebrow">⚡ Server 2.0</span>
+                    <h4>World's Fastest</h4>
+                    <p><strong>2.5ms wired</strong> beats $70 bluetooth controllers. Ultra-smooth PC engine.</p>
+                    <a href="/#download" class="btn btn-sm" id="mbCta">Play & Review</a>
+                  </div>
+                  <button class="mb-close" id="mbClose" aria-label="Close">✕</button>
+                </div>
+              </div>
+            </div>
+            <div class="neck"></div>
+            <div class="foot"></div>
+          </div>
+          <svg class="pairing" viewBox="0 0 600 470" fill="none" aria-hidden="true">
+            <path id="pairPath" d="M178 318 C 96 290, 80 210, 150 130"/>
+            <circle cx="150" cy="130" r="4" fill="#FF4D00"/>
+          </svg>
+          <div class="ms-pill"><span class="dot"></span>2.5 ms · USB</div>
+          <div class="phone">
+            <div class="pscreen">
+              <div class="gyro-pill"><span class="gdot"></span>GYRO</div>
+              <div class="stick"><div class="knob"></div></div>
+              <div class="abxy">
+                <span class="ab abY">Y</span><span class="ab abX">X</span>
+                <span class="ab abB">B</span><span class="ab abA">A</span>
+              </div>
+            </div>
+          </div>
+          <div class="tilt-arc arc1"></div>
+          <div class="tilt-arc arc2"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ════ TRUST STRIP ════ -->
+    <section class="section-tight">
+      <div class="container trust-row" data-reveal-group>
+        <span class="pill" data-reveal><span class="dot"></span>No account needed</span>
+        <span class="pill" data-reveal><span class="dot"></span>100% local network</span>
+        <span class="pill" data-reveal><span class="dot"></span>Driver included — no installer maze</span>
+      </div>
+    </section>
+
+    <!-- ════ DEMO VIDEO ════ -->
+    <!-- Click-to-play "facade": until someone actually asks for the video this
+         is a button with a thumbnail on it, and NOT a YouTube iframe. Embedding
+         the iframe directly costs roughly a megabyte of Google's JavaScript and
+         a set of third-party cookies on every single page load, for a video most
+         visitors never press play on. The iframe is created on click. -->
+    <section class="section" id="demo">
+      <div class="container">
+        <div class="section-head" data-reveal>
+          <span class="eyebrow">See it work</span>
+          <h2>Thirty seconds, phone to game<span class="o">.</span></h2>
+          <p class="lead">No hardware, no pairing maze. Here is the whole thing running.</p>
+        </div>
+
+        <!-- Deliberately NOT data-reveal: that sets visibility:hidden until the
+             scroll animation fires, and a hidden element never triggers
+             loading="lazy" — so the thumbnail would only start downloading once
+             the reveal ran, flashing an empty black box first. The heading above
+             still animates; the player simply appears. -->
+        <div class="video-frame">
+          <button type="button" class="video-play" id="demo-video"
+                  data-video="-HLxd8_atmw"
+                  aria-label="Play the GamepadOS demo video">
+            <img src="https://i.ytimg.com/vi/-HLxd8_atmw/maxresdefault.jpg"
+                 alt="GamepadOS demo: a phone being used as a PC game controller"
+                 width="1280" height="720" loading="lazy" decoding="async">
+            <span class="video-play-btn" aria-hidden="true">
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+            </span>
+          </button>
+        </div>
+      </div>
+    </section>
+
+
+    <!-- ════ HOW IT WORKS ════ -->
+    <section class="section" id="how">
+      <div class="container">
+        <div class="section-head" data-reveal>
+          <span class="eyebrow">Setup</span>
+          <h2>Pair in seconds</h2>
+          <p class="lead">Two small downloads, one QR code. That's the whole setup.</p>
+        </div>
+        <div class="grid-3" data-reveal-group>
+          <div class="step" data-reveal>
+            <span class="step-num">1</span>
+            <h3>Run the PC server</h3>
+            <p>Download the <strong>Gamepad Server installer</strong> and run it. It sets up the ViGEmBus driver and firewall automatically — then it just works, no extra prompts.</p>
+          </div>
+          <div class="step" data-reveal>
+            <span class="step-num">2</span>
+            <h3>Scan the QR</h3>
+            <p>Install the Android app and scan the QR code the server shows. Wi-Fi pairing is instant.</p>
+            <span class="or">Wired instead? Plug in USB and enable USB debugging — the server does the rest.</span>
+          </div>
+          <div class="step" data-reveal>
+            <span class="step-num">3</span>
+            <h3>Play anything</h3>
+            <p>Your PC sees a real Xbox 360 controller. Any game with gamepad support just works.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ════ LATENCY ════ -->
+    <section class="section-tight" id="latency">
+      <div class="container">
+        <div class="card lat-card" data-liquid data-reveal>
+          <div class="lat-num"><span id="msCounter">2.5</span><span class="unit">ms</span></div>
+          <p class="lat-cap">Measured round-trip input latency over USB. Tuned 5 GHz Wi-Fi stays in the low double digits.</p>
+          <div class="lat-pills">
+            <span class="pill"><span class="dot"></span>Up to 500 Hz input</span>
+            <span class="pill"><span class="dot"></span>Wi-Fi + USB</span>
+            <span class="pill"><span class="dot"></span>Rumble feedback</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ════ FEATURES ════ -->
+    <section class="section" id="features">
+      <div class="container">
+        <div class="section-head" data-reveal>
+          <span class="eyebrow">Features</span>
+          <h2>Built like a controller, not an app</h2>
+          <p class="lead">Everything is tuned for play: instant response, layouts that fit your hands, and feedback you can feel.</p>
+        </div>
+        <div class="grid-2" data-reveal-group>
+          <div class="card" data-liquid data-reveal>
+            <div class="card-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M12 3v3M5.6 5.6l2.1 2.1M18.4 5.6l-2.1 2.1"/><rect x="5" y="11" width="14" height="9" rx="3.5"/><circle cx="9.5" cy="15.5" r="1.4"/></svg>
+            </div>
+            <h3>Gyro motion steering</h3>
+            <p>Tilt the phone to steer. Made for racing games — sensitivity and axis are tunable, and you can toggle it per layout.</p>
+          </div>
+          <div class="card" data-liquid data-reveal>
+            <div class="card-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="13" width="8" height="8" rx="2"/><path d="M17 3v6M14 6h6M3 17h6M7 14v6" opacity="0.45"/></svg>
+            </div>
+            <h3>Layout builder</h3>
+            <p>Drag, resize and place every button exactly where your thumbs want it. Save as many custom layouts as you like.</p>
+          </div>
+          <div class="card" data-liquid data-reveal>
+            <div class="card-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="7" cy="15" r="3.2"/><circle cx="17" cy="9" r="3.2"/><path d="M7 11.8V5M17 12.2V19"/></svg>
+            </div>
+            <h3>Presets that fit your game</h3>
+            <p>Racing, shooter and emulator layouts out of the box. Pick one and play, or use it as a starting point for your own.</p>
+          </div>
+          <div class="card" data-liquid data-reveal>
+            <div class="card-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><rect x="8" y="4" width="8" height="16" rx="2.5"/><path d="M4.5 9c-1 2-1 4 0 6M19.5 9c1 2 1 4 0 6" opacity="0.6"/></svg>
+            </div>
+            <h3>Rumble, both ways</h3>
+            <p>Force feedback from the game travels back and buzzes the phone. Hits, curbs and recoil feel real.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ════ DOWNLOAD ════ -->
+    <section class="section" id="download">
+      <div class="container">
+        <div class="section-head center" data-reveal>
+          <span class="eyebrow">Download</span>
+          <h2>Get both. They're free<span class="o">.</span></h2>
+        </div>
+        <div class="grid-2" data-reveal-group>
+          <div class="card dl-card" data-liquid data-reveal>
+            <div class="dl-icon">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="#141417" aria-hidden="true"><path d="M17.5 8.6l1.7-3a.4.4 0 10-.7-.4l-1.7 3.1A10.3 10.3 0 0012 7.2c-1.7 0-3.4.4-4.8 1.1L5.5 5.2a.4.4 0 10-.7.4l1.7 3A9.6 9.6 0 001.5 17h21a9.6 9.6 0 00-5-8.4zM7.8 14.8a1.1 1.1 0 110-2.2 1.1 1.1 0 010 2.2zm8.4 0a1.1 1.1 0 110-2.2 1.1 1.1 0 010 2.2z"/></svg>
+            </div>
+            <h3>Android app</h3>
+            <ul>
+              <li>Android 9 or newer</li>
+              <li>On Google Play — updates arrive automatically</li>
+              <li>Touch, gyro and the layout builder</li>
+            </ul>
+            <div style="display:flex;gap:12px;margin-top:auto;flex-wrap:wrap;margin-bottom:16px;">
+              <a class="btn btn-dark" href="https://play.google.com/store/apps/details?id=com.gamepad.client" target="_blank" rel="noopener">
+                <span style="display:flex;align-items:center;gap:8px;">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3.6 2.3a1 1 0 00-.5.9v17.6a1 1 0 00.5.9l9.3-9.7L3.6 2.3zm10.6 8.1l2.9-3-9.8-5.6 6.9 8.6zm0 3.2l-6.9 8.6 9.8-5.6-2.9-3zm4.2-1.6l2.5-1.4c.8-.5.8-1.7 0-2.2l-2.4-1.4-3 3.1 2.9 1.9z"/></svg>
+                  Get it on Google Play
+                </span>
+              </a>
+              <a class="btn btn-ghost" data-dl="android" href="https://supportportal.gamepad.space/api/download/app">
+                <span style="display:flex;align-items:center;gap:8px;color:var(--orange);">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                  <span style="color:var(--ink);">Early Release</span>
+                </span>
+              </a>
+            </div>
+            <p class="meta mt-2">APK · Android 9+ · ~3 MB</p>
+          </div>
+          <div class="card dl-card" data-liquid data-reveal>
+            <div class="dl-icon">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="#141417" aria-hidden="true"><path d="M3 5.7l7.6-1v7.5H3V5.7zm0 12.6l7.6 1v-7.4H3v6.4zm8.4 1.2L21 21v-8.1h-9.6v6.6zm0-15.3v6.9H21V3l-9.6 1.2z"/></svg>
+            </div>
+            <h3>PC server</h3>
+            <ul>
+              <li>Windows 10 / 11 installer</li>
+              <li>Sets up the ViGEmBus driver + firewall for you</li>
+              <li>Shows the QR — pairs over Wi-Fi or USB</li>
+            </ul>
+            <div style="display:flex;margin-top:auto;margin-bottom:16px;">
+              <a class="btn btn-ghost" data-dl="windows" href="https://supportportal.gamepad.space/api/download/pc">
+                <span style="display:flex;align-items:center;gap:8px;">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 5.7l7.6-1v7.5H3V5.7zm0 12.6l7.6 1v-7.4H3v6.4zm8.4 1.2L21 21v-8.1h-9.6v6.6zm0-15.3v6.9H21V3l-9.6 1.2z"/></svg>
+                  Download for Windows
+                </span>
+              </a>
+            </div>
+            <p class="meta mt-2">GamepadServer-Setup.exe · Windows 10/11 · ~12 MB · driver &amp; firewall included</p>
+            <!-- Shown to everyone, but written as "if this happens" rather than a step to
+                 perform. Users on a fresh Windows 11 install WILL be blocked and deserve a
+                 warning before they download; users on every other Windows must not be
+                 taught to switch off a security feature they never needed to touch. -->
+            <details class="meta mt-2" style="cursor:pointer;">
+              <summary>Windows 11 blocked it? Read this first</summary>
+              <div style="margin-top:8px;line-height:1.6;">
+                <p>On a fresh Windows 11 install you may see <em>"Smart App Control blocked an app that may be unsafe"</em>. That is Windows refusing to run software from a publisher it can't verify — we haven't bought a code-signing certificate yet. It is not a virus warning and there is nothing wrong with the download.</p>
+                <p>You can check the file yourself before trusting us: right-click the installer → Properties → Digital Signatures, and compare the SHA-256 we publish on the <a href="/support">support page</a>.</p>
+                <p><strong>Your options, honestly:</strong> wait until we're signed (it's on our list), or turn Smart App Control off in <strong>Windows Security → App &amp; browser control → Smart App Control</strong>. <strong>Turning it off is permanent</strong> — Windows can only switch it back on by resetting the PC, and it protects everything on your machine, not just this app. Please don't do it on our account unless you're genuinely comfortable with that.</p>
+              </div>
+            </details>
+          </div>
+        </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ════ FAQ TEASER ════ -->
+    <section class="section">
+      <div class="container">
+        <div class="section-head" data-reveal>
+          <span class="eyebrow">FAQ</span>
+          <h2>Quick answers</h2>
+        </div>
+        <div class="faq" data-reveal>
+          <div class="faq-item">
+            <button class="faq-q" aria-expanded="false">Does it work with my game?<span class="faq-x">+</span></button>
+            <div class="faq-a"><div class="faq-a-inner">If the game supports a gamepad, yes — your PC sees a standard Xbox 360 controller, the most widely supported pad there is.</div></div>
+          </div>
+          <div class="faq-item">
+            <button class="faq-q" aria-expanded="false">Do I need the same Wi-Fi network?<span class="faq-x">+</span></button>
+            <div class="faq-a"><div class="faq-a-inner">For wireless play, yes — phone and PC must be on the same network. No Wi-Fi around? USB wired mode works anywhere.</div></div>
+          </div>
+          <div class="faq-item">
+            <button class="faq-q" aria-expanded="false">Is my input private?<span class="faq-x">+</span></button>
+            <div class="faq-a"><div class="faq-a-inner">Completely. Controller input travels directly from your phone to your PC over your own network — it never touches our servers, with or without an account. An account is optional and only backs up the layouts you build, so you can get them back on a new phone. <a href="/privacy">Read the privacy policy</a>.</div></div>
+          </div>
+          <div class="faq-item">
+            <button class="faq-q" aria-expanded="false">It's not connecting — help?<span class="faq-x">+</span></button>
+            <div class="faq-a"><div class="faq-a-inner">Nine times out of ten it's a VPN, a firewall prompt that got dismissed, or a network that blocks device-to-device traffic. <a href="/support#troubleshooting">The troubleshooting guide</a> walks through each fix.</div></div>
+          </div>
+        </div>
+        <p class="mt-4" data-reveal><a class="link-more" href="/support">Visit the support center</a></p>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-inner">
+      <div class="footer-top">
+        <div>
+          <a class="logo" href="/"><span class="logo-mark"></span>GamepadOS</a>
+          <p class="footer-tag">Your phone is the controller. Free, no account needed, your input never leaves your network.</p>
+        </div>
+        <div class="footer-cols">
+          <div class="footer-col">
+            <h4>Product</h4>
+            <a href="/#features">Features</a>
+            <a href="/#how">Setup</a>
+            <a href="/#download">Download</a>
+          </div>
+          <div class="footer-col">
+            <h4>Help</h4>
+            <a href="/support">Support center</a>
+            <a href="/support#troubleshooting">Troubleshooting</a>
+            <a href="/support#faq">FAQ</a>
+            <a href="/contact">Contact us</a>
+          </div>
+          <div class="footer-col">
+            <h4>Legal</h4>
+            <a href="/privacy">Privacy policy</a>
+            <a href="/privacy#data">Local data policy</a>
+            <a href="/privacy#attributions">Attributions</a>
+          </div>
+          <div class="footer-col">
+            <h4>Follow</h4>
+            <a href="https://www.instagram.com/gamepados_official/" target="_blank" rel="noopener">Instagram</a>
+          </div>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <span>© 2026 GamepadOS. All rights reserved.</span>
+        <span>Windows 10/11 · Android 9+ · Free</span>
+      </div>
+    </div>
+  </footer>
+
+  <div class="dlbar">
+    <div class="dlbar-inner">
+      <span class="dlbar-label"><span class="dot"></span>GamepadOS <span class="dim">— free on Android &amp; Windows</span></span>
+      <div class="dlbar-btns">
+        <a class="btn btn-dark btn-sm" data-dl="android" href="https://supportportal.gamepad.space/api/download/app">Android APK</a>
+        <a class="btn btn-ghost btn-sm" data-dl="windows" href="https://supportportal.gamepad.space/api/download/pc">PC Server</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal removed, now inside monitor -->
+
+  <script type="module" src="/js/main.js"></script>
+  <script type="module" src="/js/home.js"></script>
+<script type="module" src="/js/nav-auth.js"></script>
+</body>
+</html>

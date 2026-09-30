@@ -83,7 +83,7 @@ export function DashboardAllowance() {
   useEffect(() => onSessionChange(() => setSession(getSession())), []);
   useEffect(() => {
     if (session) return;
-    // No gameplay clock is started here. Refresh midnight/resume presentation only.
+    // No gameplay clock is started here. Refresh on resume/focus only.
     const update = () => setRemaining(guestTrial().remainingSeconds);
     const timer = window.setInterval(update, 30000);
     const visible = () => { if (!document.hidden) update(); };
@@ -93,8 +93,8 @@ export function DashboardAllowance() {
   }, [session]);
   return <div className="calm-allowance" data-testid="daily-allowance">
     <span className="console-allowance-icon"><Clock3 size={20} aria-hidden="true" /></span>
-    <div className="calm-grow"><span className="console-eyebrow">{session ? "YOUR MEMBERSHIP" : "A LITTLE FREE PLAY. EVERY DAY."}</span>
-      <strong>{session ? "Your plan & playtime" : remaining > 0 ? <><span data-testid="remaining-playtime">{formatDuration(remaining)}</span> <small>on the house</small></> : "Renews at midnight"}</strong>
+    <div className="calm-grow"><span className="console-eyebrow">{session ? "YOUR MEMBERSHIP" : "YOUR PLAY TIME"}</span>
+      <strong>{session ? "Your plan & playtime" : remaining > 0 ? <><span data-testid="remaining-playtime">{formatDuration(remaining)}</span> <small>left</small></> : "Watch an ad for 30 minutes"}</strong>
     </div>
     <button data-testid="view-plans-button" onClick={() => requestDashboardTab("account")} aria-label={session ? "View account" : "View plans"}><ChevronRight size={19} /></button>
   </div>;

@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Your account — GamepadOS</title>
+  <meta name="description" content="Sign in to your GamepadOS account to see your plan, your daily playtime, and to upgrade. Your plan follows your account — buy here and it works in the app, whichever store you installed from.">
+  <link rel="canonical" href="https://www.gamepad.space/account">
+  <!-- Not a page for search results: it is behind a sign-in and personal. -->
+  <meta name="robots" content="noindex, follow">
+
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/css/style.css">
+  <link rel="stylesheet" href="/css/liquid.css">
+  <link rel="stylesheet" href="/css/account.css">
+</head>
+<body>
+
+<nav class="nav">
+  <div class="nav-inner">
+    <a class="logo" href="/"><span class="logo-mark"></span>GamepadOS</a>
+    <button class="nav-burger" aria-label="Menu"><span></span></button>
+    <div class="nav-links">
+      <a href="/#features">Features</a>
+      <a href="/#how">Setup</a>
+      <a href="/support">Support</a>
+      <a href="/contact">Contact</a>
+      <a href="/#download">Download</a>
+      <a class="btn btn-dark btn-sm nav-cta" href="/account" data-nav-auth>Sign in</a>
+    </div>
+  </div>
+</nav>
+
+<main class="acc-main">
+
+  <!-- One page, four states. JS shows exactly one. -->
+
+  <!-- ── Loading ─────────────────────────────────────────────────────── -->
+  <section id="state-loading" class="acc-card">
+    <p class="acc-muted">Loading…</p>
+  </section>
+
+  <!-- ── Signed out ──────────────────────────────────────────────────── -->
+  <section id="state-auth" class="acc-card" hidden>
+    <h1 class="acc-title">Your account</h1>
+    <p class="acc-sub">
+      Your plan follows your <strong>account</strong>, not the app you installed.
+      Buy here and it works in the app — whichever store you got it from.
+    </p>
+
+    <div class="acc-tabs" role="tablist">
+      <button class="acc-tab active" data-tab="signin" role="tab">Sign in</button>
+      <button class="acc-tab" data-tab="signup" role="tab">Create account</button>
+    </div>
+
+    <form id="form-signin" class="acc-form">
+      <label class="acc-label" for="si-email">Email</label>
+      <input class="acc-input" id="si-email" type="email" autocomplete="email" required>
+      <label class="acc-label" for="si-pass">Password</label>
+      <input class="acc-input" id="si-pass" type="password" autocomplete="current-password" required>
+      <button class="btn btn-dark acc-submit" type="submit">Sign in</button>
+      <button class="acc-link" type="button" id="go-forgot">Forgotten your password?</button>
+    </form>
+
+    <form id="form-signup" class="acc-form" hidden>
+      <label class="acc-label" for="su-name">Name</label>
+      <input class="acc-input" id="su-name" type="text" autocomplete="name" minlength="2" maxlength="40" required>
+      <label class="acc-label" for="su-email">Email</label>
+      <input class="acc-input" id="su-email" type="email" autocomplete="email" required>
+      <label class="acc-label" for="su-pass">Password</label>
+      <input class="acc-input" id="su-pass" type="password" autocomplete="new-password" minlength="8" required>
+      <p class="acc-hint">At least 8 characters.</p>
+      <button class="btn btn-dark acc-submit" type="submit">Create account</button>
+    </form>
+
+    <p id="auth-msg" class="acc-msg" hidden></p>
+  </section>
+
+  <!-- ── Confirm email ───────────────────────────────────────────────── -->
+  <section id="state-verify" class="acc-card" hidden>
+    <h1 class="acc-title">Check your email</h1>
+    <p class="acc-sub">We sent a 6-digit code to <strong id="verify-email"></strong>.</p>
+    <form id="form-verify" class="acc-form">
+      <label class="acc-label" for="vf-code">Confirmation code</label>
+      <input class="acc-input acc-code" id="vf-code" type="text" inputmode="numeric"
+             pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" required>
+      <button class="btn btn-dark acc-submit" type="submit">Confirm</button>
+      <button class="acc-link" type="button" id="go-resend">Send it again</button>
+    </form>
+    <p id="verify-msg" class="acc-msg" hidden></p>
+  </section>
+
+  <!-- ── Reset password ──────────────────────────────────────────────── -->
+  <section id="state-forgot" class="acc-card" hidden>
+    <h1 class="acc-title">Reset your password</h1>
+    <p class="acc-sub">We'll email you a 6-digit code.</p>
+    <form id="form-forgot" class="acc-form">
+      <label class="acc-label" for="fg-email">Email</label>
+      <input class="acc-input" id="fg-email" type="email" autocomplete="email" required>
+      <button class="btn btn-dark acc-submit" type="submit">Send code</button>
+    </form>
+    <form id="form-reset" class="acc-form" hidden>
+      <label class="acc-label" for="rs-code">Code</label>
+      <input class="acc-input acc-code" id="rs-code" type="text" inputmode="numeric"
+             pattern="[0-9]{6}" maxlength="6" required>
+      <label class="acc-label" for="rs-pass">New password</label>
+      <input class="acc-input" id="rs-pass" type="password" autocomplete="new-password" minlength="8" required>
+      <button class="btn btn-dark acc-submit" type="submit">Set new password</button>
+    </form>
+    <button class="acc-link" type="button" id="back-signin">Back to sign in</button>
+    <p id="forgot-msg" class="acc-msg" hidden></p>
+  </section>
+
+  <!-- ── Signed in ───────────────────────────────────────────────────── -->
+  <section id="state-account" hidden>
+    <div class="acc-card">
+      <div class="acc-head">
+        <div>
+          <h1 class="acc-title" id="acc-name">Your account</h1>
+          <p class="acc-sub" id="acc-email"></p>
+        </div>
+        <button class="acc-link" type="button" id="go-signout">Sign out</button>
+      </div>
+
+      <div class="acc-plan" id="acc-plan">
+        <div class="acc-plan-row">
+          <span class="acc-plan-label">Plan</span>
+          <span class="acc-plan-value" id="plan-name">—</span>
+        </div>
+        <div class="acc-plan-row" id="plan-today-row">
+          <span class="acc-plan-label">Today</span>
+          <span class="acc-plan-value" id="plan-today">—</span>
+        </div>
+        <div class="acc-meter" id="plan-meter" hidden>
+          <div class="acc-meter-fill" id="plan-meter-fill"></div>
+        </div>
+        <p class="acc-hint" id="plan-resets"></p>
+
+        <!-- Only shown while a subscription is actually renewing. Two steps on
+             purpose: the first click explains what cancelling does, the second
+             does it. -->
+        <div class="acc-sub-manage" id="sub-manage" hidden>
+          <p class="acc-hint" id="sub-renews"></p>
+          <button class="acc-link" type="button" id="go-cancel-sub">Cancel subscription</button>
+
+          <div class="acc-confirm" id="sub-confirm" hidden>
+            <p class="acc-confirm-title">Stop your subscription renewing?</p>
+            <p class="acc-hint" id="sub-confirm-detail"></p>
+            <div class="acc-confirm-actions">
+              <button class="btn btn-ghost" type="button" id="go-cancel-keep">Keep my plan</button>
+              <button class="btn btn-dark" type="button" id="go-cancel-confirm">Yes, cancel renewal</button>
+            </div>
+          </div>
+        </div>
+        <!-- OUTSIDE #sub-manage on purpose: cancelling hides that block (there
+             is no longer a renewal to manage), which would take the
+             confirmation message down with it at the exact moment it matters. -->
+        <p class="acc-msg" id="sub-msg" hidden></p>
+      </div>
+    </div>
+
+    <div class="acc-card">
+      <h2 class="acc-title acc-title-sm">Upgrade</h2>
+      <p class="acc-sub">
+        A one-off payment or a subscription — both unlock in the app straight away.
+      </p>
+      <div class="acc-plans" id="plan-cards"></div>
+      <p class="acc-hint acc-hint-legal">
+        Prices include GST. Access is granted immediately, so <strong>all purchases are
+        final and non-refundable</strong> — try the free hour a day first. If something
+        goes wrong, <a href="/support">raise a support ticket</a> and we will look at it.
+        Full <a href="/refunds">refund policy</a>.
+      </p>
+    </div>
+
+    <div class="acc-card">
+      <h2 class="acc-title acc-title-sm">Have a code?</h2>
+      <form id="form-promo" class="acc-form acc-form-inline">
+        <input class="acc-input" id="promo-code" type="text" placeholder="Enter code"
+               maxlength="40" autocapitalize="characters" required>
+        <button class="btn btn-dark" type="submit">Redeem</button>
+      </form>
+      <p id="promo-msg" class="acc-msg" hidden></p>
+    </div>
+
+    <p id="acc-msg" class="acc-msg" hidden></p>
+  </section>
+
+</main>
+
+<footer class="footer">
+  <div class="footer-inner">
+    <span>&copy; <span id="year"></span> GamepadOS</span>
+    <nav class="footer-links">
+      <a href="/privacy">Privacy</a>
+      <a href="/refunds">Refunds</a>
+      <a href="/support">Support</a>
+      <a href="/contact">Contact</a>
+      <a href="https://www.instagram.com/gamepados_official/" target="_blank" rel="noopener">Instagram</a>
+    </nav>
+  </div>
+</footer>
+
+<script type="module" src="/js/account.js"></script>
+<script type="module" src="/js/nav-auth.js"></script>
+</body>
+</html>

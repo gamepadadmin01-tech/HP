@@ -73,7 +73,7 @@ export function PlaytimeToast() {
               {minutes} min left
             </span>
             <span className="text-[11px]" style={{ color: "#9AA4B4" }}>
-              {urgent ? "wrapping up soon" : "today"}
+              {urgent ? "wrapping up soon" : "of play time"}
             </span>
           </motion.div>
         )}

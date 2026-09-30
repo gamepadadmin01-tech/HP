@@ -3,14 +3,15 @@
 // One button, used on the out-of-time screen, the guest plans screen and the
 // signed-in plan panel. Renders nothing in builds without ads, for Lifetime,
 // and until the plan is known — see canShowAdButton in store/rewardedAd.ts.
-// Under it: what the player has saved from ads, or the result of the last ad.
+// Under it: what the player has saved, or the result of the last ad. Hidden,
+// with a one-line note instead, once an hour or more is held (2026-09-30).
 
 import React, { useEffect, useSyncExternalStore } from "react";
 import { PlayCircle, Loader2 } from "lucide-react";
 import { getSession, onSessionChange } from "../store/account";
 import { getBillingState, onBillingChange, formatDuration } from "../store/billing";
 import { guestTrial } from "../store/guestTrial";
-import { canShowAdButton, getAdState, onAdChange, onAdCredited, watchAd } from "../store/rewardedAd";
+import { adCapReached, canShowAdButton, getAdState, onAdChange, onAdCredited, watchAd } from "../store/rewardedAd";
 import { adPrivacyOptionsRequired, preloadRewardedAd, showAdPrivacyOptions } from "../platform/native";
 
 const ACCENT = "var(--calm-accent, #abc8db)";
@@ -26,7 +27,16 @@ export function AdRewardButton({ onCredited }: { onCredited?: () => void }) {
   useEffect(() => { preloadRewardedAd(); }, []);
   useEffect(() => (onCredited ? onAdCredited(onCredited) : undefined), [onCredited]);
 
-  if (!canShowAdButton()) return null;
+  if (!canShowAdButton()) {
+    // Over an hour held (2026-09-30 cap): no button, but say why -- and keep
+    // the "+30 minutes added" that pushed them over visible for its moment.
+    if (!adCapReached()) return null;
+    const done = ad.phase === "done" ? ad.message : "";
+    return <p role="status" className="w-full max-w-xs text-xs text-center"
+      style={{ color: done ? GOOD : MUTED }}>
+      {done || "You have an hour or more saved. Ads come back when it drops below an hour."}
+    </p>;
+  }
 
   const bank = session
     ? billing.entitlement?.adTime?.bankSeconds ?? 0
@@ -56,7 +66,7 @@ export function AdRewardButton({ onCredited }: { onCredited?: () => void }) {
         style={{ color: note ? (ad.phase === "error" ? DANGER : GOOD) : MUTED }}>
         {note
           || (bank > 0
-            ? `Saved from ads: ${formatDuration(bank)} · never expires`
+            ? `Saved: ${formatDuration(bank)} · never expires`
             : "Optional. Each ad adds 30 minutes that never expire.")}
       </p>
       {adPrivacyOptionsRequired() && (

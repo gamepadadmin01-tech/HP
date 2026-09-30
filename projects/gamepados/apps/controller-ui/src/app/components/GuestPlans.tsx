@@ -6,7 +6,6 @@ import { getAppInfo } from "../platform/native";
 import { getSession, onSessionChange } from "../store/account";
 import { guestTrial } from "../store/guestTrial";
 import { formatDuration } from "../store/billing";
-import { getPlaytimeState, onPlaytimeChange } from "../store/playtime";
 import { AccountAuth } from "./AccountAuth";
 import { PlanCard } from "./PlanPanel";
 import { AdRewardButton } from "./AdRewardButton";
@@ -31,7 +30,7 @@ export function GuestPlans() {
     getPlans(getAppInfo().channel || "direct").then(value => {
       if (!cancelled) setCatalogue(value);
     }).catch(() => {
-      if (!cancelled) setError("Plans could not load. Your free trial still works offline.");
+      if (!cancelled) setError("Plans could not load. Your play time still works offline.");
     }).finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [attempt, session?.token, playComingSoon]);
@@ -44,8 +43,8 @@ export function GuestPlans() {
 
   if (playComingSoon) return <section className="guest-plans space-y-4">
     <div className="guest-trial-summary"><Clock size={22} aria-hidden="true" /><div>
-      <h2 className="text-lg font-semibold calm-ink">30 minutes, every day</h2>
-      <p className="text-sm mt-1 calm-muted">{expired ? "Today's free time is used. Watch an ad for 30 more minutes, or come back after midnight." : `${formatDuration(trial.remainingSeconds)} to play. No sign-in needed.`}</p>
+      <h2 className="text-lg font-semibold calm-ink">Your play time</h2>
+      <p className="text-sm mt-1 calm-muted">{expired ? "Your free time is used up. Watch an ad for 30 more minutes." : `${formatDuration(trial.remainingSeconds)} to play. No sign-in needed.`}</p>
     </div></div>
     {/* Play build: rewarded ads are the ONLY way to more time -- no plans, no
         Lifetime, no link to buy on the website (owner's decision, 2026-09-30). */}
@@ -56,10 +55,10 @@ export function GuestPlans() {
     <div className="guest-trial-summary">
       <Clock size={22} aria-hidden="true" />
       <div>
-        <h2 className="text-lg font-semibold calm-ink">{selected ? "Your selected plan" : expired ? "Keep playing your way" : "30 minutes, every day"}</h2>
+        <h2 className="text-lg font-semibold calm-ink">{selected ? "Your selected plan" : expired ? "Keep playing your way" : "Your play time"}</h2>
         <p className="text-sm mt-1 calm-muted">
           {selected ? chosen?.displayName || "Choose a plan below"
-            : expired ? "Today's free time is used. Watch an ad for 30 more minutes, choose a plan, or return after midnight."
+            : expired ? "Your free time is used up. Watch an ad for 30 more minutes, or get Lifetime."
             : `${formatDuration(trial.remainingSeconds)} to play. No sign-in needed.`}
         </p>
       </div>
@@ -79,16 +78,10 @@ export function GuestPlans() {
             onChoose={session ? undefined : p => setSelected(p.code)} />)}
           {offers.length === 0 && <p className="text-sm calm-muted">No plans are available for purchase right now.</p>}
           <p className="text-xs calm-muted">{session ? "Payment is confirmed before access is added." : "Compare first. Sign in only when you choose to buy."}</p>
-        </div> : <p className="text-sm calm-muted">Purchases are not available in this build. Your daily free trial is available here.</p>}
+        </div> : <p className="text-sm calm-muted">Purchases are not available in this build.</p>}
     </>}
   </section>;
 }
 
-/** Only this small readout renders on each clock tick, never the pad SVG. */
-export function GuestTrialPill({ onPlans }: { onPlans: () => void }) {
-  const state = useSyncExternalStore(onPlaytimeChange, getPlaytimeState, getPlaytimeState);
-  return <button data-nx="1" onClick={onPlans} className="guest-trial-pill"
-    aria-label="View subscription plans">
-    <Clock size={12} /> {formatDuration(state.remainingSeconds ?? 1800)} free · Plans
-  </button>;
-}
+// (GuestTrialPill was removed on 2026-09-30: PlaytimeChip replaced it on the
+// controller. Its CSS class, .guest-trial-pill, is still used by the chip.)

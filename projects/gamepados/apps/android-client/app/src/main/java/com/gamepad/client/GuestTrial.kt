@@ -15,7 +15,18 @@ internal class GuestTrial(context: Context, private val onExpired: () -> Unit) {
         prefs.getString("zone", null) ?: java.util.TimeZone.getDefault().id,
         prefs.getLong("lastWall", 0),
         prefs.getLong("bankMs", 0),
+        prefs.getBoolean("welcomeGranted", false),
     )
+
+    init {
+        // The one-time 30 minutes (2026-09-30): granted on the first launch of a build that has
+        // this rule — including existing installs, once — and never again (flag persisted).
+        synchronized(this) {
+            if (quota.ensureWelcome()) {
+                prefs.edit().putLong("bankMs", quota.bankMs).putBoolean("welcomeGranted", true).apply()
+            }
+        }
+    }
     private val ticker = object : Runnable {
         override fun run() {
             val expired = synchronized(this@GuestTrial) {
@@ -37,7 +48,7 @@ internal class GuestTrial(context: Context, private val onExpired: () -> Unit) {
         quota.advance(System.currentTimeMillis(), SystemClock.elapsedRealtime())
         prefs.edit().putLong("usedMs", quota.usedMs).putLong("resetsAt", quota.resetsAt)
             .putLong("lastWall", quota.lastWall).putString("zone", quota.zoneId)
-            .putLong("bankMs", quota.bankMs).apply()
+            .putLong("bankMs", quota.bankMs).putBoolean("welcomeGranted", quota.welcomeGranted).apply()
     }
 
     @Synchronized fun setActive(on: Boolean): String {
@@ -52,6 +63,7 @@ internal class GuestTrial(context: Context, private val onExpired: () -> Unit) {
         return JSONObject().put("remainingSeconds", quota.remainingMs() / 1000.0)
             .put("freeRemainingSeconds", quota.freeRemainingMs() / 1000.0)
             .put("bankSeconds", quota.bankMs / 1000.0)
+            .put("canEarnAd", quota.canEarnAd())
             .put("limitSeconds", GuestQuota.LIMIT_MS / 1000)
             .put("resetsAt", quota.resetsAt).toString()
     }
