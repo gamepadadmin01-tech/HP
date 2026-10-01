@@ -247,8 +247,11 @@ android {
         // 56 = 1.4.2: guest daily trial, plan browsing and gyro lifecycle fixes.
         // 57 = 1.4.3: show the guest introduction only once per installation.
         // 60 = 1.4.6: optional rewarded ads — "Watch an ad · +30 min" (playstore, direct, uptodown).
-        versionCode = 60
-        versionName = "1.4.6"
+        // 61 = 1.4.7 (2026-10-02): 1.4.6's code plus the held-input fix (a held LT dropped about once
+        //      a minute), a clear controller screen (no time chip, no latency badge), the orange icon
+        //      and the one-time-30-minutes rules. Bumped so the owner can upload it to Play.
+        versionCode = 61
+        versionName = "1.4.7"
 
         // AdMob test IDs by default; the release build type swaps in the live ones (see top of file).
         buildConfigField("String", "ADMOB_REWARDED_ID", "\"$admobTestRewardedId\"")
