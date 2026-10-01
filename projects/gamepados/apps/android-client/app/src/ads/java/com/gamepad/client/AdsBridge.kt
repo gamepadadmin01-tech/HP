@@ -157,13 +157,16 @@ open class AdsBridge(activity: MainActivity) : UpdaterBridgeBase(activity) {
         }
         var earned = false
         rewarded.fullScreenContentCallback = object : FullScreenContentCallback() {
+            // No automatic load() of the next ad here (removed 2026-10-01). The usual moment an ad
+            // closes is the out-of-time screen, and play resumes straight after — so the next ad's
+            // video was downloading over the player's Wi-Fi while they raced (lag and jitter
+            // spikes). The next ad now loads when the button is next on screen (preloadRewardedAd)
+            // or on the tap itself.
             override fun onAdDismissedFullScreenContent() {
                 report(if (earned) "rewarded" else "closed", null, guest = !signedIn)
-                load()   // the next one is ready before they want it
             }
             override fun onAdFailedToShowFullScreenContent(error: AdError) {
                 report("failed", "The ad could not play. Try again in a minute.")
-                load()
             }
         }
         rewarded.show(activity) { _ ->

@@ -169,9 +169,39 @@ class NativeInputEngine(private val activity: MainActivity) {
 
     // ═══════════════════════════ Bridge entry points ═══════════════════════════
 
-    /** Parse + store the pad geometry JS published. Clears any in-flight touches. */
+    /** What the last setGeometry was built from (matrix + widgets + stick feel). */
+    private var lastGeometrySig: String? = null
+
+    /** Parse + store the pad geometry JS published.
+     *
+     *  Clears in-flight touches ONLY when the pad itself changed (widgets, screen matrix or stick
+     *  feel). A re-send of the same pad — e.g. because an exclusion rect moved — just swaps the
+     *  exclusions and keeps every held finger. Until 2026-10-01 every call cleared: the 1.4.6 time
+     *  chip re-sent the geometry once a minute, and a held LT (an F1 accelerator) dropped each time. */
     fun setGeometry(json: String) {
         val o = JSONObject(json)
+        val sig = buildString {
+            append(o.optJSONArray("matrix")?.toString()); append('|')
+            append(o.optJSONArray("widgets")?.toString()); append('|')
+            append(o.optString("stickMode")); append('|')
+            append(o.optBoolean("stickFollow", true)); append('|')
+            append(o.optDouble("curveExp", 1.0))
+        }
+        if (sig == lastGeometrySig && haveMatrix) {
+            val exArr = o.optJSONArray("exclusions") ?: JSONArray()
+            val ex = FloatArray(exArr.length() * 4)
+            for (i in 0 until exArr.length()) {
+                val r = exArr.getJSONObject(i)
+                ex[i * 4] = r.getDouble("x").toFloat(); ex[i * 4 + 1] = r.getDouble("y").toFloat()
+                ex[i * 4 + 2] = r.getDouble("w").toFloat(); ex[i * 4 + 3] = r.getDouble("h").toFloat()
+            }
+            synchronized(lock) {
+                exclusions = ex
+                dpr = o.optDouble("dpr", dpr.toDouble()).toFloat().coerceAtLeast(0.1f)
+                hapticsEnabled = o.optBoolean("hapticsEnabled", hapticsEnabled)
+            }
+            return
+        }
         val m = o.getJSONArray("matrix")
         val a = m.getDouble(0).toFloat(); val b = m.getDouble(1).toFloat()
         val c = m.getDouble(2).toFloat(); val d = m.getDouble(3).toFloat()
@@ -230,6 +260,7 @@ class NativeInputEngine(private val activity: MainActivity) {
             hapticsEnabled = o.optBoolean("hapticsEnabled", hapticsEnabled)
             clearAllInputLocked()
         }
+        lastGeometrySig = sig   // only once the new pad is fully in place
         scheduleVisuals()
     }
 

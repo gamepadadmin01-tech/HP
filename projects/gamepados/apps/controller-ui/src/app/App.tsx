@@ -7,7 +7,6 @@ import { Home, Usb, Activity, Gamepad2, X, Settings, User, Check, ArrowUpRight, 
 import { QRScanOverlay } from "./components/Dialogs";
 import { PlaytimeLockout } from "./components/PlaytimeLockout";
 import { PlaytimeToast } from "./components/PlaytimeToast";
-import { PlaytimeChip, NX_CHANGED } from "./components/PlaytimeChip";
 import { beginPlay, endPlay, getPlaytimeState, isBlocked, onPlaytimeChange } from "./store/playtime";
 import { onDashboardTabRequest, requestDashboardTab } from "./store/navIntent";
 import { LaunchNotice } from "./components/LaunchNotice";
@@ -1147,29 +1146,9 @@ function ControllerScreen({ onBack, isActive: screenActive, activeMapping, custo
   // always-streaming fix. One source of truth for "the user is playing".
   const gyroTilt = useGyro(gyroMaxAngle, gyroDeadzone, () => sendTelemetryRef.current(), gyroOn, isActive, gyroWheel);
   const lastGyroHitMax = useRef({ x: false, y: false });
-  const [realTelemetry, setRealTelemetry] = useState(null);
-
-  useEffect(() => {
-    if (!isActive) return;
-    const bridge = (window as any).AndroidBridge;
-    if (bridge && bridge.getNetworkTelemetryJson) {
-      const interval = setInterval(() => {
-        const w = (window as any).__usbWS;
-        if (w && w.isOpen()) {
-          setRealTelemetry({ linkAlive: true, latency: w.latency, connectionType: "usbdebug" });
-          return;
-        }
-        try {
-          const json = bridge.getNetworkTelemetryJson();
-          const stats = JSON.parse(json);
-          setRealTelemetry(stats);
-        } catch (e) {
-          console.error("Failed to parse network telemetry JSI", e);
-        }
-      }, 200);
-      return () => clearInterval(interval);
-    }
-  }, [isActive]);
+  // (The on-controller latency badge and the 200 ms telemetry poll that fed it
+  // were removed on 2026-10-01: each poll stored a new object and re-rendered
+  // the whole pad five times a second, for a number players don't need.)
 
   // Web browser emulation buffer logging state
   const [hudTelemetry, setHudTelemetry] = useState<{
@@ -1524,10 +1503,14 @@ function ControllerScreen({ onBack, isActive: screenActive, activeMapping, custo
         setLtFill(0); setRtFill(0);
       } catch {}
     };
-    // The geometry payload, built in ONE place. Activation sends it, and so does
-    // a moved data-nx element (the draggable time chip, PlaytimeChip.tsx): the
-    // native layer only knows the exclusion rects it was last sent. Re-sending
-    // mid-play is safe -- setGeometry swaps the maps and keeps held fingers.
+    // The geometry payload, built in ONE place, sent on activation.
+    //
+    // Do NOT re-send it mid-play for cosmetic reasons. Until 2026-10-01 the
+    // draggable time chip re-sent it on every label change (once a minute), and
+    // NativeInputEngine.setGeometry CLEARED all held input on each call -- the
+    // F1 accelerator (held LT) dropped every minute. setGeometry now keeps held
+    // fingers when the pad and matrix are unchanged, but sending less is still
+    // the rule.
     const geometryJson = (m: DOMMatrix) => {
       const exclusions = Array.from(document.querySelectorAll("[data-nx]")).map((el) => {
         const r = (el as HTMLElement).getBoundingClientRect();
@@ -1564,13 +1547,6 @@ function ControllerScreen({ onBack, isActive: screenActive, activeMapping, custo
     };
     // Double-rAF so the svg's CTM is read after layout has settled.
     raf1 = requestAnimationFrame(() => { raf2 = requestAnimationFrame(tryActivate); });
-    const onNxChanged = () => {
-      if (cancelled || !nativeActiveRef.current) return;
-      const m = svgRef.current && svgRef.current.getScreenCTM();
-      if (!m) return;
-      try { bridge.setNativeInputGeometry(geometryJson(m)); } catch {}
-    };
-    window.addEventListener(NX_CHANGED, onNxChanged);
     const transportPoll = setInterval(() => {
       if (cancelled) return;
       if (usbWS.isOpen()) deactivate();
@@ -1580,7 +1556,6 @@ function ControllerScreen({ onBack, isActive: screenActive, activeMapping, custo
       cancelled = true;
       cancelAnimationFrame(raf1); cancelAnimationFrame(raf2);
       clearInterval(transportPoll);
-      window.removeEventListener(NX_CHANGED, onNxChanged);
       deactivate();
     };
   }, [isActive, nativeFlag, activePad, windowSize, hasSession, outOfTime, stickFeelNonce]);
@@ -1671,38 +1646,7 @@ function ControllerScreen({ onBack, isActive: screenActive, activeMapping, custo
         ← BACK
       </button>
 
-      {/* Live link-quality badge. Latency is a smoothed ACK round trip; jitter
-          is the average change between consecutive RTT samples. Showing both
-          catches a link that has a good average but feels jerky in play. */}
-      {(() => {
-        const lat: number | null = (realTelemetry && typeof (realTelemetry as any).latency === "number")
-          ? (realTelemetry as any).latency : null;
-        const jitter: number | null = (realTelemetry && typeof (realTelemetry as any).jitter === "number")
-          ? (realTelemetry as any).jitter : null;
-        const connected = !!(realTelemetry && (realTelemetry as any).linkAlive);
-        // Two links can have the same average RTT but very different feel. Add
-        // two jitter units to the colour threshold without changing the RTT shown.
-        const qualityMs = lat == null ? null : lat + Math.max(0, jitter ?? 0) * 2;
-        const color = qualityMs == null ? "rgba(255,255,255,0.4)"
-          : qualityMs < 20 ? "#34d399" : qualityMs < 40 ? "#fbbf24" : "#f87171";
-        return (
-          <div className="absolute z-10 flex items-center gap-1 px-2 py-1 rounded-full pointer-events-none"
-            style={{
-              bottom: "max(6px, env(safe-area-inset-bottom))",
-              left: "max(6px, env(safe-area-inset-left))",
-              background: "rgba(0,0,0,0.55)",
-              border: "1px solid rgba(255,255,255,0.1)",
-              fontFamily: "'Space Grotesk','Inter',sans-serif",
-            }}>
-            <span className="w-1.5 h-1.5 rounded-full" style={{ background: color, boxShadow: `0 0 6px ${color}` }} />
-            <span className="text-[10px] font-bold tabular-nums" style={{ color }}>
-              {connected && lat != null
-                ? `${lat.toFixed(1)} ms${jitter != null && jitter >= 0.1 ? ` · j${jitter.toFixed(1)}` : ""}`
-                : "— ms"}
-            </span>
-          </div>
-        );
-      })()}
+      {/* (Latency badge removed 2026-10-01 -- owner's decision; see the note where its poll was.) */}
 
       {/* Gyro Fluid Indicator — its OWN layer at zIndex 0, BEHIND the button
           canvas (z-[5]). The buttons carry black silhouettes that occlude it
@@ -2153,12 +2097,11 @@ function ControllerScreen({ onBack, isActive: screenActive, activeMapping, custo
         )}
       </AnimatePresence>
 
-      {/* Time left (free + ad bank), for everyone on a time limit -- hidden on
-          Lifetime. Draggable anywhere; a tap goes where more time is. Replaced
-          the signed-out-only GuestTrialPill (2026-09-30). */}
-      {!outOfTime && <PlaytimeChip onTap={() => {
-        requestDashboardTab("account"); onBack();
-      }} />}
+      {/* No time display on the controller (owner's decision, 2026-10-01): it
+          distracted players, and the dashboard and Time tab already show it.
+          The draggable PlaytimeChip that sat here also caused the 1.4.6 held-input
+          drop -- each label change re-sent the native geometry, which released
+          every held button (see the geometry comment above). */}
     </div>
   );
 }
@@ -3937,7 +3880,10 @@ export default function App() {
   // #4: if a prior session queued a rating while offline, sync it now / on reconnect.
   useEffect(() => { initFeedbackSync(); }, []);
   const [rumbleOn, setRumbleOn] = useState(true);
-  const realTelemetry = useNetworkTelemetry(true);
+  // Paused while the controller is open (2026-10-01): each 500 ms poll set new
+  // state here, re-rendering the whole app -- the pad included -- twice a second
+  // during play. Only the dashboard shows these numbers.
+  const realTelemetry = useNetworkTelemetry(view !== "controller");
 
   // The native app-icon SplashScreen is the ONLY intro. Signal it to dismiss once
   // the UI has painted a STABLE, FINAL-LOOKING frame — otherwise the splash lifts
