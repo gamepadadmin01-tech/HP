@@ -20,6 +20,7 @@ import { ShellMotion } from "./components/ShellMotion";
 import { ShellScreenTransition } from "./components/ShellScreenTransition";
 import { SignInScreen } from "./components/SignInScreen";
 import { Ticket } from "lucide-react";
+import { getAppInfo } from "./platform/native";
 import { motion, AnimatePresence, useIsPresent, useReducedMotion } from "framer-motion";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -3643,7 +3644,7 @@ function DashboardScreen({
 
       {!authOpen && <nav className="calm-nav" aria-label="Main navigation">
         {TABS.map(({ id, label, Icon }) => <motion.button data-no-shell-press data-testid={`nav-${id}-button`} key={id} onClick={() => changeTab(id)} aria-current={tab === id ? "page" : undefined} whileTap={reduceShellMotion ? undefined : { scale: .94 }}>
-          <span className="console-nav-icon">{tab === id && <motion.span className="console-nav-active" layoutId="active-tab" transition={{ type: "spring", stiffness: 400, damping: 30 }} />}{id === 'account' && !session ? <Ticket size={20} /> : <Icon size={20} />}</span><span>{id === 'account' && !session ? 'Plans' : label}</span>
+          <span className="console-nav-icon">{tab === id && <motion.span className="console-nav-active" layoutId="active-tab" transition={{ type: "spring", stiffness: 400, damping: 30 }} />}{id === 'account' && !session ? <Ticket size={20} /> : <Icon size={20} />}</span><span>{id === 'account' && !session ? (getAppInfo().channel === 'playstore' ? 'Time' : 'Plans') : label}</span>
         </motion.button>)}
       </nav>}
 
