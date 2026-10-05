@@ -80,6 +80,14 @@ struct sockaddr_in serverAddr;
 // Discovery is explicit: directed USB broadcasts need not end in .255.
 bool discoveringPeer = false;
 uint32_t discoveryBroadcast = INADDR_BROADCAST;
+// The PC address from the QR code / saved pairing (Wi-Fi only; 0 for USB).
+// Added 2026-10-05: while discovering, every frame ALSO goes here. Broadcast
+// alone could never find the PC again when the phone is the Wi-Fi HOTSPOT: a
+// limited broadcast follows the default route, which on a hotspot phone is
+// mobile data, so it never reaches the PC. That stranded the app after it sat
+// in recents (frozen > 3.5 s -> fell back to broadcast -> no way back short
+// of a rescan).
+uint32_t homePeer = 0;
 
 // ── Peer recovery ────────────────────────────────────────────────────────────
 // Start of the current "have we heard anything?" window, CLOCK_MONOTONIC ns. Set
@@ -584,6 +592,13 @@ void* txThreadLoop(void* arg) {
                 // destination so the datagram still reaches the broadcast address.
                 sent = sendto(udpSocket, outBuf, outLen, MSG_DONTWAIT,
                               (struct sockaddr*)&serverAddr, sizeof(serverAddr));
+                // ...and to the paired PC's own address (see homePeer). An ACK from
+                // it locks on through the normal discovery path below.
+                if (discoveringPeer && homePeer != 0 && homePeer != serverAddr.sin_addr.s_addr) {
+                    struct sockaddr_in home = serverAddr;
+                    home.sin_addr.s_addr = homePeer;
+                    sendto(udpSocket, outBuf, outLen, MSG_DONTWAIT, (struct sockaddr*)&home, sizeof(home));
+                }
             }
             if (sent > 0) {
                 packetCount++;
@@ -997,6 +1012,11 @@ Java_com_gamepad_client_MainActivity_nativeGrxSendRaw(JNIEnv* env, jobject, jbyt
         } else {
             sendto(udpSocket, b, (size_t)n, MSG_DONTWAIT,
                    (struct sockaddr*)&serverAddr, sizeof(serverAddr));
+            if (discoveringPeer && homePeer != 0 && homePeer != serverAddr.sin_addr.s_addr) {
+                struct sockaddr_in home = serverAddr;   // same as the hot path: also the paired PC
+                home.sin_addr.s_addr = homePeer;
+                sendto(udpSocket, b, (size_t)n, MSG_DONTWAIT, (struct sockaddr*)&home, sizeof(home));
+            }
         }
         env->ReleaseByteArrayElements(data, b, JNI_ABORT);
     }
@@ -1052,6 +1072,7 @@ Java_com_gamepad_client_MainActivity_initNetworkNative(JNIEnv* env, jobject thiz
     inet_pton(AF_INET, ip, &serverAddr.sin_addr);
     discoveringPeer = std::strcmp(key, "usb") == 0;
     discoveryBroadcast = discoveringPeer ? serverAddr.sin_addr.s_addr : htonl(INADDR_BROADCAST);
+    homePeer = discoveringPeer ? 0 : serverAddr.sin_addr.s_addr;
 
     env->ReleaseStringUTFChars(ipStr, ip);
     env->ReleaseStringUTFChars(keyStr, key);

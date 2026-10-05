@@ -3975,9 +3975,21 @@ export default function App() {
         try { t = JSON.parse(bridge?.getNetworkTelemetryJson?.() || '{}'); confirmWireless(t); } catch {}
         try { broadcast = bridge?.getUsbBroadcastAddress?.() || ''; } catch {}
         return { running: !!t.engineRunning, alive: !!t.linkAlive, kind: t.connectionType || '',
-          broadcast, wirelessIntentAt: (window as any).__wirelessIntentAt || 0, pref: getWiredPref() };
+          broadcast, wirelessIntentAt: (window as any).__wirelessIntentAt || 0, pref: getWiredPref(),
+          sinceAck: typeof t.sinceAck === 'number' ? t.sinceAck : -1,
+          hidden: document.hidden, canRestoreWifi: !!savedPc() };
       },
       stopNative: () => { try { bridge?.stopEngine?.(); } catch {} },
+      // Wi-Fi self-heal (transportCoordinator.ts): the same thing a QR rescan
+      // does, with the saved PC. Both calls queue on Android's UI thread in
+      // order, so the stop finishes before the new session starts.
+      restartWireless: () => {
+        const pc = savedPc();
+        if (!pc || !bridge?.connectToPC) return;
+        try { bridge.stopEngine?.(); } catch {}
+        pendingWireless(pc);
+        try { bridge.connectToPC(pc.ip, pc.port, pc.key); } catch {}
+      },
       startTether: broadcast => {
         try { bridge?.connectToPC?.(broadcast, 7777, 'usb'); } catch {}
         setUsbToast(true); clearTimeout(toastTimer);

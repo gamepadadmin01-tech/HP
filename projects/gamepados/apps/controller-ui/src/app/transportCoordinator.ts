@@ -3,11 +3,32 @@ import { rememberMode, cancelPendingWireless } from './store/connectionMemory';
 export type TransportSnapshot = {
   running: boolean; alive: boolean; kind: string; broadcast: string;
   wirelessIntentAt: number; pref: 'auto' | 'tether' | 'usbdebug';
+  /** ms since the PC's last ACK; -1 = none since the engine (re)started. */
+  sinceAck?: number;
+  /** The app is in the background (document.hidden). */
+  hidden?: boolean;
+  /** A confirmed Wi-Fi PC is saved, so a reconnect knows where to go. */
+  canRestoreWifi?: boolean;
 };
+
+// ── Wi-Fi self-heal (added 2026-10-05) ──────────────────────────────────────
+// Leaving the app in recents and coming back stranded Wi-Fi: Android froze the
+// app, the PC heard nothing for > 3 s and dropped the phone (and its encryption
+// keys), and nothing on the phone ever started a fresh session — the player had
+// to scan the QR again. A Wi-Fi link that WAS answering and has been silent for
+// WIFI_STALL_MS is now restarted with the saved PC, exactly like a rescan, and
+// retried with backoff until the PC answers. Never in the background, and never
+// for a link that has not answered once (that is the VPN/firewall "no reply"
+// case, where input can still be working).
+const WIFI_STALL_MS = 6000;
+const WIFI_RETRY_MIN = 8000;
+const WIFI_RETRY_MAX = 30000;
 export function createTransportCoordinator(io: {
   now: () => number; read: () => TransportSnapshot;
   stopNative: () => void; startTether: (broadcast: string) => void;
   connectDebug: () => void; disconnectDebug: () => void;
+  /** Stop the engine and connect again to the saved Wi-Fi PC. */
+  restartWireless?: () => void;
 }) {
   let explicitUsb = false;
   let explicitWireless = false;
@@ -18,6 +39,9 @@ export function createTransportCoordinator(io: {
   let starting = false;
   let startRequestedAt = 0;
   let startedBroadcast = '';
+  let wifiHealing = false;
+  let wifiNext = 0;
+  let wifiDelay = WIFI_RETRY_MIN;
   const reset = () => { unhealthySince = null; nextAttempt = 0; retryDelay = 4000; startedBroadcast = ''; };
   function reconcile() {
     const s = io.read(), now = io.now();
@@ -28,6 +52,19 @@ export function createTransportCoordinator(io: {
       stopping = false;
     }
     if (starting && s.running) starting = false;
+    if (s.running && s.kind === 'wireless' && !explicitUsb) {
+      if (s.alive) {
+        wifiHealing = false; wifiNext = 0; wifiDelay = WIFI_RETRY_MIN;
+      } else if (io.restartWireless && s.canRestoreWifi && !s.hidden && now >= wifiNext &&
+                 (wifiHealing || (s.sinceAck ?? -1) > WIFI_STALL_MS)) {
+        // After the first restart sinceAck reads -1 again, so keep retrying on the
+        // backoff until an ACK arrives (wifiHealing), not on sinceAck.
+        wifiHealing = true;
+        wifiNext = now + wifiDelay; wifiDelay = Math.min(wifiDelay * 2, WIFI_RETRY_MAX);
+        io.restartWireless();
+        return;
+      }
+    }
     if (!explicitUsb && (explicitWireless || (s.alive && s.kind === 'wireless') ||
         (s.wirelessIntentAt > 0 && now - s.wirelessIntentAt < 8000))) {
       io.disconnectDebug(); reset(); return;

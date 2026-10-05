@@ -9,7 +9,7 @@ const {createTransportCoordinator}=await import('data:text/javascript;base64,'+B
 function fixture(overrides={}){
  let now=100000;const calls=[];
  const s={running:true,alive:true,kind:'wireless',broadcast:'192.168.42.255',wirelessIntentAt:0,pref:'auto',...overrides};
- const c=createTransportCoordinator({now:()=>now,read:()=>({...s}),stopNative:()=>calls.push('stop'),startTether:b=>{calls.push('tether:'+b);s.running=true;s.alive=false;s.kind='wired'},connectDebug:()=>calls.push('debug'),disconnectDebug:()=>calls.push('close-debug')});
+ const c=createTransportCoordinator({now:()=>now,read:()=>({...s}),stopNative:()=>calls.push('stop'),startTether:b=>{calls.push('tether:'+b);s.running=true;s.alive=false;s.kind='wired'},connectDebug:()=>calls.push('debug'),disconnectDebug:()=>calls.push('close-debug'),restartWireless:()=>{calls.push('wifi-restart');s.sinceAck=-1}});
  return {s,c,calls,advance:ms=>{now+=ms},stopped:()=>{s.running=false;s.alive=false;s.kind='none'}};
 }
 let count=0;const test=(name,fn)=>{fn();count++;console.log('PASS '+name)};
@@ -41,4 +41,14 @@ test('A delayed old WebSocket close cannot clear its replacement',()=>{
  vm.runInContext("onmessage({data:{cmd:'disconnect'}});onmessage({data:{cmd:'connect'}})",ctx);const current=sockets[1];current.readyState=1;current.onopen();old.onclose();assert.equal(messages.at(-1).v,true);
  vm.runInContext("onmessage({data:{cmd:'connect'}})",ctx);assert.equal(sockets.length,2);
 });
+// ── Wi-Fi self-heal (2026-10-05): back from recents without a rescan ──
+const stalled=o=>fixture({alive:false,sinceAck:60000,canRestoreWifi:true,hidden:false,...o});
+test('Back from recents: a stalled Wi-Fi link reconnects to the saved PC',()=>{const f=stalled();f.c.reconcile();assert.deepEqual(f.calls.filter(x=>x==='wifi-restart'),['wifi-restart'])});
+test('Wi-Fi reconnect retries with backoff until the PC answers',()=>{const f=stalled();f.c.reconcile();f.advance(1500);f.c.reconcile();assert.equal(f.calls.filter(x=>x==='wifi-restart').length,1,'not on every tick');f.advance(6500);f.c.reconcile();assert.equal(f.calls.filter(x=>x==='wifi-restart').length,2,'retried after 8 s even though sinceAck reads -1');f.advance(8000);f.c.reconcile();assert.equal(f.calls.filter(x=>x==='wifi-restart').length,2,'second wait is 16 s');f.advance(8000);f.c.reconcile();assert.equal(f.calls.filter(x=>x==='wifi-restart').length,3)});
+test('Wi-Fi reconnect stops once the PC answers, and starts fresh next time',()=>{const f=stalled();f.c.reconcile();f.s.alive=true;f.s.sinceAck=10;f.advance(20000);f.c.reconcile();assert.equal(f.calls.filter(x=>x==='wifi-restart').length,1);f.s.alive=false;f.s.sinceAck=3000;f.advance(1000);f.c.reconcile();assert.equal(f.calls.filter(x=>x==='wifi-restart').length,1,'a 3 s gap is not a stall');f.s.sinceAck=7000;f.c.reconcile();assert.equal(f.calls.filter(x=>x==='wifi-restart').length,2)});
+test('No Wi-Fi reconnect while the app is in the background',()=>{const f=stalled({hidden:true});f.c.reconcile();assert.ok(!f.calls.includes('wifi-restart'))});
+test('A link that never answered (VPN/firewall) is not restarted',()=>{const f=stalled({sinceAck:-1});f.advance(60000);f.c.reconcile();assert.ok(!f.calls.includes('wifi-restart'))});
+test('No Wi-Fi reconnect without a saved PC',()=>{const f=stalled({canRestoreWifi:false});f.c.reconcile();assert.ok(!f.calls.includes('wifi-restart'))});
+test('A short Wi-Fi blip is left alone',()=>{const f=stalled({sinceAck:4000});f.c.reconcile();assert.ok(!f.calls.includes('wifi-restart'))});
+test('USB sessions are never touched by the Wi-Fi reconnect',()=>{const f=stalled({kind:'wired',pref:'tether'});f.c.reconcile();assert.ok(!f.calls.includes('wifi-restart'))});
 console.log(`${count} transport regression cases passed`);

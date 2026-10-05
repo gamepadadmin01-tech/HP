@@ -67,9 +67,44 @@ hotspot, very close. The owner was sure the cause was on our side, and the code 
   - Holds are cleared when streaming stops and on a new session.
 - **`App.tsx`:** a same-size resize keeps the same `windowSize` object.
 
+## Second report the same day: back from recents needed a QR rescan
+**Symptom:** with the app in recents, coming back left it not connecting until the QR was scanned again.
+
+**Cause:** three things, all needed together.
+1. **Android freezes a backgrounded app.** The PC heard nothing for 3 s and dropped the pad. Its
+   idle tick then evicted the phone's GRX (encryption) state at once. The resumed phone kept sending
+   frames encrypted with the old keys; they were dropped and never answered.
+2. **On resume the engine fell back to broadcast immediately**, because the last ACK was more than
+   3.5 s old. On a phone hotspot a 255.255.255.255 broadcast follows the default route, which is
+   mobile data, so it never reaches the PC. The engine never retried the PC's own address.
+3. **Nothing on the phone ever started a fresh session for a stalled Wi-Fi link.** The transport
+   coordinator only retries USB tether.
+
+**Fixes:**
+- **Server (`net.rs`):**
+  - GRX state is kept for `GRX_KEEP` (10 min) after the pad session drops, via `grx_seen` refreshed
+    on the idle tick. A lone HELLO for an IP that never held a pad is still evicted at once.
+  - A HELLO now replaces an established GRX session when that IP has no live pad (anti-spoof is kept
+    while the pad is live).
+- **Engine (`gamepad-engine.cpp`):** `homePeer` = the QR IP. While discovering, every frame and every
+  handshake frame is also sent to it.
+- **UI (`transportCoordinator.ts` + `App.tsx`):** Wi-Fi self-heal.
+  - When the link is running, not alive, and either `sinceAck` > 6 s or a heal is already under way:
+    stop the engine, then `connectToPC(savedPc)`.
+  - Backoff is 8 → 16 → 30 s. Never while `document.hidden`, never without a saved PC, never for a
+    link that has not answered since it started. 8 new cases in `transport-switch.test.mjs`
+    (21 pass).
+
+**Verified:** `examples/resume_check.rs` is an encrypted fake phone. It plays, goes silent 5–6 s
+(pad dropped), then resumes WITHOUT a new handshake. Against the shipped 2.1.4 exe it got 97 ACKs on
+return, and the server logged `-127.0.0.1` then `+127.0.0.1`. Two new unit tests cover key retention
+and the HELLO rule.
+
+**Not verified:** a real phone frozen in recents on the hotspot.
+
 ## Builds
 - **PC server 2.1.4:** `releases/pc/2.1.4/actual/GamepadServer-Setup-2.1.4.exe`
-  - sha256 `bae83f65c5ba7b03538bd2f848f4d8dd089d7c93571284b7c52cd720b7f3f7de`
+  - sha256 `432e0f96e7b73128fdaf66f204edad64d1b4f14bbde08d5c8f90f1028a1ee667`
   - Unsigned, like 2.1.3.
   - Website copy staged in `website/backend/downloads/`.
 - **App 1.4.8 (62):** `releases/mobile/1.4.8/actual/` contains all seven flavours.

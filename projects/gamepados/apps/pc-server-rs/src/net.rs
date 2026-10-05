@@ -173,6 +173,10 @@ pub fn is_usb_tether(client_ip: &str, tether_subnets: &[String]) -> bool {
     }
 }
 
+/// How long a phone's GRX keys are kept after its pad session was dropped, so a
+/// phone returning from the background resumes without a rescan (2026-10-05).
+pub const GRX_KEEP: std::time::Duration = std::time::Duration::from_secs(600);
+
 pub struct Server<S: PadSink> {
     pub sessions: SessionManager,
     pub sink: S,
@@ -190,6 +194,9 @@ pub struct Server<S: PadSink> {
     pub grx_psk: Option<[u8; 32]>,
     /// One handshake/session per phone IP.
     grx_sessions: std::collections::HashMap<String, crate::grx::GrxServerSession>,
+    /// When each GRX session's phone last held a live pad session (updated on
+    /// the idle tick). Keeps the keys for `GRX_KEEP` after the pad is dropped.
+    grx_seen: std::collections::HashMap<String, Instant>,
     /// Frames that arrived encrypted and decrypted successfully.
     pub grx_ok: u64,
     /// Encrypted frames dropped (forged / replayed / not yet established).
@@ -225,6 +232,7 @@ impl<S: PadSink> Server<S> {
             pad_writes: 0,
             grx_psk: None,
             grx_sessions: std::collections::HashMap::new(),
+            grx_seen: std::collections::HashMap::new(),
             grx_ok: 0,
             grx_dropped: 0,
             gaps_50: 0,
@@ -376,7 +384,15 @@ impl<S: PadSink> Server<S> {
                 // the victim's encrypted session with one packet — reintroducing
                 // exactly the spoofed kill-switch that the removed BYE packet
                 // avoided. A genuine reconnect arrives from a new session anyway.
-                if self.grx_sessions.get(&ip).is_some_and(|s| s.established) {
+                //
+                // Narrowed 2026-10-05: only while that phone still holds a LIVE pad
+                // session. GRX state is now kept for GRX_KEEP after the pad is
+                // dropped (see idle_tick), and a phone coming back after that must
+                // be able to start a fresh session — refusing it would leave it on
+                // cleartext. A spoofed HELLO for an idle IP disturbs nobody.
+                if self.grx_sessions.get(&ip).is_some_and(|s| s.established)
+                    && self.sessions.get(&ip).is_some()
+                {
                     return out;
                 }
                 let eph = match crate::grx::new_ephemeral() {
@@ -609,9 +625,17 @@ impl<S: PadSink> Server<S> {
             }
         }
 
-        // Evict GRX state for IPs that no longer hold a pad session. Without
-        // this the handshake map grows for the whole life of the process — every
+        // Evict GRX state for phones that have been gone a while. Without this
+        // the handshake map grows for the whole life of the process — every
         // phone that ever connected keeps its keys and replay window resident.
+        //
+        // Changed 2026-10-05: the keys are KEPT for GRX_KEEP after the pad
+        // session is dropped (3 s of silence), no longer evicted at once. A phone
+        // left in recents is frozen by Android; when the player came back, its
+        // encrypted frames met a server that had already thrown the keys away,
+        // were dropped unanswered, and only a QR rescan recovered. Kept, they
+        // decrypt, a pad is created again and play resumes by itself. State for
+        // an IP that never held a pad (a lone HELLO) is still evicted at once.
         if !self.grx_sessions.is_empty() {
             let live: std::collections::HashSet<String> = self
                 .sessions
@@ -619,7 +643,18 @@ impl<S: PadSink> Server<S> {
                 .filter(|k| !k.starts_with("usb:") && *k != "aoa") // UDP keys are IPs
                 .cloned()
                 .collect();
-            self.grx_sessions.retain(|ip, _| live.contains(ip));
+            for ip in &live {
+                if self.grx_sessions.contains_key(ip) {
+                    self.grx_seen.insert(ip.clone(), now);
+                }
+            }
+            let seen = &self.grx_seen;
+            self.grx_sessions.retain(|ip, _| {
+                live.contains(ip)
+                    || seen.get(ip).is_some_and(|t| now.saturating_duration_since(*t) < GRX_KEEP)
+            });
+            let kept = &self.grx_sessions;
+            self.grx_seen.retain(|ip, _| kept.contains_key(ip));
         }
     }
 
@@ -1052,5 +1087,51 @@ mod tests {
         s.handle_frame(&frame(3, 0, 0), a, t0 + ms(150));
         assert_eq!((s.gaps_50, s.gaps_100, s.gaps_250), (1, 1, 0));
         assert_eq!(s.max_gap_ms, 120);
+    }
+
+    /// Back from recents: the pad was dropped after 3 s of silence, but the
+    /// phone's GRX keys must survive so its encrypted frames still decrypt.
+    #[test]
+    fn grx_keys_outlive_a_dropped_pad_for_a_while() {
+        let mut s = server();
+        s.grx_psk = Some([0x11; 32]);
+        let a = from("192.168.1.55");
+        let t0 = Instant::now();
+        let mut hello = vec![crate::grx::T_HELLO];
+        hello.extend_from_slice(&[7u8; 32]);
+        hello.extend_from_slice(&(crate::grx::GRX_LTID.len() as u32).to_le_bytes());
+        hello.extend_from_slice(crate::grx::GRX_LTID);
+        s.handle_datagram(&hello, a, t0);
+        s.handle_frame(&frame(1, 0, 0), a, t0); // a live pad session
+        s.idle_tick(t0 + ms(100));
+        assert_eq!(s.grx_session_count(), 1);
+        s.idle_tick(t0 + ms(3200)); // pad dropped (3 s of silence)
+        assert_eq!(s.sessions.count(), 0);
+        assert_eq!(s.grx_session_count(), 1, "keys kept after the pad is dropped");
+        s.idle_tick(t0 + GRX_KEEP + ms(5000));
+        assert_eq!(s.grx_session_count(), 0, "but not forever");
+    }
+
+    /// A phone returning after its pad was dropped may start a FRESH session;
+    /// while its pad is live, a HELLO is still ignored (anti-spoof).
+    #[test]
+    fn hello_replaces_an_established_session_only_when_the_pad_is_gone() {
+        let mut s = server();
+        s.grx_psk = Some([0x11; 32]);
+        let a = from("192.168.1.55");
+        let t0 = Instant::now();
+        let hello = |b: u8| {
+            let mut h = vec![crate::grx::T_HELLO];
+            h.extend_from_slice(&[b; 32]);
+            h.extend_from_slice(&(crate::grx::GRX_LTID.len() as u32).to_le_bytes());
+            h.extend_from_slice(crate::grx::GRX_LTID);
+            h
+        };
+        assert!(s.handle_datagram(&hello(7), a, t0).hs.is_some());
+        s.grx_sessions.get_mut("192.168.1.55").unwrap().established = true;
+        s.handle_frame(&frame(1, 0, 0), a, t0); // live pad
+        assert!(s.handle_datagram(&hello(8), a, t0).hs.is_none(), "live pad: HELLO ignored");
+        s.idle_tick(t0 + ms(3200)); // pad dropped, keys kept
+        assert!(s.handle_datagram(&hello(9), a, t0 + ms(3300)).hs.is_some(), "pad gone: fresh session");
     }
 }
