@@ -312,7 +312,10 @@ impl App {
                     // singleton mutex only frees on process exit — staying alive
                     // here is what makes an upgrade fail with "file in use".
                     match launch_installer_elevated(&path) {
-                        Ok(()) => std::process::exit(0),
+                        Ok(()) => {
+                            crate::wlan::restore_now();
+                            std::process::exit(0)
+                        }
                         Err(e) => {
                             self.update_state = UpdateState::Failed;
                             self.update_msg = e;

@@ -34,8 +34,28 @@ mod imp {
     unsafe extern "system" {
         fn GetCurrentProcess() -> isize;
         fn SetPriorityClass(hProcess: isize, dwPriorityClass: u32) -> i32;
+        fn GetCurrentThread() -> isize;
+        fn SetThreadPriority(hThread: isize, nPriority: i32) -> i32;
+        fn SetProcessInformation(
+            hProcess: isize,
+            class: i32,
+            info: *const core::ffi::c_void,
+            size: u32,
+        ) -> i32;
     }
     const ABOVE_NORMAL_PRIORITY_CLASS: u32 = 0x0000_8000;
+    const THREAD_PRIORITY_HIGHEST: i32 = 2;
+    /// PROCESS_INFORMATION_CLASS::ProcessPowerThrottling.
+    const PROCESS_POWER_THROTTLING: i32 = 4;
+    const PROCESS_POWER_THROTTLING_CURRENT_VERSION: u32 = 1;
+    const PROCESS_POWER_THROTTLING_EXECUTION_SPEED: u32 = 0x1;
+
+    #[repr(C)]
+    struct PowerThrottlingState {
+        version: u32,
+        control_mask: u32,
+        state_mask: u32,
+    }
 
     // ── ws2_32: socket options ──────────────────────────────────────────────
     #[link(name = "ws2_32")]
@@ -71,6 +91,45 @@ mod imp {
             eprintln!("warn: SetPriorityClass(ABOVE_NORMAL) failed; expect RTT jitter under load");
         }
         ok
+    }
+
+    /// Opt this process OUT of Windows 11's background power throttling
+    /// ("EcoQoS"), added 2026-10-05.
+    ///
+    /// The server spends almost all its time minimised or hidden behind the
+    /// game, which is exactly when Windows may decide it is background work and
+    /// run it on slow, power-saving cores at low clock. For a process whose
+    /// whole job is to pass a button press on within a millisecond, that is the
+    /// wrong call. Setting EXECUTION_SPEED in the control mask with the state
+    /// bit OFF is Microsoft's documented way to say "never throttle me". This is
+    /// per-process, not a system setting, and ends with the process.
+    pub fn disable_power_throttling() -> bool {
+        let state = PowerThrottlingState {
+            version: PROCESS_POWER_THROTTLING_CURRENT_VERSION,
+            control_mask: PROCESS_POWER_THROTTLING_EXECUTION_SPEED,
+            state_mask: 0,
+        };
+        let ok = unsafe {
+            SetProcessInformation(
+                GetCurrentProcess(),
+                PROCESS_POWER_THROTTLING,
+                &state as *const PowerThrottlingState as *const core::ffi::c_void,
+                std::mem::size_of::<PowerThrottlingState>() as u32,
+            )
+        } != 0;
+        if !ok {
+            eprintln!("note: could not opt out of power throttling (older Windows?)");
+        }
+        ok
+    }
+
+    /// Raise the CALLING thread (the UDP receive loop) to HIGHEST, added
+    /// 2026-10-05. The process stays ABOVE_NORMAL (see `set_high_priority` for
+    /// why it must not be HIGH): this thread sleeps in recv almost all the
+    /// time, so raising it costs the game nothing, but when a packet lands it
+    /// runs at once instead of queueing behind other background threads.
+    pub fn raise_receive_thread() -> bool {
+        unsafe { SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_HIGHEST) != 0 }
     }
 
     fn set_opt(sock: &UdpSocket, level: i32, name: i32, val: i32) -> bool {
@@ -124,7 +183,9 @@ mod imp {
     use std::net::UdpSocket;
     
     pub fn set_high_priority() -> bool { false }
+    pub fn disable_power_throttling() -> bool { false }
+    pub fn raise_receive_thread() -> bool { false }
     pub fn tune_socket(_s: &UdpSocket) -> (bool, bool, bool) { (false, false, false) }
 }
 
-pub use imp::{set_high_priority, tune_socket};
+pub use imp::{disable_power_throttling, raise_receive_thread, set_high_priority, tune_socket};

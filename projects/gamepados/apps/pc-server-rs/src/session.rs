@@ -24,6 +24,16 @@ pub const NEUTRAL_AFTER: Duration = Duration::from_millis(500);
 /// Quiet for longer than this → drop the session entirely.
 pub const DROP_AFTER: Duration = Duration::from_secs(3);
 
+/// Shortest time a button press stays visible on the pad (added 2026-10-05).
+///
+/// A game reads XInput once per frame (~16.7 ms at 60 fps). Over Wi-Fi a
+/// press and its release can reach us together — the PC's Wi-Fi card holds
+/// packets while it naps or scans and then hands them over in one pile — and a
+/// release written a millisecond after its press is a press the game never
+/// saw. 20 ms is longer than one 60 fps frame, so every press is read at least
+/// once. Only BUTTONS are held: triggers and sticks are never delayed.
+pub const MIN_PRESS: Duration = Duration::from_millis(20);
+
 /// Transport-switch migration window. A phone actively playing pings every
 /// ~16 ms, so a gap in this band means "it moved", not "it's mid-game".
 pub const MIGRATE_MIN_QUIET: Duration = Duration::from_millis(500);
@@ -32,7 +42,7 @@ pub const MIGRATE_MAX_QUIET: Duration = Duration::from_millis(3500);
 /// UDP sessions are keyed by IP. WebSocket ("usb:N") and AOA sessions are not,
 /// and must NEVER migrate — a WS session sits legitimately idle on the dashboard,
 /// so stealing its pad would let two transports drive one controller.
-fn is_udp_key(k: &str) -> bool {
+pub fn is_udp_key(k: &str) -> bool {
     !k.starts_with("usb:") && k != "aoa"
 }
 
@@ -86,9 +96,73 @@ pub struct Session {
     pub is_neutral: bool,
     /// Per-session escape hatch for the Guide button (bit 14).
     pub allow_guide: bool,
+    /// When each button bit was last WRITTEN to the pad as newly pressed.
+    /// Drives the `MIN_PRESS` hold.
+    pub press_at: [Option<Instant>; 16],
+    /// The real newest input, waiting because one or more of its releases
+    /// came too soon after the press. Written by `flush_due` at `.1`.
+    pub pending: Option<(Packet, Instant)>,
+}
+
+/// What `Session::compose` decided to put on the pad.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Composed {
+    /// The frame to write (the real input, plus any buttons still being held).
+    pub pkt: Packet,
+    /// Buttons kept down only because their press is younger than `MIN_PRESS`.
+    pub held: u16,
 }
 
 impl Session {
+    /// Decide what the pad should show for the real input `want`, keeping
+    /// every button down for at least `MIN_PRESS` after it was written as
+    /// pressed. `extra` forces buttons down that were pressed AND released
+    /// inside one received pile (they never reached the pad otherwise).
+    ///
+    /// Sets or clears `pending`; the caller writes `pkt` through `should_write`.
+    pub fn compose(&mut self, want: Packet, extra: u16, now: Instant) -> Composed {
+        let shown = self.last_report.map(|r| r.buttons).unwrap_or(0);
+        let mut held: u16 = 0;
+        let mut due: Option<Instant> = None;
+        for bit in 0..16 {
+            let m = 1u16 << bit;
+            if shown & m != 0 && want.buttons & m == 0 && extra & m == 0 {
+                if let Some(t) = self.press_at[bit] {
+                    let until = t + MIN_PRESS;
+                    if until > now {
+                        held |= m;
+                        due = Some(due.map_or(until, |d| d.min(until)));
+                    }
+                }
+            }
+        }
+        let mut pkt = want;
+        pkt.buttons |= extra | held;
+        // Newly pressed on the pad: start their hold clocks now.
+        let rising = pkt.buttons & !shown;
+        for bit in 0..16 {
+            if rising & (1u16 << bit) != 0 {
+                self.press_at[bit] = Some(now);
+                if extra & (1u16 << bit) != 0 {
+                    let until = now + MIN_PRESS;
+                    due = Some(due.map_or(until, |d| d.min(until)));
+                }
+            }
+        }
+        self.pending = due.map(|d| (want, d));
+        Composed { pkt, held }
+    }
+
+    /// If the held-back real input is due, return it re-composed (it may still
+    /// hold other buttons whose press is younger). `None` when nothing is due.
+    pub fn take_due(&mut self, now: Instant) -> Option<Packet> {
+        let (want, at) = self.pending?;
+        if at > now {
+            return None;
+        }
+        Some(self.compose(want, 0, now).pkt)
+    }
+
     /// Ordering guard + bookkeeping. Returns `false` if the frame is stale and
     /// must be dropped **without** ACKing (matches `server.py handle_frame`).
     pub fn accept_ts(&mut self, ts: u64) -> bool {
@@ -126,6 +200,10 @@ impl Session {
     pub fn mark_neutral(&mut self) {
         self.last_report = None;
         self.is_neutral = true;
+        // A neutral pad holds nothing; a held-back release must not resurrect
+        // input after the anti-stuck reset.
+        self.pending = None;
+        self.press_at = [None; 16];
     }
 }
 
@@ -216,6 +294,8 @@ impl SessionManager {
                 rumble: (0, 0),
                 is_neutral: true,
                 allow_guide: true,
+                press_at: [None; 16],
+                pending: None,
             },
         );
         self.sessions.get_mut(key)
@@ -258,6 +338,8 @@ impl SessionManager {
         s.key = new_key.to_string();
         s.last_ts = 0; // new stream -> new ordering base (different clock)
         s.last_report = None; // force the first report through the dedup gate
+        s.pending = None;
+        s.press_at = [None; 16];
         s.last_seen = now;
         self.sessions.insert(new_key.to_string(), s);
         self.migrated_last = true;

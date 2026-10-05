@@ -17,7 +17,7 @@
 use std::net::{IpAddr, SocketAddr};
 use std::time::Instant;
 
-use crate::session::{Report, SessionManager};
+use crate::session::{Composed, Report, SessionManager};
 use crate::wire::{accept_auth, ack_frame, rmb_frame, Packet, PAYLOAD_SIZE};
 
 /// What to send back for one inbound frame. Fixed-size: no heap traffic on the
@@ -63,6 +63,8 @@ pub struct NullSink {
     /// Test hook: simulate a pad that cannot be created.
     pub fail_acquire: bool,
     pub acquired: usize,
+    /// The last frame written, so tests can see WHAT reached the pad.
+    pub last: Option<Packet>,
 }
 
 impl PadSink for NullSink {
@@ -73,8 +75,9 @@ impl PadSink for NullSink {
         self.acquired += 1;
         true
     }
-    fn write(&mut self, _slot: usize, _pkt: &Packet, _allow_guide: bool) {
+    fn write(&mut self, _slot: usize, pkt: &Packet, _allow_guide: bool) {
         self.writes += 1;
+        self.last = Some(*pkt);
     }
     fn neutralize(&mut self, _slot: usize) {
         self.neutralized += 1;
@@ -101,6 +104,14 @@ pub struct Telemetry {
     pub grx_established: usize,
     /// Session keys — IPs for UDP, `usb:N` for WebSocket.
     pub clients: Vec<String>,
+    /// Wi-Fi health (added 2026-10-05). See the matching fields on `Server`.
+    pub gaps_50: u64,
+    pub gaps_100: u64,
+    pub gaps_250: u64,
+    pub max_gap_ms: u64,
+    pub merged_presses: u64,
+    pub held_releases: u64,
+    pub neutralized: u64,
 }
 
 /// Auth context. Kept as plain data so the policy stays pure and testable.
@@ -183,6 +194,23 @@ pub struct Server<S: PadSink> {
     pub grx_ok: u64,
     /// Encrypted frames dropped (forged / replayed / not yet established).
     pub grx_dropped: u64,
+    // ── Wi-Fi health (added 2026-10-05) ─────────────────────────────────────
+    // A phone that is playing sends at least every 33 ms, so a longer silence
+    // between accepted frames is the network, not the player. These turn "it
+    // felt laggy" into numbers on the 5 s stats line.
+    /// Silences between accepted frames of one UDP session longer than 50/100/250 ms.
+    pub gaps_50: u64,
+    pub gaps_100: u64,
+    pub gaps_250: u64,
+    /// Longest such silence since the last stats line (reset by the caller).
+    pub max_gap_ms: u64,
+    /// Buttons that were pressed AND released inside one received pile and were
+    /// written as a press anyway — before 2.1.4 each of these was a lost input.
+    pub merged_presses: u64,
+    /// Releases held back so a press stayed visible for `MIN_PRESS`.
+    pub held_releases: u64,
+    /// Anti-stuck resets after 0.5 s of silence.
+    pub neutralized: u64,
 }
 
 impl<S: PadSink> Server<S> {
@@ -199,7 +227,99 @@ impl<S: PadSink> Server<S> {
             grx_sessions: std::collections::HashMap::new(),
             grx_ok: 0,
             grx_dropped: 0,
+            gaps_50: 0,
+            gaps_100: 0,
+            gaps_250: 0,
+            max_gap_ms: 0,
+            merged_presses: 0,
+            held_releases: 0,
+            neutralized: 0,
         }
+    }
+
+    /// Decode one input datagram (GRX-encrypted or cleartext) into a packet,
+    /// applying the same checks `handle_datagram` does. No pad is touched.
+    /// Handshake frames must NOT come here — the drain separates them first.
+    pub fn decode_input(&mut self, data: &[u8], addr: SocketAddr) -> Option<Packet> {
+        if self.grx_psk.is_some() && data.len() == crate::grx::WIRE_LEN {
+            let ip = addr.ip().to_string();
+            let pt = match self.grx_sessions.get_mut(&ip) {
+                Some(s) if s.established => s.open(data),
+                _ => None,
+            };
+            return match pt {
+                Some(pt) => {
+                    self.grx_ok += 1;
+                    Packet::decode(&pt)
+                }
+                None => {
+                    self.grx_dropped += 1;
+                    None
+                }
+            };
+        }
+        if data.len() != PAYLOAD_SIZE {
+            return None;
+        }
+        let pkt = Packet::decode(data)?;
+        let ip = addr.ip().to_string();
+        let offlan_or_tether = is_offlan(&ip, self.auth.lan_ip.as_deref(), self.auth.lan_prefix_len)
+            || is_usb_tether(&ip, &self.auth.tether_subnets);
+        if !accept_auth(pkt.auth_token, self.auth.expected_hash, offlan_or_tether) {
+            self.packets_rejected += 1;
+            return None;
+        }
+        Some(pkt)
+    }
+
+    /// Every input frame one phone sent that arrived in the same received pile
+    /// (added 2026-10-05).
+    ///
+    /// Before 2.1.4 the drain kept only the LAST frame of a pile. Over Wi-Fi the
+    /// PC's card holds packets while it naps or scans and then delivers them all
+    /// at once, so a quick tap's press and release often arrived together — and
+    /// only the release was written. The game never saw the press. Now every
+    /// frame is decoded: the newest by TIMESTAMP (not by arrival order) is the
+    /// state, and any button that was pressed somewhere in the pile but is up in
+    /// the newest is still written as a press, held for `MIN_PRESS`.
+    ///
+    /// Still exactly one ACK, for the newest frame, so the phone's RTT reading
+    /// is not dragged by the backlog (the reason the drain exists — main.rs).
+    pub fn handle_batch(&mut self, frames: &[&[u8]], addr: SocketAddr, now: Instant) -> Replies {
+        let mut pkts: Vec<Packet> = Vec::with_capacity(frames.len());
+        for f in frames {
+            if let Some(p) = self.decode_input(f, addr) {
+                pkts.push(p);
+            }
+        }
+        if pkts.is_empty() {
+            return Replies::default();
+        }
+        let ip = addr.ip().to_string();
+        self.apply_batch(&ip, addr, &pkts, now)
+    }
+
+    /// Write any held-back release whose `MIN_PRESS` has run out. Call whenever
+    /// the receive loop wakes and `next_due` has passed.
+    pub fn flush_due(&mut self, now: Instant) {
+        let keys: Vec<String> = self.sessions.keys().cloned().collect();
+        for key in keys {
+            let Some(sess) = self.sessions.get_mut(&key) else { continue };
+            let Some(pkt) = sess.take_due(now) else { continue };
+            let (slot, allow_guide) = (sess.slot, sess.allow_guide);
+            if sess.should_write(Report::from_packet(&pkt)) {
+                self.sink.write(slot, &pkt, allow_guide);
+                self.pad_writes += 1;
+            }
+        }
+    }
+
+    /// The earliest moment a held-back release must be written, if any.
+    pub fn next_due(&self) -> Option<Instant> {
+        self.sessions
+            .keys()
+            .filter_map(|k| self.sessions.get(k).and_then(|s| s.pending.map(|(_, at)| at)))
+            .min()
     }
 
     /// Route one inbound datagram. This is the transport entry point: it decides
@@ -348,8 +468,26 @@ impl<S: PadSink> Server<S> {
         pkt: &Packet,
         now: Instant,
     ) -> Replies {
+        self.apply_batch(key, addr, std::slice::from_ref(pkt), now)
+    }
+
+    /// `apply_packet` for one or more frames from the same source. A single
+    /// frame behaves exactly as before 2.1.4, apart from the `MIN_PRESS` hold.
+    fn apply_batch(
+        &mut self,
+        key: &str,
+        addr: SocketAddr,
+        pkts: &[Packet],
+        now: Instant,
+    ) -> Replies {
         let mut out = Replies::default();
         let ip = key.to_string();
+        if pkts.is_empty() {
+            return out;
+        }
+        // The press hold is for UDP (Wi-Fi / tether). The USB-debugging
+        // WebSocket streams every 3 ms over a cable and is left exactly as it was.
+        let hold = crate::session::is_udp_key(key);
 
         // ── session (one pad per source) ─────────────────────────────────────
         // No slot available → do NOT ACK: a 5th device must look unconnected.
@@ -386,22 +524,70 @@ impl<S: PadSink> Server<S> {
         }
 
         // ── ordering: stale frames are dropped and NOT ACKed ─────────────────
-        if !sess.accept_ts(pkt.ts) {
-            self.packets_stale += 1;
-            return out;
+        // Every frame is judged against the baseline from BEFORE this pile. If
+        // the baseline moved frame by frame, a press frame that arrived after
+        // its own (newer) release would be thrown away as stale.
+        let base = sess.last_ts;
+        let mut newest: Option<Packet> = None;
+        let mut pressed_in_pile: u16 = 0;
+        let mut accepted: u64 = 0;
+        for p in pkts {
+            if !crate::wire::accept_ordering(base, p.ts) {
+                continue;
+            }
+            accepted += 1;
+            pressed_in_pile |= p.buttons;
+            // Equal timestamps: the later ARRIVAL wins, as it did before 2.1.4.
+            newest = Some(match newest {
+                Some(n) if n.ts > p.ts => n,
+                _ => *p,
+            });
         }
+        self.packets_stale += pkts.len() as u64 - accepted;
+        let Some(newest) = newest else {
+            return out;
+        };
+
+        // ── Wi-Fi health: how long was this phone silent? ────────────────────
+        if hold && !is_new {
+            let gap = now.saturating_duration_since(sess.last_seen).as_millis() as u64;
+            if gap > 50 {
+                self.gaps_50 += 1;
+            }
+            if gap > 100 {
+                self.gaps_100 += 1;
+            }
+            if gap > 250 {
+                self.gaps_250 += 1;
+            }
+            if gap > self.max_gap_ms {
+                self.max_gap_ms = gap;
+            }
+        }
+        sess.last_ts = newest.ts;
         sess.last_seen = now;
 
         // ── pad write (deduped) ──────────────────────────────────────────────
-        let write = sess.should_write(Report::from_packet(pkt));
+        let c = if hold {
+            let shown = sess.last_report.map(|r| r.buttons).unwrap_or(0);
+            // Pressed somewhere in the pile, up in the newest frame, and never
+            // shown on the pad: a tap that would otherwise be lost entirely.
+            let lost = pressed_in_pile & !newest.buttons & !shown;
+            self.merged_presses += lost.count_ones() as u64;
+            sess.compose(newest, lost, now)
+        } else {
+            Composed { pkt: newest, held: 0 }
+        };
+        self.held_releases += c.held.count_ones() as u64;
+        let write = sess.should_write(Report::from_packet(&c.pkt));
         if write {
-            self.sink.write(slot, pkt, allow_guide);
+            self.sink.write(slot, &c.pkt, allow_guide);
             self.pad_writes += 1;
         }
-        self.packets_ok += 1;
+        self.packets_ok += accepted;
 
         // ── ACK last: the pad IOCTL must not wait on this syscall ────────────
-        out.ack = Some(ack_frame(pkt.ts));
+        out.ack = Some(ack_frame(newest.ts));
         out
     }
 
@@ -409,7 +595,13 @@ impl<S: PadSink> Server<S> {
     pub fn idle_tick(&mut self, now: Instant) {
         for action in self.sessions.idle_tick(now) {
             match action {
-                crate::session::IdleAction::Neutralize { slot, .. } => self.sink.neutralize(slot),
+                crate::session::IdleAction::Neutralize { slot, key } => {
+                    self.sink.neutralize(slot);
+                    self.neutralized += 1;
+                    // Used to be silent. 0.5 s without input is exactly the
+                    // moment a held throttle drops, so it is worth a line.
+                    eprintln!("Controller {key}: no input for 0.5 s -> pad reset to neutral");
+                }
                 crate::session::IdleAction::Drop { slot, key } => {
                     self.sink.release(slot);
                     eprintln!("Controller session -{key} (active={})", self.sessions.count());
@@ -449,6 +641,13 @@ impl<S: PadSink> Server<S> {
             grx_dropped: self.grx_dropped,
             grx_established: self.grx_sessions.values().filter(|s| s.established).count(),
             clients: self.sessions.keys().cloned().collect(),
+            gaps_50: self.gaps_50,
+            gaps_100: self.gaps_100,
+            gaps_250: self.gaps_250,
+            max_gap_ms: self.max_gap_ms,
+            merged_presses: self.merged_presses,
+            held_releases: self.held_releases,
+            neutralized: self.neutralized,
         }
     }
 }
@@ -693,5 +892,165 @@ mod tests {
         s.idle_tick(t0 + Duration::from_millis(3100));
         assert_eq!(s.sink.released, 1, "long-silent pad must be freed");
         assert_eq!(s.sessions.count(), 0);
+    }
+
+    // ── 2.1.4: piles, ordering and the minimum press (added 2026-10-05) ──────
+
+    fn frame(ts: u64, buttons: u16, lt: u8) -> Vec<u8> {
+        Packet {
+            ts,
+            buttons,
+            lt,
+            rt: 0,
+            ls_x: 128,
+            ls_y: 128,
+            rs_x: 128,
+            rs_y: 128,
+            auth_token: 0xABCD_1234,
+        }
+        .encode()
+        .to_vec()
+    }
+
+    fn ms(n: u64) -> std::time::Duration {
+        std::time::Duration::from_millis(n)
+    }
+
+    /// THE Wi-Fi bug: a tap whose press and release arrive in one pile used to
+    /// leave only the release, so the game never saw the press.
+    #[test]
+    fn tap_inside_one_pile_still_reaches_the_pad() {
+        let mut s = server();
+        let a = from("192.168.1.55");
+        let t0 = Instant::now();
+        s.handle_frame(&frame(1, 0, 0), a, t0); // session up, nothing held
+        let (p, r) = (frame(10, 0x1000, 0), frame(20, 0, 0));
+        let rep = s.handle_batch(&[&p[..], &r[..]], a, t0 + ms(100));
+        assert_eq!(s.sink.last.unwrap().buttons, 0x1000, "the press must be written");
+        assert_eq!(s.merged_presses, 1);
+        assert_eq!(rep.ack.unwrap(), ack_frame(20), "one ACK, for the newest frame");
+        assert_eq!(s.next_due(), Some(t0 + ms(100) + crate::session::MIN_PRESS));
+
+        s.flush_due(t0 + ms(110));
+        assert_eq!(s.sink.last.unwrap().buttons, 0x1000, "not before 20 ms");
+        s.flush_due(t0 + ms(121));
+        assert_eq!(s.sink.last.unwrap().buttons, 0, "then the real release");
+        assert_eq!(s.next_due(), None);
+    }
+
+    /// The newest frame is chosen by timestamp, not by arrival order. Before,
+    /// a reordered pile could keep an old frame and drop the new one.
+    #[test]
+    fn newest_by_timestamp_wins_over_arrival_order() {
+        let mut s = server();
+        let a = from("192.168.1.55");
+        let t0 = Instant::now();
+        let (newer, older) = (frame(20, 0x0001, 200), frame(10, 0x0001, 50));
+        let rep = s.handle_batch(&[&newer[..], &older[..]], a, t0);
+        assert_eq!(s.sink.last.unwrap().lt, 200, "the newest state is applied");
+        assert_eq!(rep.ack.unwrap(), ack_frame(20));
+        assert_eq!(s.packets_stale, 0, "same-pile frames are not stale");
+        // Something older than the pile is still stale afterwards.
+        assert!(s.handle_frame(&frame(15, 0, 0), a, t0 + ms(5)).ack.is_none());
+    }
+
+    #[test]
+    fn equal_timestamps_take_the_later_arrival() {
+        let mut s = server();
+        let a = from("192.168.1.55");
+        let t0 = Instant::now();
+        s.handle_frame(&frame(1, 0, 0), a, t0);
+        let (p, r) = (frame(10, 0x1000, 0), frame(10, 0, 0));
+        s.handle_batch(&[&p[..], &r[..]], a, t0 + ms(100));
+        assert_eq!(s.sink.last.unwrap().buttons, 0x1000, "press shown first");
+        s.flush_due(t0 + ms(121));
+        assert_eq!(s.sink.last.unwrap().buttons, 0, "the later arrival is the state");
+    }
+
+    #[test]
+    fn release_5ms_after_press_waits_until_20ms() {
+        let mut s = server();
+        let a = from("192.168.1.55");
+        let t0 = Instant::now();
+        s.handle_frame(&frame(1, 0x0010, 0), a, t0);
+        s.handle_frame(&frame(2, 0, 0), a, t0 + ms(5));
+        assert_eq!(s.sink.last.unwrap().buttons, 0x0010, "still held at 5 ms");
+        assert_eq!(s.held_releases, 1);
+        assert!(s.handle_frame(&frame(3, 0, 0), a, t0 + ms(12)).ack.is_some());
+        assert_eq!(s.sink.last.unwrap().buttons, 0x0010, "still held at 12 ms");
+        s.flush_due(t0 + ms(20));
+        assert_eq!(s.sink.last.unwrap().buttons, 0, "released at 20 ms");
+    }
+
+    #[test]
+    fn normal_press_length_is_not_delayed() {
+        let mut s = server();
+        let a = from("192.168.1.55");
+        let t0 = Instant::now();
+        s.handle_frame(&frame(1, 0x0010, 0), a, t0);
+        s.handle_frame(&frame(2, 0, 0), a, t0 + ms(80));
+        assert_eq!(s.sink.last.unwrap().buttons, 0, "an 80 ms press releases at once");
+        assert_eq!(s.held_releases, 0);
+        assert_eq!(s.next_due(), None);
+    }
+
+    #[test]
+    fn triggers_are_never_delayed() {
+        let mut s = server();
+        let a = from("192.168.1.55");
+        let t0 = Instant::now();
+        s.handle_frame(&frame(1, 0, 255), a, t0);
+        s.handle_frame(&frame(2, 0, 0), a, t0 + ms(2));
+        assert_eq!(s.sink.last.unwrap().lt, 0, "a trigger follows the phone exactly");
+        assert_eq!(s.next_due(), None);
+    }
+
+    #[test]
+    fn other_input_still_flows_while_a_release_is_held() {
+        let mut s = server();
+        let a = from("192.168.1.55");
+        let t0 = Instant::now();
+        s.handle_frame(&frame(1, 0x0010, 0), a, t0);
+        s.handle_frame(&frame(2, 0, 180), a, t0 + ms(4));
+        let last = s.sink.last.unwrap();
+        assert_eq!((last.buttons, last.lt), (0x0010, 180), "button held, trigger live");
+    }
+
+    #[test]
+    fn neutral_reset_cancels_a_held_release() {
+        let mut s = server();
+        let a = from("192.168.1.55");
+        let t0 = Instant::now();
+        s.handle_frame(&frame(1, 0x0010, 0), a, t0);
+        s.handle_frame(&frame(2, 0, 0), a, t0 + ms(5));
+        assert!(s.next_due().is_some());
+        s.idle_tick(t0 + ms(800));
+        assert_eq!(s.next_due(), None, "nothing may be written after the reset");
+        assert_eq!(s.neutralized, 1);
+        let writes = s.sink.writes;
+        s.flush_due(t0 + ms(900));
+        assert_eq!(s.sink.writes, writes);
+    }
+
+    #[test]
+    fn usb_websocket_path_is_unchanged() {
+        let mut s = server();
+        let t0 = Instant::now();
+        s.handle_ws_frame("usb:1", &frame(1, 0x0010, 0), t0);
+        s.handle_ws_frame("usb:1", &frame(2, 0, 0), t0 + ms(1));
+        assert_eq!(s.sink.last.unwrap().buttons, 0, "no hold on the cable path");
+        assert_eq!(s.next_due(), None);
+    }
+
+    #[test]
+    fn wifi_gaps_are_counted() {
+        let mut s = server();
+        let a = from("192.168.1.55");
+        let t0 = Instant::now();
+        s.handle_frame(&frame(1, 0, 0), a, t0);
+        s.handle_frame(&frame(2, 0, 0), a, t0 + ms(30));
+        s.handle_frame(&frame(3, 0, 0), a, t0 + ms(150));
+        assert_eq!((s.gaps_50, s.gaps_100, s.gaps_250), (1, 1, 0));
+        assert_eq!(s.max_gap_ms, 120);
     }
 }

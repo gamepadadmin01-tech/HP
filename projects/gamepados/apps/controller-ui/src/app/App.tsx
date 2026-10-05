@@ -1437,10 +1437,12 @@ function ControllerScreen({ onBack, isActive: screenActive, activeMapping, custo
     const handleResize = () => {
       clearTimeout(timeout);
       timeout = setTimeout(() => {
-        setWindowSize({
-          width: window.innerWidth,
-          height: window.innerHeight,
-        });
+        // Same size -> keep the SAME object (2026-10-05). A new object re-ran
+        // the native-touch effect below, whose cleanup deactivates the overlay
+        // and releases every held finger -- a dropped throttle mid-race on a
+        // resize event that changed nothing.
+        const w = window.innerWidth, h = window.innerHeight;
+        setWindowSize((p) => (p.width === w && p.height === h ? p : { width: w, height: h }));
       }, 150);
     };
     window.addEventListener("resize", handleResize);

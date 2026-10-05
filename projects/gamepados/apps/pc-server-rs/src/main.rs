@@ -137,14 +137,11 @@ fn parse_args() -> Args {
     a
 }
 
-/// Keep only the NEWEST input frame per source address. Non-20-byte datagrams
-/// (GRX handshake/encrypted frames) are ignored here — the Python server still
-/// owns those transports.
 /// Largest frame the drain carries: a GRX-encrypted input frame (41 B).
 /// Handshake frames are bigger but are never coalesced — see below.
 const MAX_INPUT_FRAME: usize = pc_server_rs::grx::WIRE_LEN;
 
-/// One coalesced input frame: peer address, payload, payload length, and the
+/// One received input frame: peer address, payload, payload length, and the
 /// **local address it arrived on**.
 ///
 /// That last field is what makes the reply leave by the same interface the
@@ -159,14 +156,23 @@ type Frame = (
     Option<pc_server_rs::pktinfo::LocalAddr>,
 );
 
-/// Keep only the NEWEST input frame per source.
+/// Most input frames one drain keeps. A phone sends at most ~200 a second, so
+/// even a half-second Wi-Fi pile is well under this; the cap only bounds memory
+/// against a flood.
+const MAX_BATCH: usize = 256;
+
+/// Collect EVERY input frame of the drain (changed 2026-10-05).
 ///
-/// Accepts both the 20-byte cleartext frame and the 41-byte GRX frame, since
-/// both are "current input" and only the newest matters. **Handshake frames are
-/// deliberately excluded** — they are a state machine, not a sample, so
-/// coalescing them would drop a HELLO or CONFIRM and stall the session forever.
-fn upsert(
-    latest: &mut Vec<Frame>,
+/// Until 2.1.4 this was `upsert`, which kept only the last frame per source.
+/// That lost taps over Wi-Fi: a press and its release that arrived in the same
+/// pile left only the release. `Server::handle_batch` now sees all of them,
+/// picks the newest by timestamp, and still writes the press.
+///
+/// Accepts both the 20-byte cleartext frame and the 41-byte GRX frame.
+/// **Handshake frames are deliberately excluded** — they are a state machine,
+/// not a sample, and are processed one by one before the input.
+fn push_frame(
+    frames: &mut Vec<Frame>,
     addr: std::net::SocketAddr,
     data: &[u8],
     local: Option<pc_server_rs::pktinfo::LocalAddr>,
@@ -175,21 +181,12 @@ fn upsert(
     if n != pc_server_rs::wire::PAYLOAD_SIZE && n != pc_server_rs::grx::WIRE_LEN {
         return;
     }
+    if frames.len() >= MAX_BATCH {
+        frames.remove(0);
+    }
     let mut b = [0u8; MAX_INPUT_FRAME];
     b[..n].copy_from_slice(data);
-    // Match on IP (not full addr): a phone's source PORT can change, but it is
-    // still the same device and must not occupy two entries in one batch.
-    if let Some(e) = latest.iter_mut().find(|(a, _, _, _)| a.ip() == addr.ip()) {
-        e.0 = addr;
-        e.1 = b;
-        e.2 = n;
-        // Refresh the arrival address too: a phone that roams between adapters
-        // (Wi-Fi -> tether) keeps its IP for a moment but must be answered on
-        // the interface the NEWEST frame came in on.
-        e.3 = local;
-    } else {
-        latest.push((addr, b, n, local));
-    }
+    frames.push((addr, b, n, local));
 }
 
 /// Re-attach to the parent process's console, if there is one.
@@ -392,6 +389,7 @@ fn main() -> std::io::Result<()> {
     // did (see `upsert`). What remains is kept for robustness (buffer sizing,
     // priority) and for untested Wi-Fi QoS (DSCP), not for latency.
     let prio_ok = pc_server_rs::winperf::set_high_priority();
+    let ecoqos_off = pc_server_rs::winperf::disable_power_throttling();
     let (rcv_ok, snd_ok, tos_ok) = pc_server_rs::winperf::tune_socket(&sock);
 
     // Auto-detect what wasn't passed explicitly, so the server runs with no
@@ -459,8 +457,8 @@ fn main() -> std::io::Result<()> {
         if auto_detect_tether { "(auto-detected)" } else { "(from --tether-subnet)" }
     );
     println!(
-        "  tuning  : highprio={} rcvbuf={} sndbuf={} dscp={}",
-        prio_ok, rcv_ok, snd_ok, tos_ok
+        "  tuning  : highprio={} no-throttle={} rcvbuf={} sndbuf={} dscp={}",
+        prio_ok, ecoqos_off, rcv_ok, snd_ok, tos_ok
     );
 
     // GRX bootstraps off the EXISTING pairing key — both ends already hold it
@@ -526,6 +524,10 @@ fn main() -> std::io::Result<()> {
     // singleton mutex, and udp/7777) alive invisibly. That leak is the 1.1.17
     // "already running" bug, and with the mutex in place it would now block the
     // next launch outright.
+    //
+    // Put the PC's Wi-Fi settings back first: exit() kills the wlan worker
+    // before it could do it (wlan.rs).
+    pc_server_rs::wlan::restore_now();
     std::process::exit(0);
 }
 
@@ -683,7 +685,26 @@ fn run_udp<S: pc_server_rs::net::PadSink + Send + 'static>(
     let mut drained_total: u64 = 0;
     let mut drained_max: usize = 0;
     // Reused across batches — no per-packet allocation on the hot path.
-    let mut latest: Vec<Frame> = Vec::with_capacity(8);
+    let mut frames: Vec<Frame> = Vec::with_capacity(64);
+    // Phones whose frames are in the current batch, in first-arrival order.
+    let mut sources: Vec<std::net::IpAddr> = Vec::with_capacity(4);
+    // When a held-back release (the 20 ms minimum press) is due, if any. The
+    // read timeout shrinks to it so the release is written on time even when
+    // the phone goes quiet; Windows' ~15.6 ms timer tick can make it a little
+    // late, which only lengthens a tap slightly.
+    let mut due: Option<Instant> = None;
+    let mut cur_timeout = READ_TIMEOUT;
+    // Windows Wi-Fi streaming mode while a phone is connected (wlan.rs). Runs
+    // on its own thread: the Wi-Fi API can take tens of ms per call.
+    // Dry-run is the automated test mode and must never touch the PC's Wi-Fi;
+    // GAMEPAD_WLAN=1 exists only to verify wlan.rs itself.
+    let wlan = pc_server_rs::wlan::WlanTuner::start(
+        !args.dry_run || std::env::var("GAMEPAD_WLAN").is_ok_and(|v| v == "1"),
+    );
+    // The receive thread outranks ordinary work, but the PROCESS stays
+    // ABOVE_NORMAL so the game is never outranked (winperf.rs).
+    let thread_prio_ok = pc_server_rs::winperf::raise_receive_thread();
+    println!("  thread  : receive-thread priority raised={thread_prio_ok}");
     // Handshake frames collected during a drain. They are a state machine, not a
     // sample, so they are processed individually and never coalesced.
     let mut handshakes: Vec<(
@@ -706,18 +727,29 @@ fn run_udp<S: pc_server_rs::net::PadSink + Send + 'static>(
     );
 
     loop {
+        let want_timeout = match due {
+            Some(d) => d
+                .saturating_duration_since(Instant::now())
+                .clamp(Duration::from_millis(1), READ_TIMEOUT),
+            None => READ_TIMEOUT,
+        };
+        if want_timeout != cur_timeout {
+            sock.set_read_timeout(Some(want_timeout)).ok();
+            cur_timeout = want_timeout;
+        }
         match replier.recv_from(&sock, &mut buf) {
             Ok((n, addr, local)) => {
-                // ── DRAIN TO NEWEST (matches server.py `latest[ip] = ...`) ────
+                // ── DRAIN THE QUEUE (was "drain to newest" until 2.1.4) ────────
                 // CRITICAL FOR LATENCY, measured 2026-07-21: processing and
                 // ACKing every queued datagram made the phone's RTT read ~3.5 ms
                 // with bumps to 4.5, versus ~2.45 ms solid for the Python server.
                 // The phone recomputes its RTT EMA on EVERY ack it receives, so
                 // ACKing a backlog of already-stale packets drags that average
                 // up — each old frame reports the time it spent queued.
-                // Only the newest frame per source is real "current input"
-                // anyway, so we keep that and silently discard the rest.
-                latest.clear();
+                // Only the newest frame per source is ACKed. Since 2.1.4 the
+                // older frames are still READ, so a tap whose press and release
+                // arrive in one Wi-Fi pile is not lost (Server::handle_batch).
+                frames.clear();
                 handshakes.clear();
                 tickets.clear();
                 if pc_server_rs::grx::is_handshake(&buf[..n]) {
@@ -730,7 +762,7 @@ fn run_udp<S: pc_server_rs::net::PadSink + Send + 'static>(
                     t.copy_from_slice(&buf[..n]);
                     tickets.push((pc_server_rs::net::session_key(&addr), t));
                 } else {
-                    upsert(&mut latest, addr, &buf[..n], local);
+                    push_frame(&mut frames, addr, &buf[..n], local);
                 }
                 sock.set_nonblocking(true).ok();
                 loop {
@@ -743,7 +775,7 @@ fn run_udp<S: pc_server_rs::net::PadSink + Send + 'static>(
                                 t.copy_from_slice(&buf[..n2]);
                                 tickets.push((pc_server_rs::net::session_key(&a2), t));
                             } else {
-                                upsert(&mut latest, a2, &buf[..n2], l2);
+                                push_frame(&mut frames, a2, &buf[..n2], l2);
                             }
                         }
                         Err(_) => break, // WouldBlock: queue drained
@@ -753,7 +785,7 @@ fn run_udp<S: pc_server_rs::net::PadSink + Send + 'static>(
 
                 let t_start = Instant::now();
                 let now = t_start;
-                let drained = latest.len();
+                let drained = frames.len();
                 let mut server = shared
                     .lock()
                     .map_err(|_| std::io::Error::other("server mutex poisoned"))?;
@@ -766,9 +798,22 @@ fn run_udp<S: pc_server_rs::net::PadSink + Send + 'static>(
                         let _ = replier.send_to(&sock, hs, *a, *local);
                     }
                 }
-                for (a, data, len, local) in latest.iter() {
-                    let data = &data[..*len];
-                    let replies = server.handle_datagram(data, *a, now);
+                sources.clear();
+                for f in frames.iter() {
+                    if !sources.contains(&f.0.ip()) {
+                        sources.push(f.0.ip());
+                    }
+                }
+                for ip in sources.iter() {
+                    let group: Vec<&[u8]> =
+                        frames.iter().filter(|f| f.0.ip() == *ip).map(|f| &f.1[..f.2]).collect();
+                    // Reply to where this phone's NEWEST frame came from: a phone
+                    // roaming between adapters must be answered on the new one.
+                    let Some(last) = frames.iter().rev().find(|f| f.0.ip() == *ip) else {
+                        continue;
+                    };
+                    let (a, local) = (&last.0, &last.3);
+                    let replies = server.handle_batch(&group, *a, now);
                     // Rumble first, ACK last — same order as the Python server,
                     // so the pad write is never delayed behind the ACK syscall.
                     //
@@ -818,6 +863,7 @@ fn run_udp<S: pc_server_rs::net::PadSink + Send + 'static>(
                     gates.retain(|k| live.iter().any(|l| l == k));
                 }
 
+                due = server.next_due();
                 drop(server);
                 if handle_ns.len() < 8192 {
                     handle_ns.push(t_start.elapsed().as_nanos() as u64);
@@ -837,10 +883,19 @@ fn run_udp<S: pc_server_rs::net::PadSink + Send + 'static>(
         }
 
         let now = Instant::now();
+        if due.is_some_and(|d| now >= d) {
+            if let Ok(mut s) = shared.lock() {
+                s.flush_due(now);
+                due = s.next_due();
+            }
+        }
         if now.duration_since(last_tick) >= IDLE_TICK {
             last_tick = now;
             if let Ok(mut s) = shared.lock() {
                 s.idle_tick(now);
+                // The neutral reset may have cleared a held-back release.
+                due = s.next_due();
+                wlan.set_wanted(s.sessions.udp_count() > 0);
                 // Publish the live device count for the window. Done HERE, on
                 // the tick we already hold the lock for, so the GUI costs the
                 // input path nothing.
@@ -867,7 +922,11 @@ fn run_udp<S: pc_server_rs::net::PadSink + Send + 'static>(
         }
         if now.duration_since(last_report) >= Duration::from_secs(5) {
             last_report = now;
-            let snap = shared.lock().ok().map(|s| s.telemetry());
+            let snap = shared.lock().ok().map(|mut s| {
+                let t = s.telemetry();
+                s.max_gap_ms = 0; // "longest silence" is per stats line
+                t
+            });
             if let Some(t) = snap {
               if t.packets_ok > 0 || t.packets_rejected > 0 {
                 let grx = if t.grx_established > 0 || t.grx_ok > 0 {
@@ -880,6 +939,15 @@ fn run_udp<S: pc_server_rs::net::PadSink + Send + 'static>(
                     "sessions={} {:?} ok={} stale={} rejected={} pad_writes={}{}",
                     t.sessions, t.clients, t.packets_ok, t.packets_stale,
                     t.packets_rejected, t.pad_writes, grx
+                );
+                // Wi-Fi health. A playing phone sends at least every 33 ms, so
+                // silences past 100 ms are the network. merged = taps saved from
+                // a pile; held = presses kept 20 ms so the game could see them.
+                println!(
+                    "  wifi: gaps>50ms={} >100ms={} >250ms={} longest={}ms (last 5 s) | \
+                     merged={} held={} neutral_resets={}",
+                    t.gaps_50, t.gaps_100, t.gaps_250, t.max_gap_ms,
+                    t.merged_presses, t.held_releases, t.neutralized
                 );
                 if !handle_ns.is_empty() {
                     handle_ns.sort_unstable();

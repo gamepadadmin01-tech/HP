@@ -51,6 +51,19 @@ use std::time::Duration;
 /// never meant to be. Patch-level because nothing about the wire protocol,
 /// pairing format or UI changed.
 ///
+/// **2.1.4** — Wi-Fi input reliability (2026-10-05). Over Wi-Fi, quick taps
+/// went missing in F1. Causes and fixes: (1) the drain kept only the LAST frame
+/// of a received pile, so a press and its release arriving together left only
+/// the release — now every frame is read, the newest by timestamp wins and the
+/// press is still written (`Server::handle_batch`); (2) a release written a
+/// millisecond after its press was invisible to a game polling once a frame —
+/// buttons now stay down at least 20 ms (`session::MIN_PRESS`); (3) the PC's
+/// Wi-Fi card scanned and power-saved mid-game — while a phone is connected the
+/// server turns background scans off and streaming mode on, and restores both
+/// afterwards (`wlan.rs`); (4) the process opts out of Windows power throttling
+/// and the receive thread runs at HIGHEST. A Wi-Fi health line now appears in
+/// the 5 s stats. Patch-level: no wire-protocol, pairing-format or message change.
+///
 /// **2.1.3** — broadcast replies on subnets narrower than /24. A directed
 /// broadcast on a /28, /27, /26 or /25 ends in .15/.31/.63/.127, not .255, and
 /// Winsock rejects it as a reply SOURCE (WSAEADDRNOTAVAIL / WSAEINVAL), so the
@@ -106,7 +119,7 @@ use std::time::Duration;
 /// the same number. One definition now feeds both; they cannot drift.
 macro_rules! app_version {
     () => {
-        "2.1.3"
+        "2.1.4"
     };
 }
 

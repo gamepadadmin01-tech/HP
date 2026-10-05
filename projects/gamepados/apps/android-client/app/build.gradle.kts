@@ -250,8 +250,11 @@ android {
         // 61 = 1.4.7 (2026-10-02): 1.4.6's code plus the held-input fix (a held LT dropped about once
         //      a minute), a clear controller screen (no time chip, no latency badge), the orange icon
         //      and the one-time-30-minutes rules. Bumped so the owner can upload it to Play.
-        versionCode = 61
-        versionName = "1.4.7"
+        // 62 = 1.4.8 (2026-10-05): Wi-Fi input reliability — full state every 8 ms while anything
+        //      is held (was 33 ms), buttons sent pressed for at least 30 ms so a quick tap survives
+        //      a Wi-Fi hiccup, and a same-size resize no longer releases held fingers.
+        versionCode = 62
+        versionName = "1.4.8"
 
         // AdMob test IDs by default; the release build type swaps in the live ones (see top of file).
         buildConfigField("String", "ADMOB_REWARDED_ID", "\"$admobTestRewardedId\"")

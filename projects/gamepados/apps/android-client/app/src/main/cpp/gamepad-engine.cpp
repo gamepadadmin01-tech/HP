@@ -229,6 +229,54 @@ std::atomic<bool> inputStreaming(true);
 // than waiting out a fixed poll tick. This is the core "latency → zero" change.
 std::condition_variable payloadCv;
 bool payloadDirty = false; // guarded by payloadMutex
+
+// ── Minimum press (added 2026-10-05, app 1.4.8) ─────────────────────────────
+// A button released within MIN_PRESS_NS of its press is still SENT as pressed
+// until MIN_PRESS_NS has passed. Two reasons, both seen in F1 over Wi-Fi:
+//   * a quick tap's press and release can both land between two TX snapshots,
+//     so the press was never sent at all;
+//   * a press sent as one or two frames ~2 ms apart dies in a single Wi-Fi
+//     hiccup. Held 30 ms, it goes out in several frames spread over time (see
+//     ACTIVE_KEEPALIVE_NS), so a short drop no longer erases it.
+// Press times are recorded at INJECT time (not in the TX loop) for exactly the
+// first reason. Guarded by payloadMutex. Only buttons: triggers and sticks are
+// never delayed. The PC server (2.1.4+) also holds presses 20 ms; the two do not
+// add up — the server measures from when IT wrote the press.
+static const uint64_t MIN_PRESS_NS = 30000000ULL; // 30 ms
+static uint64_t pressAtNs[16] = {0};
+static uint16_t lastInjectedButtons = 0;
+
+static inline uint64_t monoNowNs() {
+    struct timespec t;
+    clock_gettime(CLOCK_MONOTONIC, &t);
+    return (uint64_t)t.tv_sec * 1000000000ULL + (uint64_t)t.tv_nsec;
+}
+
+// Call with payloadMutex held, after currentPayload was written.
+static inline void notePressesLocked() {
+    uint16_t now = currentPayload.buttons;
+    uint16_t rising = now & (uint16_t)~lastInjectedButtons;
+    if (rising) {
+        uint64_t t = monoNowNs();
+        for (int b = 0; b < 16; b++) if (rising & (1u << b)) pressAtNs[b] = t;
+    }
+    lastInjectedButtons = now;
+}
+
+// Call with payloadMutex held: forget every hold (streaming off / new session).
+static inline void clearPressesLocked() {
+    memset(pressAtNs, 0, sizeof(pressAtNs));
+    lastInjectedButtons = 0;
+}
+
+// Buttons still inside their minimum press. Call with payloadMutex held.
+static inline uint16_t heldPressesLocked(uint64_t nowNs) {
+    uint16_t held = 0;
+    for (int b = 0; b < 16; b++) {
+        if (pressAtNs[b] != 0 && nowNs - pressAtNs[b] < MIN_PRESS_NS) held |= (uint16_t)(1u << b);
+    }
+    return held;
+}
 float screenWidthFloat = 1920.0f;
 float screenHeightFloat = 1080.0f;
 // (The old native sensor-fusion path and its state were removed: gyro steering
@@ -277,6 +325,25 @@ static const int CHANGED_PACKET_REDUNDANCY = 3;
 // poll tick, so idle wakeup cadence (CPU/heat) is unchanged — we only REMOVE the
 // up-to-2ms latency the fixed tick used to add to every fresh input.
 static const long RX_POLL_NS = 2000000L; // 2 ms
+
+// Keep-alive while something is HELD (added 2026-10-05, app 1.4.8).
+// The idle keep-alive is ~33 ms. While a trigger, button or stick is held — the
+// whole of an F1 lap — that meant a lost Wi-Fi packet was not repaired for up
+// to 33 ms, and the 3 back-to-back resends above all fall inside ~4 ms, shorter
+// than a typical Wi-Fi hiccup. While input is active (or changed in the last
+// ACTIVE_TAIL_NS, which also protects the RELEASE) the full state now goes out
+// every 8 ms. Cost: ~125 small packets/s, below what gyro steering already
+// sends; idle stays at 33 ms, so menus and pauses cost nothing extra.
+static const uint64_t ACTIVE_KEEPALIVE_NS = 8000000ULL;   // 8 ms
+static const uint64_t ACTIVE_TAIL_NS      = 250000000ULL; // 250 ms
+
+// "Neutral" = nothing pressed, triggers released, sticks within ±2 of centre.
+// in = buttons(2) LT RT LSX LSY RSX RSY, as in curInput below.
+static inline bool inputIsNeutral(const uint8_t in[8]) {
+    if (in[0] | in[1] | in[2] | in[3]) return false;
+    for (int i = 4; i < 8; i++) if (in[i] < 126 || in[i] > 130) return false;
+    return true;
+}
 
 // ==========================================
 // 2b. ADPF — tell the scheduler this thread has a deadline
@@ -405,6 +472,8 @@ void* txThreadLoop(void* arg) {
     // Set to CHANGED_PACKET_REDUNDANCY when input changes; decremented each poll
     // it forces an extra send. Keep-alive heartbeats do not touch this.
     int redundancyRemaining = 0;
+    // When the sent input last CHANGED; drives the 8 ms active keep-alive tail.
+    uint64_t lastChangeNs = 0;
 
     while (isRunning) {
         // Lock, snapshot newest state, clear the dirty flag (we're consuming this
@@ -413,6 +482,8 @@ void* txThreadLoop(void* arg) {
             std::lock_guard<std::mutex> lock(payloadMutex);
             networkPayload = currentPayload;
             payloadDirty = false;
+            // Minimum press: keep recently pressed buttons down (see MIN_PRESS_NS).
+            networkPayload.buttons |= heldPressesLocked(monoNowNs());
         }
 
         // Decide whether to actually transmit. Holding the pad still used to blast
@@ -434,6 +505,10 @@ void* txThreadLoop(void* arg) {
         bool rumbleActive = (rumbleLeft.load(std::memory_order_relaxed) != 0) ||
                             (rumbleRight.load(std::memory_order_relaxed) != 0);
         uint64_t heartbeatNs = rumbleActive ? 16000000ULL : 33000000ULL;
+        // 8 ms while anything is held or input changed recently (ACTIVE_KEEPALIVE_NS).
+        if (!inputIsNeutral(curInput) || (rawTimestamp - lastChangeNs) < ACTIVE_TAIL_NS) {
+            heartbeatNs = ACTIVE_KEEPALIVE_NS;
+        }
         bool heartbeat = (rawTimestamp - lastSendNs) >= heartbeatNs; // adaptive keep-alive
         // FIX 1: a fresh change arms CHANGED_PACKET_REDUNDANCY back-to-back sends.
         // While that counter is positive we keep re-sending (redundant) even when
@@ -538,6 +613,7 @@ void* txThreadLoop(void* arg) {
                 // FIX 1: (re)arm redundancy on a genuine input change; otherwise
                 // burn down the counter so each armed extra send fires once.
                 if (changed) {
+                    lastChangeNs = rawTimestamp;
                     redundancyRemaining = CHANGED_PACKET_REDUNDANCY - 1; // this send counts as the 1st
                 } else if (redundancyRemaining > 0) {
                     redundancyRemaining--;
@@ -868,6 +944,7 @@ Java_com_gamepad_client_MainActivity_injectNativePayload(JNIEnv* env, jobject th
         {
             std::lock_guard<std::mutex> lock(payloadMutex);
             env->GetByteArrayRegion(data, 0, sizeof(GamepadPayload), reinterpret_cast<jbyte*>(&currentPayload));
+            notePressesLocked();
             payloadDirty = true;
         }
         // Wake the TX thread NOW so this input transmits immediately rather than on
@@ -891,6 +968,8 @@ Java_com_gamepad_client_MainActivity_setInputStreamingNative(JNIEnv*, jobject, j
             currentPayload.leftTrigger = 0;  currentPayload.rightTrigger = 0;
             currentPayload.leftStickX = 128; currentPayload.leftStickY = 128;
             currentPayload.rightStickX = 128; currentPayload.rightStickY = 128;
+            // Leaving the controller must release at once, not after a hold.
+            clearPressesLocked();
             payloadDirty = true;
         }
         payloadCv.notify_one();
@@ -985,6 +1064,7 @@ Java_com_gamepad_client_MainActivity_initNetworkNative(JNIEnv* env, jobject thiz
         // Center = 128 (matches App.tsx 128+norm*127 and server.py (b-128)/127).
         currentPayload.leftStickX = 128;  currentPayload.leftStickY = 128;
         currentPayload.rightStickX = 128; currentPayload.rightStickY = 128;
+        clearPressesLocked();
     }
 
     // Start Tx Thread
@@ -1085,6 +1165,7 @@ Java_com_gamepad_client_MainActivity_initAccessoryNative(JNIEnv* env, jobject th
         std::lock_guard<std::mutex> lock(payloadMutex);
         currentPayload.leftStickX = 128;  currentPayload.leftStickY = 128;
         currentPayload.rightStickX = 128; currentPayload.rightStickY = 128;
+        clearPressesLocked();
     }
 
     packetCount = 0;

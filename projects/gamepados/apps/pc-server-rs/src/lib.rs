@@ -35,4 +35,5 @@ pub mod ui;
 pub mod vigem;
 pub mod winperf;
 pub mod wire;
+pub mod wlan;
 pub mod ws;
