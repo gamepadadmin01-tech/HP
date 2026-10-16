@@ -7,7 +7,7 @@ export type TransportSnapshot = {
   sinceAck?: number;
   /** The app is in the background (document.hidden). */
   hidden?: boolean;
-  /** A confirmed Wi-Fi PC is saved, so a reconnect knows where to go. */
+  /** A confirmed Wi-Fi PC is saved, so a reconnect (or a return from USB) knows where to go. */
   canRestoreWifi?: boolean;
 };
 
@@ -42,6 +42,17 @@ export function createTransportCoordinator(io: {
   let wifiHealing = false;
   let wifiNext = 0;
   let wifiDelay = WIFI_RETRY_MIN;
+  // Wi-Fi → USB (added 2026-10-13). Plugging in a USB-tethering cable while connected over
+  // Wi-Fi moves the session to the cable (the steadiest link), once per plug-in. If the
+  // cable cannot reach the PC, or is unplugged, the session goes back to the saved Wi-Fi PC.
+  let sawNoTether = false;       // the tether has been absent at least once, so its next appearance is a real plug-in
+  let tetherSince = 0;           // when the current plug-in was first seen (0 = none, or already there when the app started)
+  let explicitWirelessAt = 0;    // last deliberate Wi-Fi choice (QR scan, saved-PC restore)
+  let switchTried = 0;           // the plug-in we already switched on (or gave up on): never twice
+  let switchedFromWifi = false;  // the current wired session replaced a Wi-Fi one
+  let switchedAt = 0;
+  let wiredUp = false;           // that wired session answered at least once
+  const USB_SWITCH_GIVE_UP_MS = 10000;
   const reset = () => { unhealthySince = null; nextAttempt = 0; retryDelay = 4000; startedBroadcast = ''; };
   function reconcile() {
     const s = io.read(), now = io.now();
@@ -52,6 +63,27 @@ export function createTransportCoordinator(io: {
       stopping = false;
     }
     if (starting && s.running) starting = false;
+    const tetherAvailable = !!s.broadcast && s.broadcast !== '255.255.255.255';
+    if (!tetherAvailable) { sawNoTether = true; tetherSince = 0; switchTried = 0; }
+    else if (tetherSince === 0 && sawNoTether) tetherSince = now;
+    const backToWifi = () => {
+      switchedFromWifi = false; wiredUp = false;
+      explicitWireless = true; explicitWirelessAt = now;   // also blocks another switch on this plug-in
+      starting = false; stopping = false; reset();
+      io.restartWireless!();
+    };
+    if (switchedFromWifi && !explicitUsb && io.restartWireless && s.canRestoreWifi && !s.hidden) {
+      if (s.running && s.kind === 'wired' && s.alive) wiredUp = true;
+      // The cable was unplugged, or never reached the PC: return to the Wi-Fi we left.
+      if (!tetherAvailable || (!wiredUp && now - switchedAt >= USB_SWITCH_GIVE_UP_MS)) { backToWifi(); return; }
+    }
+    if (tetherAvailable && tetherSince > 0 && tetherSince !== switchTried && tetherSince > explicitWirelessAt &&
+        !explicitUsb && s.pref === 'auto' && s.running && s.kind === 'wireless' && !s.hidden && s.canRestoreWifi) {
+      switchTried = tetherSince; switchedFromWifi = true; switchedAt = now; wiredUp = false;
+      explicitWireless = false;    // a Wi-Fi choice made BEFORE the cable was plugged in does not outlast it
+      io.stopNative(); stopping = true; starting = false; reset();
+      return;
+    }
     if (s.running && s.kind === 'wireless' && !explicitUsb) {
       if (s.alive) {
         wifiHealing = false; wifiNext = 0; wifiDelay = WIFI_RETRY_MIN;
@@ -69,7 +101,6 @@ export function createTransportCoordinator(io: {
         (s.wirelessIntentAt > 0 && now - s.wirelessIntentAt < 8000))) {
       io.disconnectDebug(); reset(); return;
     }
-    const tetherAvailable = !!s.broadcast && s.broadcast !== '255.255.255.255';
     const debug = s.pref === 'usbdebug' || (s.pref === 'auto' && !tetherAvailable && (!s.running || explicitUsb));
     if (debug) {
       if (s.running || starting) { io.disconnectDebug(); io.stopNative(); stopping = true; starting = false; reset(); return; }
@@ -104,8 +135,8 @@ export function createTransportCoordinator(io: {
   }
   return {
     reconcile,
-    chooseUsb() { explicitUsb = true; explicitWireless = false; reset(); reconcile(); },
-    chooseWireless() { explicitUsb = false; explicitWireless = true; stopping = false; starting = false; reset(); },
+    chooseUsb() { explicitUsb = true; explicitWireless = false; switchedFromWifi = false; reset(); reconcile(); },
+    chooseWireless() { explicitUsb = false; explicitWireless = true; explicitWirelessAt = io.now(); switchedFromWifi = false; stopping = false; starting = false; reset(); },
   };
 }
 

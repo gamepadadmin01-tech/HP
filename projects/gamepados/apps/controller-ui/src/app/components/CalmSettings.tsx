@@ -48,7 +48,8 @@ export function CalmSettings(p:CalmSettingsProps) {
     return ()=>{clearInterval(timer);document.removeEventListener('visibilitychange',syncVisibility);};
   },[bridge]);
   return <div className="calm-settings">
-    <div className="calm-intro"><span className="console-eyebrow">FINE-TUNE YOUR FEEL</span><h1 data-testid="settings-heading">Dial it in.</h1><p>Small adjustments. A whole different game.</p></div>
+    {/* The visible intro lines were removed (owner request, 2026-10-12). The heading stays for screen readers and for the UI tests. */}
+    <h1 className="sr-only" data-testid="settings-heading">Settings</h1>
     {!bridge && <p className="calm-inline-note">Browser preview · Live device readings are available in the Android app.</p>}
     <section data-tone="blue" className="calm-settings-section"><h2><Gauge size={15} />Motion</h2><div className="calm-settings-panel">
       <CalmSwitch label="Tilt steering" detail="Steer by tilting your phone left and right." on={p.gyroOn} onChange={p.setGyroOn}/>

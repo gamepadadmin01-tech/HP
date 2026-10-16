@@ -407,7 +407,7 @@ function useStick(maxR: number, svgRef: React.RefObject<SVGSVGElement | null>, o
   return { posRef, onDown, onMove, onUp, knobRef };
 }
 
-import { Btn, Dpad, RightStick, TriggerPill, RED_NORM, RED_HELD, ACCENT_RGB } from "./components/Widgets";
+import { Btn, Dpad, RightStick, TriggerPill, RED_NORM, RED_HELD, ACCENT_RGB, buttonText } from "./components/Widgets";
 
 // ─── Gyro indicator material ─────────────────────────────────────────────────
 // SMOKED GLASS, matching the pad buttons. The bar used to be a solid #2CAABA
@@ -1964,6 +1964,7 @@ function ControllerScreen({ onBack, isActive: screenActive, activeMapping, custo
                   <RightStick
                     key={btn.uid}
                     cx={btn.x} cy={btn.y} outerR={btn.r} innerR={btn.r * 0.48}
+                    tag={isHybrid ? "H" : (up.startsWith("L") ? "L" : "R")}
                     stick={activeStick}
                     id={btn.uid as BtnId}
                     held={effHeldCustom}
@@ -1989,11 +1990,11 @@ function ControllerScreen({ onBack, isActive: screenActive, activeMapping, custo
                       selectStickMode(mode as "L" | "R"); triggerH(btn.haptic);
                     }}>
                     {active && (
-                      <circle cx={btn.x} cy={btn.y} r={btn.r + 6} fill="rgba(79,134,198,0.35)"
+                      <circle cx={btn.x} cy={btn.y} r={btn.r + 6} fill={`rgba(${ACCENT_RGB}, 0.35)`}
                         style={{ pointerEvents: "none", filter: "blur(8px)" }} />
                     )}
                     <circle cx={btn.x} cy={btn.y} r={btn.r}
-                      fill={active ? "rgba(79,134,198,0.85)" : "rgba(79,134,198,0.12)"}
+                      fill={active ? RED_HELD : RED_NORM}
                       stroke={active ? "rgba(255,255,255,0.4)" : "rgba(255,255,255,0.1)"}
                       strokeWidth={active ? 2.5 : 1.5} />
                     <text x={btn.x} y={btn.y} textAnchor="middle" dominantBaseline="central"
@@ -2042,9 +2043,9 @@ function ControllerScreen({ onBack, isActive: screenActive, activeMapping, custo
               // System buttons render an icon instead of their literal label.
               const SYS_ICON: Record<string, React.ReactNode> = {
                 view: (
-                  <g style={{ stroke: "currentColor", strokeWidth: 2.2, fill: "none" }}>
-                    <rect x={-9} y={-9} width={18} height={7} rx={1.2} />
-                    <rect x={-9} y={1} width={18} height={7} rx={1.2} />
+                  <g style={{ stroke: "currentColor", strokeWidth: btn.r * 0.07, fill: "none" }}>
+                    <rect x={-btn.r * 0.28} y={-btn.r * 0.28} width={btn.r * 0.56} height={btn.r * 0.22} rx={2} />
+                    <rect x={-btn.r * 0.28} y={btn.r * 0.05} width={btn.r * 0.56} height={btn.r * 0.22} rx={2} />
                   </g>
                 ),
                 home: <tspan>🎮</tspan>,
@@ -2053,7 +2054,7 @@ function ControllerScreen({ onBack, isActive: screenActive, activeMapping, custo
               const isSys = btn.label in SYS_ICON;
               const displayLabel = isSys
                 ? SYS_ICON[btn.label]
-                : ((activeMapping && activeMapping[btn.label as BtnId]) || btn.label);
+                : ((activeMapping && activeMapping[btn.label as BtnId]) || buttonText(btn.label) || (btn.type === "macro" ? "M" : "B"));
               return (
                 <Btn
                   key={btn.uid}
@@ -2611,7 +2612,7 @@ function PadThumbWidget({ b, accent }: { b: CustomBtnDef; accent: string }) {
     return <g>{pts.map(([dx, dy, l], i) => (
       <g key={i}>
         <circle cx={x + dx} cy={y + dy} r={br} fill={fill} stroke={stroke} strokeWidth={2} />
-        {txt(x + dx, y + dy, l, br * 0.8)}
+        {txt(x + dx, y + dy, l, br * 0.52)}
       </g>
     ))}</g>;
   }
@@ -2662,7 +2663,7 @@ function PadThumbWidget({ b, accent }: { b: CustomBtnDef; accent: string }) {
     return (
       <g>
         <rect x={x - b.w / 2} y={y - b.h / 2} width={b.w} height={b.h} rx={Math.min(b.w, b.h) * 0.28} fill={fill} stroke={stroke} strokeWidth={2} />
-        {txt(x, y, b.label || (b.type === "macro" ? "M" : "B"), Math.min(b.w, b.h) * 0.42)}
+        {txt(x, y, buttonText(b.label) || (b.type === "macro" ? "M" : "B"), Math.min(b.w, b.h) * 0.42)}
       </g>
     );
   }
@@ -2670,7 +2671,7 @@ function PadThumbWidget({ b, accent }: { b: CustomBtnDef; accent: string }) {
   return (
     <g>
       <circle cx={x} cy={y} r={r} fill={fill} stroke={accent} strokeWidth={2} strokeOpacity={0.5} />
-      {txt(x, y, b.label || (b.type === "macro" ? "M" : "B"), r * 0.52)}
+      {txt(x, y, buttonText(b.label) || (b.type === "macro" ? "M" : "B"), r * 0.52)}
     </g>
   );
 }
@@ -2848,7 +2849,8 @@ function TabHome({ realTelemetry, onLaunch, onConnect, onLaunchEditor, selectedP
 
   return (
     <div className="calm-home">
-      <div className="calm-intro console-home-intro"><span className="console-eyebrow">LESS SETUP. MORE PLAY.</span><h1 data-testid="home-heading">Ready, player one.</h1><p>Your next session starts right here.</p></div>
+      {/* The visible intro lines were removed (owner request, 2026-10-12). The heading stays for screen readers and for the UI tests. */}
+      <h1 className="sr-only" data-testid="home-heading">Home</h1>
       <ConnectionSummary telemetry={realTelemetry} onClick={onConnect} />
       <div className="calm-section-heading"><h2>Your loadout</h2><span>{controllers.length.toString().padStart(2, "0")} {controllers.length === 1 ? "LAYOUT" : "LAYOUTS"}</span></div>
       <div className="calm-library" data-count={controllers.length}>
@@ -3968,12 +3970,17 @@ export default function App() {
     const w = (window as any).__usbWS;
     if (!w) return;
     let toastTimer: ReturnType<typeof setTimeout> | undefined;
+    let usbShown = false, usbLastSeen = 0;
     const coordinator = createTransportCoordinator({
       now: Date.now,
       read: () => {
         let t: any = {}, broadcast = '';
         try { t = JSON.parse(bridge?.getNetworkTelemetryJson?.() || '{}'); confirmWireless(t); } catch {}
         try { broadcast = bridge?.getUsbBroadcastAddress?.() || ''; } catch {}
+        // "USB detected" is shown ONCE per cable connection. Re-arm only after the tether has
+        // been gone for 10 s, so a flapping reading or the coordinator's retries never re-show it.
+        if (broadcast && broadcast !== '255.255.255.255') usbLastSeen = Date.now();
+        else if (usbShown && Date.now() - usbLastSeen > 10000) usbShown = false;
         return { running: !!t.engineRunning, alive: !!t.linkAlive, kind: t.connectionType || '',
           broadcast, wirelessIntentAt: (window as any).__wirelessIntentAt || 0, pref: getWiredPref(),
           sinceAck: typeof t.sinceAck === 'number' ? t.sinceAck : -1,
@@ -3992,6 +3999,8 @@ export default function App() {
       },
       startTether: broadcast => {
         try { bridge?.connectToPC?.(broadcast, 7777, 'usb'); } catch {}
+        if (usbShown) return;   // the coordinator retries with backoff; the notice is not repeated
+        usbShown = true;
         setUsbToast(true); clearTimeout(toastTimer);
         toastTimer = setTimeout(() => setUsbToast(false), 2600);
       },
@@ -4276,7 +4285,7 @@ export default function App() {
               backdropFilter: "blur(8px)", fontFamily: "'Inter',sans-serif",
             }}>
             <span className="text-amber-400 text-sm leading-none">⟠</span>
-            <span className="text-[11px] font-bold text-amber-200">USB detected — connecting…</span>
+            <span className="text-[11px] font-bold text-amber-200">USB detected</span>
           </motion.div>
         )}
       </AnimatePresence>

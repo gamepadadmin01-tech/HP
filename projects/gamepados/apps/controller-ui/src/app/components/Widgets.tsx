@@ -26,6 +26,12 @@ export const ACCENT_RGB = "44, 170, 186";
 // values are what actually matter.
 export const RED_NORM = `rgba(${ACCENT_RGB}, 0.12)`;  // resting fill
 export const RED_HELD = `rgba(${ACCENT_RGB}, 0.85)`;  // pressed fill — the press
+
+/** Text drawn on a button. The stick-click buttons are stored as "Left stick" / "Right stick"
+ *  (that string is the mapping key) but are far too long for the circle, so show L3 / R3.
+ *  Display only — never use this for mapping. Used by the editor, the pad and the thumbnail. */
+export const buttonText = (label: string): string =>
+  label === "Left stick" ? "L3" : label === "Right stick" ? "R3" : label;
                                                       // feedback depends on this
                                                       // staying distinct from NORM
 export const FACE_COLORS = {
@@ -514,10 +520,12 @@ export const Dpad = React.memo(DpadBase, (p, n) => {
   return true;
 });
 
-function RightStickBase({ cx, cy, outerR, innerR, stick, id, held, dn, up }: {
+function RightStickBase({ cx, cy, outerR, innerR, stick, id, held, dn, up, tag }: {
   cx: number; cy: number; outerR: number; innerR: number;
   stick: StickApi;
   id: BtnId; held: Set<string>; dn: (id: BtnId) => void; up: (id: BtnId) => void;
+  /** Letter drawn on the knob ("L" / "R" / "H"), as the layout editor shows it. Custom layouts only. */
+  tag?: string;
 }) {
   const { ripples, spawn } = useSvgRipple();
   const clipId = `stick-rip-${Math.round(cx)}-${Math.round(cy)}`;
@@ -587,6 +595,11 @@ function RightStickBase({ cx, cy, outerR, innerR, stick, id, held, dn, up }: {
           fill="url(#padSpec)" style={{ pointerEvents: "none" }} />
         <circle cx={cx} cy={cy} r={innerR * 0.18} fill="rgba(100,100,100,0.35)"
           style={{ pointerEvents: "none" }} />
+        {tag && (
+          <text x={cx} y={cy} textAnchor="middle" dominantBaseline="central"
+            fontSize={outerR * 0.35} fontWeight={800} fill="rgba(40,40,40,0.9)"
+            style={{ fontFamily: "'Inter',sans-serif", pointerEvents: "none", userSelect: "none" }}>{tag}</text>
+        )}
       </g>
     </g>
   );
@@ -596,7 +609,7 @@ function RightStickBase({ cx, cy, outerR, innerR, stick, id, held, dn, up }: {
 // compare knobRef so a Hybrid stick's L↔R swap (lstick↔rstick) still re-renders.
 export const RightStick = React.memo(RightStickBase, (p, n) =>
   p.cx === n.cx && p.cy === n.cy && p.outerR === n.outerR && p.innerR === n.innerR &&
-  p.id === n.id && p.stick.knobRef === n.stick.knobRef &&
+  p.id === n.id && p.stick.knobRef === n.stick.knobRef && p.tag === n.tag &&
   p.held.has(p.id) === n.held.has(n.id)
 );
 

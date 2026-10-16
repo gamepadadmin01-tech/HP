@@ -285,6 +285,29 @@ static inline uint16_t heldPressesLocked(uint64_t nowNs) {
     }
     return held;
 }
+
+#ifdef GAMEPAD_TEST_PATTERN
+// ── Test pattern (DEBUG BUILDS ONLY, 2026-10-10) ───────────────────────────────
+// Lets the PC drive a repeatable load for wireless measurements: holds A and moves the
+// left stick in a steady circle (one turn per 2 s, refreshed every 8 ms like a thumb on
+// the glass). The PC switches it with a 4-byte "TPN"+0/1 datagram from the locked peer.
+// This whole block is compiled out of every release flavour: it would let anyone on
+// the Wi-Fi inject input into a player's phone.
+static std::atomic<bool> g_testPattern(false);
+static uint64_t g_testPatternLastNs = 0;
+
+// Call with payloadMutex held, from the TX thread, before the snapshot.
+static inline void applyTestPatternLocked(uint64_t nowNs) {
+    if (nowNs - g_testPatternLastNs < 8000000ULL) return;
+    g_testPatternLastNs = nowNs;
+    double phase = 6.283185307179586 * (double)(nowNs % 2000000000ULL) / 2000000000.0;
+    currentPayload.buttons = 0x1000;  // A
+    currentPayload.leftStickX = (uint8_t)(128.0 + 100.0 * __builtin_cos(phase));
+    currentPayload.leftStickY = (uint8_t)(128.0 + 100.0 * __builtin_sin(phase));
+    notePressesLocked();
+    payloadDirty = true;
+}
+#endif
 float screenWidthFloat = 1920.0f;
 float screenHeightFloat = 1080.0f;
 // (The old native sensor-fusion path and its state were removed: gyro steering
@@ -488,6 +511,9 @@ void* txThreadLoop(void* arg) {
         // input), unlock. (Ultra-fast, prevents tearing.)
         {
             std::lock_guard<std::mutex> lock(payloadMutex);
+#ifdef GAMEPAD_TEST_PATTERN
+            if (g_testPattern.load(std::memory_order_relaxed)) applyTestPatternLocked(monoNowNs());
+#endif
             networkPayload = currentPayload;
             payloadDirty = false;
             // Minimum press: keep recently pressed buttons down (see MIN_PRESS_NS).
@@ -757,6 +783,28 @@ void* txThreadLoop(void* arg) {
                         rumbleSeq.fetch_add(1, std::memory_order_relaxed);
                         continue; // keep draining the queue; rumble handled
                     }
+#ifdef GAMEPAD_TEST_PATTERN
+                    // Test pattern switch from the PC: "TPN" + 1 (start) / 0 (stop). Debug
+                    // builds only; same source guard as rumble.
+                    if (rec >= 4 && rxBuffer[0] == 'T' && rxBuffer[1] == 'P' && rxBuffer[2] == 'N') {
+                        if (discoveringPeer || fromAddr.sin_addr.s_addr != serverAddr.sin_addr.s_addr || fromAddr.sin_port != serverAddr.sin_port) {
+                            continue;
+                        }
+                        bool want = (rxBuffer[3] == 1);
+                        bool was = g_testPattern.exchange(want, std::memory_order_relaxed);
+                        if (was && !want) {
+                            std::lock_guard<std::mutex> lk(payloadMutex);
+                            currentPayload.buttons = 0;
+                            currentPayload.leftTrigger = 0;  currentPayload.rightTrigger = 0;
+                            currentPayload.leftStickX = 128; currentPayload.leftStickY = 128;
+                            currentPayload.rightStickX = 128; currentPayload.rightStickY = 128;
+                            clearPressesLocked();
+                            payloadDirty = true;
+                        }
+                        if (was != want) LOGI("test pattern %s", want ? "ON" : "OFF");
+                        continue;
+                    }
+#endif
                     // ACK is "ACK" (3 bytes) optionally followed by the 8-byte
                     // little-endian timestamp the PC echoed back from the packet
                     // it just processed. We need >=3 bytes starting with "ACK".
@@ -950,6 +998,9 @@ Java_com_gamepad_client_MainActivity_injectNativePayload(JNIEnv* env, jobject th
     // source (JS heartbeat, touch, gyro) is dropped here, so nothing can
     // overwrite the neutral latched by setInputStreamingNative.
     if (!inputStreaming.load(std::memory_order_relaxed)) return;
+#ifdef GAMEPAD_TEST_PATTERN
+    if (g_testPattern.load(std::memory_order_relaxed)) return;  // the test pattern owns the payload
+#endif
     jsize len = env->GetArrayLength(data);
     if (len == sizeof(GamepadPayload)) {
         // FIX 5: single-copy JNI. GetByteArrayRegion copies the 20 bytes straight

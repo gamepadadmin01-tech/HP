@@ -91,11 +91,14 @@ export function DashboardAllowance() {
     document.addEventListener("visibilitychange", visible);
     return () => { clearInterval(timer); window.removeEventListener("focus", update); document.removeEventListener("visibilitychange", visible); };
   }, [session]);
-  return <div className="calm-allowance" data-testid="daily-allowance">
+  // The WHOLE card is the button (it used to be only the small arrow, which was easy to miss).
+  // The arrow keeps its test id so the UI tests that click it still reach the same handler.
+  return <button type="button" className="calm-allowance" data-testid="daily-allowance" onClick={() => requestDashboardTab("account")}>
     <span className="console-allowance-icon"><Clock3 size={20} aria-hidden="true" /></span>
-    <div className="calm-grow"><span className="console-eyebrow">{session ? "YOUR MEMBERSHIP" : "YOUR PLAY TIME"}</span>
+    <span className="calm-grow"><span className="console-eyebrow">{session ? "YOUR MEMBERSHIP" : "YOUR PLAY TIME"}</span>
       <strong>{session ? "Your plan & playtime" : remaining > 0 ? <><span data-testid="remaining-playtime">{formatDuration(remaining)}</span> <small>left</small></> : "Watch an ad for 30 minutes"}</strong>
-    </div>
-    <button data-testid="view-plans-button" onClick={() => requestDashboardTab("account")} aria-label={session ? "View account" : "View plans"}><ChevronRight size={19} /></button>
-  </div>;
+    </span>
+    <span className="sr-only">{session ? "View account" : "View plans"}</span>
+    <span className="calm-allowance-go" data-testid="view-plans-button" aria-hidden="true"><ChevronRight size={19} /></span>
+  </button>;
 }

@@ -51,4 +51,25 @@ test('A link that never answered (VPN/firewall) is not restarted',()=>{const f=s
 test('No Wi-Fi reconnect without a saved PC',()=>{const f=stalled({canRestoreWifi:false});f.c.reconcile();assert.ok(!f.calls.includes('wifi-restart'))});
 test('A short Wi-Fi blip is left alone',()=>{const f=stalled({sinceAck:4000});f.c.reconcile();assert.ok(!f.calls.includes('wifi-restart'))});
 test('USB sessions are never touched by the Wi-Fi reconnect',()=>{const f=stalled({kind:'wired',pref:'tether'});f.c.reconcile();assert.ok(!f.calls.includes('wifi-restart'))});
+// ── Wi-Fi → USB (2026-10-13): plug the cable in while on Wi-Fi and the session moves to it ──
+const wifiThenCable=o=>{const f=fixture({broadcast:'',canRestoreWifi:true,hidden:false,...o});f.c.reconcile();f.s.broadcast='192.168.42.255';f.advance(500);return f};
+const switched=o=>{const f=wifiThenCable(o);f.c.reconcile();f.stopped();f.c.reconcile();return f};
+test('Cable plugged in while on Wi-Fi: moves to USB after the Wi-Fi engine has stopped',()=>{const f=wifiThenCable();f.c.reconcile();assert.ok(f.calls.includes('stop'));assert.ok(!f.calls.some(x=>x.startsWith('tether:')),'waits for the native stop');f.stopped();f.c.reconcile();assert.ok(f.calls.includes('tether:192.168.42.255'))});
+test('A Wi-Fi choice made before the cable does not block the move',()=>{const f=fixture({broadcast:'',canRestoreWifi:true});f.c.chooseWireless();f.advance(2000);f.c.reconcile();f.s.broadcast='192.168.42.255';f.advance(500);f.c.reconcile();assert.ok(f.calls.includes('stop'))});
+test('A Wi-Fi choice made after the cable keeps Wi-Fi',()=>{const f=fixture({broadcast:'',canRestoreWifi:true,hidden:true});f.c.reconcile();f.s.broadcast='192.168.42.255';f.advance(500);f.c.reconcile();f.s.hidden=false;f.c.chooseWireless();f.advance(500);f.c.reconcile();assert.ok(!f.calls.includes('stop'))});
+test('A cable that was already plugged in when the app started does not take over Wi-Fi',()=>{const f=fixture({canRestoreWifi:true});f.c.reconcile();f.advance(5000);f.c.reconcile();assert.ok(!f.calls.includes('stop'))});
+test('No move without a saved Wi-Fi PC to fall back to',()=>{const f=wifiThenCable({canRestoreWifi:false});f.c.reconcile();assert.ok(!f.calls.includes('stop'))});
+test('No move while the app is in the background',()=>{const f=wifiThenCable({hidden:true});f.c.reconcile();assert.ok(!f.calls.includes('stop'))});
+test('USB that never answers goes back to the saved Wi-Fi PC, and is not retried on this plug-in',()=>{
+ const f=switched();f.advance(9999);f.c.reconcile();assert.ok(!f.calls.includes('wifi-restart'));f.advance(2);f.c.reconcile();assert.deepEqual(f.calls.filter(x=>x==='wifi-restart'),['wifi-restart']);
+ f.s.running=true;f.s.alive=true;f.s.kind='wireless';f.calls.length=0;for(let i=0;i<20;i++){f.advance(1500);f.c.reconcile()}
+ assert.ok(!f.calls.includes('stop'));assert.ok(!f.calls.some(x=>x.startsWith('tether:')));
+});
+test('USB that works, then is unplugged: back to Wi-Fi',()=>{const f=switched();f.s.alive=true;f.advance(1500);f.c.reconcile();assert.ok(!f.calls.includes('wifi-restart'));f.s.broadcast='';f.advance(1500);f.c.reconcile();assert.deepEqual(f.calls.filter(x=>x==='wifi-restart'),['wifi-restart'])});
+test('Unplug and plug in again moves to USB again',()=>{
+ const f=switched();f.advance(10001);f.c.reconcile();f.s.running=true;f.s.alive=true;f.s.kind='wireless';f.s.broadcast='';f.advance(1500);f.c.reconcile();
+ f.s.broadcast='192.168.42.255';f.advance(1500);f.calls.length=0;f.c.reconcile();assert.ok(f.calls.includes('stop'));
+});
+test('Choosing USB yourself after the move is not turned back into Wi-Fi',()=>{const f=switched();f.s.alive=true;f.c.chooseUsb();f.s.broadcast='';f.advance(1500);f.c.reconcile();assert.ok(!f.calls.includes('wifi-restart'))});
+test('USB-debugging users keep their own rules: no automatic move',()=>{const f=wifiThenCable({pref:'usbdebug'});f.c.reconcile();assert.ok(!f.calls.includes('tether:192.168.42.255'))});
 console.log(`${count} transport regression cases passed`);

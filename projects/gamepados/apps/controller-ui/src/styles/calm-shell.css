@@ -410,3 +410,10 @@
 .gp-shell .calm-card-actions { flex-shrink: 0; height: 44px; }
 .gp-shell .calm-card-actions > .calm-primary { font-size: 12px; }
 @media(min-width:700px) { .gp-shell .calm-card-name { font-size: 16px; line-height: 20px; } .gp-shell .calm-card-select { height: 40px; } }
+/* Play-time card on Home: the whole card is one button (owner request 2026-10-12). It used to be a div
+   with only a small arrow that could be pressed. The arrow is now just decoration inside the button. */
+.gp-shell .calm-allowance { width: 100%; text-align: left; font: inherit; cursor: pointer; -webkit-tap-highlight-color: transparent; transition: transform .16s ease-out, border-color .16s ease-out; }
+.gp-shell .calm-allowance:active { transform: scale(.985); }
+.gp-shell .calm-allowance:focus-visible { outline: 2px solid var(--console-violet, #bd96e4); outline-offset: 2px; }
+.gp-shell .calm-allowance-go { min-width: 44px; min-height: 44px; display: grid; place-items: center; color: var(--console-violet, var(--calm-muted)); }
+@media (prefers-reduced-motion: reduce) { .gp-shell .calm-allowance, .gp-shell .calm-allowance:active { transition: none; transform: none; } }

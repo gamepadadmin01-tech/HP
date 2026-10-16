@@ -253,8 +253,8 @@ android {
         // 62 = 1.4.8 (2026-10-05): Wi-Fi input reliability — full state every 8 ms while anything
         //      is held (was 33 ms), buttons sent pressed for at least 30 ms so a quick tap survives
         //      a Wi-Fi hiccup, and a same-size resize no longer releases held fingers.
-        versionCode = 62
-        versionName = "1.4.8"
+        versionCode = 63
+        versionName = "1.4.9"
 
         // AdMob test IDs by default; the release build type swaps in the live ones (see top of file).
         buildConfigField("String", "ADMOB_REWARDED_ID", "\"$admobTestRewardedId\"")
@@ -394,6 +394,12 @@ android {
         debug {
             applicationIdSuffix = ".dev"
             versionNameSuffix = "-dev"
+            // Test pattern receiver (hold A + circle the stick on a PC command). Debug only.
+            externalNativeBuild {
+                cmake {
+                    cppFlags += listOf("-DGAMEPAD_TEST_PATTERN")
+                }
+            }
         }
         release {
             isMinifyEnabled = true

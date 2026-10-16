@@ -4,6 +4,7 @@ import { Plus, ArrowLeft, Settings, Trash2, X as XIcon, Pencil, TriangleAlert } 
 import { useShellAppearance } from "./CalmShell";
 import { ShellMotion } from "./ShellMotion";
 import { CustomPad, CustomBtnDef, WidgetType } from "../types";
+import { RED_NORM, ACCENT_RGB, buttonText } from "./Widgets";
 
 // ── Custom pointer-driven slider ──────────────────────────────────────────────
 // Native <input type="range"> does NOT drag reliably inside this editor: the
@@ -132,6 +133,9 @@ function widgetBox(b: CustomBtnDef) {
 const WidgetPreview = React.memo(function WidgetPreview({ b }: { b: CustomBtnDef }) {
   const { x, y, r } = b;
   const stroke = "rgba(255,255,255,0.12)";
+  // The live pad draws every widget in RED_NORM and ignores the colours stored on the
+  // widget, so the preview must too (it used a blue default, and ABXY drew at 85 %).
+  const fill = RED_NORM;
 
   if (b.type === "dpad") {
     // Mirror the gameplay Dpad exactly: circular pad, 4 pie sectors, glossy top
@@ -149,13 +153,13 @@ const WidgetPreview = React.memo(function WidgetPreview({ b }: { b: CustomBtnDef
     ];
     return (
       <g>
-        <circle cx={x} cy={y} r={r} fill={b.normColor} stroke={stroke} strokeWidth={1.5} />
+        <circle cx={x} cy={y} r={r} fill={fill} stroke={stroke} strokeWidth={1.5} />
         <ellipse cx={x} cy={y - r * 0.25} rx={r * 0.6} ry={r * 0.2} fill="rgba(255,255,255,0.08)" />
         {dirs.map(({ angle }) => (
           <path key={angle} d={sector(angle - 44, angle + 44)} fill="transparent"
             stroke="rgba(255,255,255,0.10)" strokeWidth={1} />
         ))}
-        <circle cx={x} cy={y} r={inner} fill={b.normColor} stroke="rgba(0,0,0,0.2)" strokeWidth={2} />
+        <circle cx={x} cy={y} r={inner} fill={fill} stroke="rgba(0,0,0,0.2)" strokeWidth={2} />
         {dirs.map(({ angle, label }) => {
           const rad = (angle * Math.PI) / 180;
           return (
@@ -181,9 +185,9 @@ const WidgetPreview = React.memo(function WidgetPreview({ b }: { b: CustomBtnDef
       <g>
         {pts.map((p) => (
           <g key={p.l}>
-            <circle cx={x + p.dx} cy={y + p.dy} r={br} fill={p.c.replace("0.9", "0.22")} stroke={stroke} strokeWidth={1.5} />
+            <circle cx={x + p.dx} cy={y + p.dy} r={br} fill={fill} stroke={stroke} strokeWidth={1.5} />
             <text x={x + p.dx} y={y + p.dy} textAnchor="middle" dominantBaseline="central"
-              fontSize={br * 0.7} fontWeight={800} fill="rgba(255,255,255,0.85)"
+              fontSize={br * 0.52} fontWeight={800} fill="rgba(255,255,255,0.85)"
               style={{ fontFamily: "'Inter',sans-serif" }}>{p.l}</text>
           </g>
         ))}
@@ -196,7 +200,7 @@ const WidgetPreview = React.memo(function WidgetPreview({ b }: { b: CustomBtnDef
       : b.label.toUpperCase().startsWith("L") ? "L" : "R";
     return (
       <g>
-        <circle cx={x} cy={y} r={r} fill={b.normColor} stroke={stroke} strokeWidth={1.5} />
+        <circle cx={x} cy={y} r={r} fill={fill} stroke={stroke} strokeWidth={1.5} />
         <circle cx={x} cy={y} r={r * 0.48} fill="#d8d8d8" stroke="rgba(150,150,150,0.3)" strokeWidth={2} />
         <text x={x} y={y} textAnchor="middle" dominantBaseline="central"
           fontSize={r * 0.35} fontWeight={800} fill="rgba(40,40,40,0.9)"
@@ -208,7 +212,7 @@ const WidgetPreview = React.memo(function WidgetPreview({ b }: { b: CustomBtnDef
   if (b.type === "stickmode") {
     return (
       <g>
-        <circle cx={x} cy={y} r={r} fill="rgba(79,134,198,0.12)" stroke={stroke} strokeWidth={1.5} />
+        <circle cx={x} cy={y} r={r} fill={`rgba(${ACCENT_RGB}, 0.12)`} stroke={stroke} strokeWidth={1.5} />
         <text x={x} y={y} textAnchor="middle" dominantBaseline="central"
           fontSize={r * 0.42} fontWeight={800} fill="rgba(255,255,255,0.85)"
           style={{ fontFamily: "'Inter',sans-serif" }}>{b.label === "R-Mod" ? "R" : "L"}</text>
@@ -221,9 +225,10 @@ const WidgetPreview = React.memo(function WidgetPreview({ b }: { b: CustomBtnDef
     const h = b.h ?? r * 5.85;
     return (
       <g>
-        <rect x={x - w / 2} y={y - h / 2} width={w} height={h} rx={w * 0.4} fill={b.normColor} stroke={stroke} strokeWidth={1.5} />
-        <text x={x} y={y + h * 0.32} textAnchor="middle" dominantBaseline="central"
-          fontSize={w * 0.34} fontWeight={800} fill="rgba(255,255,255,0.85)"
+        <rect x={x - w / 2} y={y - h / 2} width={w} height={h} rx={w * 0.4} fill={fill} stroke={stroke} strokeWidth={1.5} />
+        {/* same place and size as the live TriggerPill label: baseline 22 above the bottom edge */}
+        <text x={x} y={y + h / 2 - 22} textAnchor="middle"
+          fontSize={w * 0.32} fontWeight={800} fill="rgba(255,255,255,0.85)"
           style={{ fontFamily: "'Inter',sans-serif" }}>{b.label || "T"}</text>
       </g>
     );
@@ -233,7 +238,7 @@ const WidgetPreview = React.memo(function WidgetPreview({ b }: { b: CustomBtnDef
   if (b.label === "view") {
     return (
       <g>
-        <circle cx={x} cy={y} r={r} fill={b.normColor} stroke={stroke} strokeWidth={1.5} />
+        <circle cx={x} cy={y} r={r} fill={fill} stroke={stroke} strokeWidth={1.5} />
         <g transform={`translate(${x},${y})`} style={{ stroke: "rgba(255,255,255,0.85)", strokeWidth: r * 0.07, fill: "none" }}>
           <rect x={-r * 0.28} y={-r * 0.28} width={r * 0.56} height={r * 0.22} rx={2} />
           <rect x={-r * 0.28} y={r * 0.05} width={r * 0.56} height={r * 0.22} rx={2} />
@@ -244,9 +249,9 @@ const WidgetPreview = React.memo(function WidgetPreview({ b }: { b: CustomBtnDef
   if (b.label === "home" || b.label === "menu") {
     return (
       <g>
-        <circle cx={x} cy={y} r={r} fill={b.normColor} stroke={stroke} strokeWidth={1.5} />
+        <circle cx={x} cy={y} r={r} fill={fill} stroke={stroke} strokeWidth={1.5} />
         <text x={x} y={y} textAnchor="middle" dominantBaseline="central"
-          fontSize={r * (b.label === "home" ? 0.6 : 0.8)} fontWeight={800} fill="rgba(255,255,255,0.85)"
+          fontSize={r * (b.label === "home" ? 0.6 : 0.7)} fontWeight={800} fill="rgba(255,255,255,0.85)"
           style={{ fontFamily: "'Inter',sans-serif" }}>{b.label === "home" ? "🎮" : "≡"}</text>
       </g>
     );
@@ -258,10 +263,10 @@ const WidgetPreview = React.memo(function WidgetPreview({ b }: { b: CustomBtnDef
     return (
       <g>
         <rect x={x - b.w / 2} y={y - b.h / 2} width={b.w} height={b.h} rx={rx}
-          fill={b.normColor} stroke={stroke} strokeWidth={1.5} />
+          fill={fill} stroke={stroke} strokeWidth={1.5} />
         <text x={x} y={y} textAnchor="middle" dominantBaseline="central"
           fontSize={Math.min(b.w, b.h) * 0.42} fontWeight={800} fill="rgba(255,255,255,0.85)"
-          style={{ fontFamily: "'Inter',sans-serif" }}>{b.label || (b.type === "macro" ? "M" : "B")}</text>
+          style={{ fontFamily: "'Inter',sans-serif" }}>{buttonText(b.label) || (b.type === "macro" ? "M" : "B")}</text>
       </g>
     );
   }
@@ -269,10 +274,10 @@ const WidgetPreview = React.memo(function WidgetPreview({ b }: { b: CustomBtnDef
   // button / macro (circle)
   return (
     <g>
-      <circle cx={x} cy={y} r={r} fill={b.normColor} stroke={stroke} strokeWidth={1.5} />
+      <circle cx={x} cy={y} r={r} fill={fill} stroke={stroke} strokeWidth={1.5} />
       <text x={x} y={y} textAnchor="middle" dominantBaseline="central"
-        fontSize={r * 0.5} fontWeight={800} fill="rgba(255,255,255,0.85)"
-        style={{ fontFamily: "'Inter',sans-serif" }}>{b.label || (b.type === "macro" ? "M" : "B")}</text>
+        fontSize={r * 0.52} fontWeight={800} fill="rgba(255,255,255,0.85)"
+        style={{ fontFamily: "'Inter',sans-serif" }}>{buttonText(b.label) || (b.type === "macro" ? "M" : "B")}</text>
     </g>
   );
 });
