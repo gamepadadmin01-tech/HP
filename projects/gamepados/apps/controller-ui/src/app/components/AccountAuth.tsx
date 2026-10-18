@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Eye, EyeOff, ArrowLeft, LoaderCircle } from "lucide-react";
 import { motion, useReducedMotion } from "framer-motion";
-import { signIn, createAccount, confirmEmail } from "../store/account";
+import { signIn, createAccount, confirmEmail, googleAvailable, beginGoogleSignIn, onGoogleResult } from "../store/account";
 import { ApiError, forgotPassword, resetPassword, resendCode } from "../api/account";
 
 // ─── Sign in / create account ─────────────────────────────────────────────────
@@ -44,6 +44,31 @@ export function AccountAuth({ standalone = false }: { standalone?: boolean } = {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+
+  // Continue with Google: shown only where the whole flow can work (inside the app, switched
+  // on at the server). The result comes back later, through the browser, not from this call.
+  const [gAvailable, setGAvailable] = useState(false);
+  const [gBusy, setGBusy] = useState(false);
+  useEffect(() => {
+    let on = true;
+    googleAvailable().then((v) => { if (on) setGAvailable(v); });
+    return () => { on = false; };
+  }, []);
+  useEffect(() => onGoogleResult((r) => { setGBusy(false); if (r.ok === false) { setNotice(""); setError(r.message); } }), []);
+  // Came back from the browser without finishing (closed it): don't leave the button stuck.
+  useEffect(() => {
+    if (!gBusy) return;
+    const giveUp = setTimeout(() => setGBusy(false), 120000);
+    const onFocus = () => setTimeout(() => setGBusy(false), 2500);
+    window.addEventListener("focus", onFocus);
+    return () => { clearTimeout(giveUp); window.removeEventListener("focus", onFocus); };
+  }, [gBusy]);
+  async function google() {
+    if (gBusy || busy) return;
+    setError(""); setNotice(""); setGBusy(true);
+    try { await beginGoogleSignIn(); }
+    catch { setGBusy(false); setError("Couldn't open Google sign-in. Try again."); }
+  }
 
   const emailOk = EMAIL_RE.test(email.trim());
   const passwordOk = password.length >= MIN_PASSWORD;
@@ -126,8 +151,15 @@ export function AccountAuth({ standalone = false }: { standalone?: boolean } = {
     : "Enter the code from your email and a new password.";
 
   return <motion.section key={mode} className="calm-auth" data-testid={`auth-${mode}-form`} initial={{ opacity: 0, x: reduced ? 0 : 8 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: reduced ? 0 : .18 }}>
-    <div className="calm-auth-heading">{!standalone && <span className="console-eyebrow">YOUR PLAYER PROFILE</span>}<h2 data-testid="auth-heading">{standalone && mode === 'signin' ? 'Sign in. Game on.' : title}</h2><p>{blurb}</p></div>
+    <div className="calm-auth-heading">{!standalone && <span className="console-eyebrow">YOUR PLAYER PROFILE</span>}<h2 data-testid="auth-heading">{title}</h2><p>{blurb}</p></div>
     {mode !== "signin" && <button data-testid="auth-back-signin-button" className="calm-text-button" onClick={() => go("signin")}><ArrowLeft size={17} aria-hidden="true" />Back to sign in</button>}
+    {(mode === "signin" || mode === "create") && gAvailable && <>
+      <button data-testid="auth-google-button" type="button" className="calm-google-button" onClick={google} disabled={gBusy || busy}>
+        {gBusy ? <LoaderCircle size={18} className="animate-spin" aria-hidden="true" /> : <GoogleG />}
+        {gBusy ? "Opening Google…" : "Continue with Google"}
+      </button>
+      <div className="calm-auth-or" role="separator"><span>or use your email</span></div>
+    </>}
     <form onSubmit={submit} className="calm-auth-form">
       {error && <Banner tone="error">{error}</Banner>}
       {notice && !error && <Banner tone="info">{notice}</Banner>}
@@ -152,6 +184,16 @@ export function AccountAuth({ standalone = false }: { standalone?: boolean } = {
       {mode === "create" && <button className="calm-text-button" onClick={()=>go("signin")}>Already have an account? Sign in</button>}
     </div>
   </motion.section>;
+}
+
+/** The Google "G", in Google's own colours (required by their branding rules for the button). */
+function GoogleG() {
+  return <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true">
+    <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z" />
+    <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z" />
+    <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z" />
+    <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z" />
+  </svg>;
 }
 
 function Banner({ tone, children }: { tone: "error" | "info"; children: React.ReactNode }) {

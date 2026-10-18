@@ -55,6 +55,15 @@
             <meta-data
                 android:name="android.hardware.usb.action.USB_ACCESSORY_ATTACHED"
                 android:resource="@xml/accessory_filter" />
+            <!-- Sign in with Google comes back from the browser as gamepados://auth?code=…
+                 (or ?error=…). The code is one-time and bound to the app that started the
+                 flow, so another app firing this link gets nothing. See MainActivity.handleAuthIntent. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="gamepados" android:host="auth" />
+            </intent-filter>
         </activity>
 
         <!-- The FileProvider for the in-app updater's install-trigger lives ONLY in

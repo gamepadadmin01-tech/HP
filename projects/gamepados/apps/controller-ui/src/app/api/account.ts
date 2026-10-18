@@ -105,6 +105,27 @@ export function login(email: string, password: string) {
   return request<{ success: true; token: string; user: User }>("/login", { email, password });
 }
 
+// ── Sign in with Google (system browser + one-time code; see website/backend/google.js) ──
+/** Is Google sign-in switched on at the server? Older servers have no such route: false. */
+export async function googleEnabled(): Promise<boolean> {
+  try {
+    const r = await request<{ success: true; enabled: boolean }>("/google/config");
+    return r.enabled === true;
+  } catch {
+    return false;
+  }
+}
+
+/** Where the browser goes to start the flow. `challenge` is SHA-256(verifier), base64url. */
+export function googleStartUrl(challenge: string) {
+  return `${BASE}/google/start?challenge=${encodeURIComponent(challenge)}`;
+}
+
+/** Trade the one-time code from the deep link (plus our verifier) for a normal session. */
+export function googleExchange(code: string, verifier: string) {
+  return request<{ success: true; token: string; user: User }>("/google/exchange", { code, verifier });
+}
+
 export function me(token: string) {
   return request<{ success: true; user: User }>("/me", undefined, token);
 }

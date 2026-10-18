@@ -3560,7 +3560,7 @@ function DashboardScreen({
               available, and is hidden on Settings because that tab shows the full
               update block — otherwise the same notice would appear twice. */}
           <motion.div key={authOpen ? 'sign-in' : tab} initial={reduceShellMotion || !dashboardEntered.current ? false : { opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: reduceShellMotion ? 0 : .22, ease: [.22, 1, .36, 1] }}>
-            {authOpen ? <SignInScreen onBack={closeSignIn} onPlans={() => changeTab('account')} /> : <>
+            {authOpen ? <SignInScreen onBack={closeSignIn} /> : <>
             {tab === "home"   && <TabHome realTelemetry={realTelemetry} onLaunch={onLaunch} onConnect={onBack}
               onLaunchEditor={onLaunchEditor}
               selectedPresetId={selectedPresetId} onSelectPreset={onSelectPreset}

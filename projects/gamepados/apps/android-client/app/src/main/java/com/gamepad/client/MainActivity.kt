@@ -1138,6 +1138,15 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback, android.hardwa
                     }.toString()
                 }
 
+                // Sign in with Google: hand the web layer the result the browser sent back
+                // through gamepados://auth — once (handleAuthIntent keeps it until asked).
+                @android.webkit.JavascriptInterface
+                fun takeAuthReturn(): String {
+                    val v = pendingAuthReturn ?: return ""
+                    pendingAuthReturn = null
+                    return v
+                }
+
                 // Open a URL (e.g. the new APK) in the browser / package installer.
                 @android.webkit.JavascriptInterface
                 fun openUrl(url: String) {
@@ -1927,6 +1936,7 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback, android.hardwa
         // persists across onCreate→onResume; handleAccessoryIntent no-ops if we're
         // already on an AOA session).
         handleAccessoryIntent(intent)
+        handleAuthIntent(intent)
     }
 
     override fun onPause() {
@@ -1974,6 +1984,28 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback, android.hardwa
         setIntent(intent)
         // Phone already running when plugged into the PC → warm USB-accessory attach.
         handleAccessoryIntent(intent)
+        handleAuthIntent(intent)
+    }
+
+    // ── Sign in with Google ───────────────────────────────────────────────────
+    // Google refuses OAuth inside a WebView, so the web layer opens the phone's browser and
+    // the browser comes back through gamepados://auth?code=… (or ?error=…). The page may not
+    // be loaded yet (cold start through the link), so the result waits here until the web
+    // layer asks for it with takeAuthReturn(); the DOM event below is only a nudge.
+    @Volatile private var pendingAuthReturn: String? = null
+
+    private fun handleAuthIntent(intent: Intent?) {
+        val data = intent?.data ?: return
+        if (data.scheme != "gamepados" || data.host != "auth") return
+        val code = data.getQueryParameter("code")
+        val json = org.json.JSONObject().apply {
+            if (!code.isNullOrEmpty()) put("code", code) else put("error", data.getQueryParameter("error") ?: "failed")
+        }.toString()
+        pendingAuthReturn = json
+        intent.data = null   // consumed: a later onResume must not replay it
+        try {
+            webView?.evaluateJavascript("window.dispatchEvent(new Event('gamepados:auth-return'))", null)
+        } catch (e: Exception) { /* the web layer also checks on focus and on start */ }
     }
 
     override fun onSensorChanged(event: android.hardware.SensorEvent) {
