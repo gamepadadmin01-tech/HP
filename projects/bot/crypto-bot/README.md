@@ -15,8 +15,17 @@ to the original two-coin setup.
 **No terminal needed — double-click these, in order:**
 1. `setup_keys.bat` — saves your testnet keys (and optional Telegram alerts) on this PC.
 2. `start_bot.bat` — starts the bot on the testnet; it restarts itself if it ever stops.
-3. Open http://localhost:8077 in your browser for the dashboard (prices, open trades, stops,
-   today's P&L, how far each coin is from a buy signal, trade log).
+3. Open http://localhost:8077 in your browser for the dashboard:
+   - **Overview** — account value, today's result vs the loss limit, open trades, a countdown to the
+     next daily close, and a card per coin (in a trade, or how close it is to buying).
+   - **Charts** — daily candles per coin with the buy level, sell level, entry and stop-loss drawn
+     on, the bot's buys/sells marked, and a plain-words explanation of what it is waiting for.
+   - **Performance** — account value over time (recorded every 15 minutes), profit/loss, win rate,
+     worst drop, results by coin and by how trades ended, and every trade.
+   - **Activity** — everything the bot did and decided, in your local time, with filters and search.
+   - **Pause / Resume / Sell everything** buttons (each asks to confirm). They work only from this
+     laptop's own dashboard page: the page carries a secret code the bot creates at each start, so
+     other websites open in your browser cannot press them.
 4. Optional: `install_autostart.bat` makes the bot start by itself whenever you log in to Windows;
    `remove_autostart.bat` undoes that.
 

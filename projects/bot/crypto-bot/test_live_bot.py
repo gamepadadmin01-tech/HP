@@ -124,6 +124,61 @@ def main():
     print(f"ok  shared cash: {len(st['positions'])} trades used {committed:,.2f} of 100 USDT, the rest were skipped")
     pt.SYMBOLS = ["BTC/USDT", "ETH/USDT"]
 
+    # 10. dashboard server: data endpoints, buttons, and the protections on them
+    import http.client
+    bot = fresh(tmp, last_close=130.0, price=130.0)
+    lb.ACTIVITY_FILE, lb.EQUITY_FILE = tmp / "activity.log", tmp / "equity.csv"
+    (tmp / "dashboard.html").write_text("<script>const TOKEN = \"__BOT_TOKEN__\";</script>")
+    pt.save_state({"positions": {}, "last_bar": {s: day(2) for s in pt.SYMBOLS}})
+    bot.tick()  # buys BTC and ETH, writes status, candles, activity, equity
+    server, token = lb.serve_dashboard(0, bot)
+    port = server.server_address[1]
+
+    def call(method, path, body=None, headers=None, host=None):
+        c = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+        h = {"Host": host or f"localhost:{port}", **(headers or {})}
+        c.request(method, path, body=json.dumps(body) if body is not None else None, headers=h)
+        r = c.getresponse()
+        return r.status, r.read().decode()
+
+    lb.serve_dashboard.__globals__["HERE"] = tmp
+    status, page = call("GET", "/")
+    assert status == 200 and token in page and "__BOT_TOKEN__" not in page
+    st = json.loads(call("GET", "/api/status")[1])
+    assert set(st["positions"]) == {"BTC/USDT", "ETH/USDT"} and st["equity"] > 0
+    assert len(json.loads(call("GET", "/api/candles?symbol=BTC/USDT")[1])) > 50
+    assert any("BUY" in a["msg"] for a in json.loads(call("GET", "/api/activity")[1]))
+    assert len(json.loads(call("GET", "/api/equity")[1])) == 1
+    assert len(json.loads(call("GET", "/api/journal")[1])) == 2
+    print("ok  dashboard data: page carries its secret code; status, candles, activity, equity, journal all served")
+
+    ok = {"X-Bot-Token": token, "Content-Type": "application/json"}
+    assert call("POST", "/api/control", {"action": "pause"})[0] == 403                       # no code
+    assert call("POST", "/api/control", {"action": "pause"}, {"X-Bot-Token": "guess"})[0] == 403
+    assert call("POST", "/api/control", {"action": "pause"}, {**ok, "Origin": "https://evil.example"})[0] == 403
+    assert call("POST", "/api/control", {"action": "pause"}, ok, host="evil.example:80")[0] == 403  # disguised address
+    assert call("GET", "/api/status", host="evil.example")[0] == 403
+    assert call("POST", "/api/control", {"action": "selfdestruct"}, ok)[0] == 400
+    assert not (tmp / "STOP").exists()
+    print("ok  buttons refused without the code, with a wrong code, from another website, or under a disguised address")
+
+    assert call("POST", "/api/control", {"action": "pause"}, {**ok, "Origin": f"http://localhost:{port}"})[0] == 200
+    assert (tmp / "STOP").exists() and bot.wake.is_set()
+    bot.wake.clear(); bot.tick()
+    assert bot.halted
+    assert call("POST", "/api/control", {"action": "resume"}, ok)[0] == 200
+    bot.tick()
+    assert not bot.halted and not (tmp / "STOP").exists()
+    assert call("POST", "/api/control", {"action": "flatten"}, ok)[0] == 200
+    bot.tick()
+    assert not pt.load_state()["positions"] and bot.halted and (tmp / "STOP").exists() and not (tmp / "FLATTEN").exists()
+    assert call("POST", "/api/control", {"action": "resume"}, ok)[0] == 200
+    bot.tick()
+    assert not bot.halted
+    server.shutdown()
+    print("ok  Pause -> halted; Resume -> trading; Sell everything -> all sold and paused; Resume works after it")
+    lb.ACTIVITY_FILE = lb.EQUITY_FILE = None
+
     # 7. risk above 3% is refused at startup
     import sys
     sys.argv = ["live_bot.py", "--risk", "0.05"]

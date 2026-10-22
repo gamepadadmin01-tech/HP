@@ -7,6 +7,8 @@ simulator.html
 # Private and changes every minute, so it stays on this PC only.
 *_state.json
 *_journal.csv
+*_activity.log
+*_equity.csv
 live_status.json
 live_status.tmp
 STOP
