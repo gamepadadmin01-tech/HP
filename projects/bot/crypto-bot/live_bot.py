@@ -82,6 +82,17 @@ pt.log = log  # trades placed through paper_trader now also alert
 MODE = "testnet"
 
 
+def stay_awake():
+    """Ask Windows not to idle-sleep while this program runs (what video players do).
+    Changes no settings: it ends when the bot closes. A closed lid still sleeps."""
+    try:
+        import ctypes
+        ES_CONTINUOUS, ES_SYSTEM_REQUIRED = 0x80000000, 0x00000001
+        return bool(ctypes.windll.kernel32.SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED))
+    except (AttributeError, OSError):  # not Windows
+        return False
+
+
 # ---------- exchanges ----------
 
 def public_data():
@@ -225,6 +236,8 @@ class Bot:
     def run_forever(self):
         log(f"bot started: {MODE}, {len(pt.SYMBOLS)} coins, account {self.args.account:,.0f} USDT, risk {self.args.risk:.1%}, "
             f"max position {self.args.max_position:,.0f} USDT, daily loss limit {self.args.max_daily_loss:.0%}")
+        _plain_log("keeping the computer awake while the bot runs" if stay_awake()
+                   else "could not ask Windows to stay awake; check your sleep settings")
         while True:
             try:
                 self.tick()

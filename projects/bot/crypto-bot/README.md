@@ -178,6 +178,21 @@ setup (daily, 20/10/2, 10 coins, 0.3% risk) is not a lucky pick.
 | Only buy while BTC is above its 200-day average | `safety_rules.py` | Softer 2022 (−1.9% vs −8.6%) but missed the 2023 recovery; worse drop, better in 3 of 6 years |
 | At most 5 trades open at once | `safety_rules.py` | Worse on everything: it throws away the diversification |
 | 4-hour candles instead of daily | `timeframe_test.py` | 6× more trades; −36% worst drop at the same risk; at matched drop +9.8%/yr vs +14.8% |
+| 1-hour, 30-minute, 15-minute candles (intraday / scalping), at 0.1% and 0.075% fees | `intraday_test.py` | All lose heavily, every year: 1h −25%/yr, 30m −64%/yr, 15m wiped out by 2024. Daily +11%/yr over the same 2021–now window |
+
+**Why fast timeframes fail — edge per trade vs cost per trade** (same rules, 2021–now, costs in R):
+
+| Candles | Edge with zero costs | Typical stop distance | Fees + slippage per trade |
+|---|---|---|---|
+| Daily | +0.78R | 12.3% | 0.02R |
+| 1-hour | +0.08R | 2.2% | 0.14R |
+| 30-minute | +0.05R | 1.5% | 0.20R |
+| 15-minute | −0.01R | 1.1% | 0.29R |
+
+Shorter candles mean tighter stops, so each trade must be bigger to risk the same amount, and the
+fees on that bigger trade eat a large share of what is risked. On 15-minute candles there is no
+edge even before costs. A scalping strategy would need an edge well above ~0.3R per trade after
+costs, which this rule family does not have.
 
 ## Practice simulator
 
