@@ -51,7 +51,8 @@ def prepare(coins):
     return out
 
 
-def simulate(sigs, start=START, end=None, risk=RISK, start_equity=10_000.0):
+def simulate(sigs, start=START, end=None, risk=RISK, start_equity=10_000.0, max_positions=None):
+    """max_positions: if set, no new trade opens while that many are already open."""
     days = sorted(set().union(*[s.index for s in sigs.values()]))
     days = [d for d in days if d >= pd.Timestamp(start, tz="UTC") and (end is None or d <= pd.Timestamp(end, tz="UTC"))]
     last_day = {c: s.index[-1] for c, s in sigs.items()}
@@ -79,6 +80,8 @@ def simulate(sigs, start=START, end=None, risk=RISK, start_equity=10_000.0):
         for c, s in sigs.items():
             if c in pos or day not in s.index or prev not in s.index:
                 continue
+            if max_positions and len(pos) >= max_positions:
+                break
             if s.at[prev, "entry"] and np.isfinite(s.at[prev, "stop_dist"]):
                 entry = s.at[day, "open"] * (1 + SLIP)
                 dist = s.at[prev, "stop_dist"]

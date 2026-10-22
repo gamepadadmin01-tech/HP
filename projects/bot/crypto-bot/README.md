@@ -166,6 +166,19 @@ with crashed coins FTT, LUNC, EOS, FIL, ICP, SAND, XLM, ETC, MATIC, POL added). 
 needs roughly 500 USDT or more, or some positions fall under Binance's 5 USDT minimum order.
 LUNC's own May-2022 collapse isn't in the data (Binance only has it from after).
 
+## What else was tested on the 10-coin bot (Oct 2026) — all rejected, current setup kept
+
+Each test had its pass rules written down before running (better return/worst-drop, better
+Sharpe, better in at least 4 of 6 years, 2021 to now). None passed, which is good news: the live
+setup (daily, 20/10/2, 10 coins, 0.3% risk) is not a lucky pick.
+
+| Test | Script | Result |
+|---|---|---|
+| Tune entry/exit/stop (72 combinations), re-picked each year from the 3 years before | `tune.py` | Tuned 0.73 return/drop vs 1.10 for 20/10/2; better in 2 of 6 years. 20/10/2 ranks 3rd of 72 over the whole period, on a plateau of similar settings |
+| Only buy while BTC is above its 200-day average | `safety_rules.py` | Softer 2022 (−1.9% vs −8.6%) but missed the 2023 recovery; worse drop, better in 3 of 6 years |
+| At most 5 trades open at once | `safety_rules.py` | Worse on everything: it throws away the diversification |
+| 4-hour candles instead of daily | `timeframe_test.py` | 6× more trades; −36% worst drop at the same risk; at matched drop +9.8%/yr vs +14.8% |
+
 ## Practice simulator
 
 `simulator.html` replays real BTC/ETH history (hourly candles since 2020) one candle at a time,
