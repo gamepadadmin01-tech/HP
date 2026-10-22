@@ -253,8 +253,14 @@ android {
         // 62 = 1.4.8 (2026-10-05): Wi-Fi input reliability — full state every 8 ms while anything
         //      is held (was 33 ms), buttons sent pressed for at least 30 ms so a quick tap survives
         //      a Wi-Fi hiccup, and a same-size resize no longer releases held fingers.
-        versionCode = 63
-        versionName = "1.4.9"
+        // 63 = 1.4.9 (2026-10-13): moves to USB by itself, one USB notice, cleaner Home and Settings.
+        //      Built for the stores, so it is NOT reused for anything that differs from it.
+        // 64 = 1.4.10 (2026-10-22): a plain sign-in page (no emblem, no tagline) and "Continue with
+        //      Google" through the phone's browser and the gamepados://auth link. The Google button
+        //      stays hidden until the server reports it switched on, so this build is safe against
+        //      a server that has no Google routes yet.
+        versionCode = 64
+        versionName = "1.4.10"
 
         // AdMob test IDs by default; the release build type swaps in the live ones (see top of file).
         buildConfigField("String", "ADMOB_REWARDED_ID", "\"$admobTestRewardedId\"")

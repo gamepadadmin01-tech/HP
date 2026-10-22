@@ -17,9 +17,19 @@ do the one-time Google Cloud setup below. Until then the app does not show the G
 5. The app trades that code (plus a secret it made at the start, so no other app can steal the
    sign-in) for a normal session token. From there nothing differs from a password sign-in.
 
+**The website uses the same flow** (added 2026-10-22). Its account page (`/account`) shows
+**Continue with Google** when the server says it is on. It starts with `ret=web`, and instead of the
+app link the backend redirects back to `https://www.gamepad.space/account#google_code=…` (the code
+rides in the URL *fragment*, which no server or log ever sees). The page trades it, with the secret
+it kept in its own `sessionStorage`, for the same kind of session. The destination is fixed in the
+backend (optional variable `GOOGLE_WEB_RETURN`, default `https://www.gamepad.space`), never taken
+from the request, so it can't be used as an open redirect. **No extra Google Cloud step is needed:**
+the same redirect URI (the backend callback) serves both the app and the website.
+
 Files: `website/backend/google.js` (+ `google.test.js`), routes in `server.js`,
 app: `controller-ui/src/app/api/account.ts`, `store/account.ts`, `components/AccountAuth.tsx`,
-and `MainActivity.kt` + `AndroidManifest.xml` for the `gamepados://auth` link.
+and `MainActivity.kt` + `AndroidManifest.xml` for the `gamepados://auth` link;
+website: `frontend/account.html`, `css/account.css`, `js/account.js`.
 
 ## One-time setup (about 10 minutes, in your Google account)
 
