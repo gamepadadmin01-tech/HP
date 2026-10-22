@@ -32,12 +32,9 @@
 !/context/
 !/projects/
 
-# Inside projects/, only gamepados and the trading bot are tracked.
+# Inside projects/, only gamepados is tracked.
 /projects/*
 !/projects/gamepados/
-# The crypto trading bot (code only). projects/bot/crypto-bot/.gitignore keeps out its
-# downloaded price data, results, and the files holding live positions and trades.
-!/projects/bot/
 
 # projects/gamepados/.gitignore governs everything below it — it excludes
 # website/, tools/, node_modules/, target/, .cargo/, releases/, secrets and
