@@ -33,6 +33,7 @@ from pathlib import Path
 import ccxt
 import pandas as pd
 
+from fetch_data import binance
 from strategies import donchian_breakout
 
 HERE = Path(__file__).parent
@@ -40,6 +41,11 @@ STATE_FILE = HERE / "paper_state.json"
 JOURNAL_FILE = HERE / "paper_journal.csv"
 SYMBOLS = ["BTC/USDT", "ETH/USDT"]
 MAX_POSITION_USDT = None  # hard cap on any single position; set by live_bot.py
+
+
+def fp(price):
+    """A price as people read it: cents for big coins, enough digits for cheap ones (0.07123, not 0.07)."""
+    return f"{price:,.2f}" if abs(price) >= 10 else f"{price:.4g}"
 
 
 def log(msg):
@@ -76,7 +82,7 @@ def testnet_exchange():
     key, secret = os.getenv("BINANCE_TESTNET_API_KEY"), os.getenv("BINANCE_TESTNET_SECRET")
     if not key or not secret:
         raise SystemExit("Set BINANCE_TESTNET_API_KEY and BINANCE_TESTNET_SECRET first (see top of this file).")
-    ex = ccxt.binance({"apiKey": key, "secret": secret, "enableRateLimit": True})
+    ex = binance(apiKey=key, secret=secret)
     ex.set_sandbox_mode(True)
     if "testnet" not in ex.urls["api"]["private"]:
         raise SystemExit("Refusing to run: exchange is not pointed at the testnet.")
@@ -103,7 +109,7 @@ def check_stop(ex, symbol, state):
     if stop_order["status"] == "closed":
         px = stop_order.get("average") or pos["stop"]
         pnl = px / pos["entry"] - 1
-        log(f"{symbol}: STOPPED OUT at {px:,.2f} ({pnl:+.1%})")
+        log(f"{symbol}: STOPPED OUT at {fp(px)} ({pnl:+.1%})")
         journal(dict(symbol=symbol, action="SELL", qty=pos["qty"], price=px, stop=pos["stop"],
                      pnl_pct=round(pnl * 100, 2), pnl_usdt=round(pos["qty"] * (px - pos["entry"]), 2),
                      reason="stop-loss", order_id=stop_order["id"]))
@@ -114,20 +120,27 @@ def check_stop(ex, symbol, state):
     return True
 
 
-def open_long(ex, symbol, state, account, risk, stop_dist, reason, entry_time, dry_run=False):
-    """Market-buy sized to `risk` of `account`, then place an exchange stop `stop_dist` below the fill."""
+def open_long(ex, symbol, state, account, risk, stop_dist, reason, entry_time, dry_run=False, cash=None):
+    """Market-buy sized to `risk` of `account`, then place an exchange stop `stop_dist` below the fill.
+
+    `cash`, when given, is the money not already tied up in other open trades; the buy never uses more.
+    """
     price = ex.fetch_ticker(symbol)["last"]
     qty = min(account * risk / stop_dist, account / price)
     if MAX_POSITION_USDT:
         qty = min(qty, MAX_POSITION_USDT / price)
+    cash_limited = cash is not None and qty * price * (1 + 0.001) > cash
+    if cash_limited:
+        qty = max(cash, 0) / (price * (1 + 0.001))
     qty = float(ex.amount_to_precision(symbol, qty))
     min_cost = ex.market(symbol)["limits"]["cost"]["min"] or 0
     if qty * price < min_cost:
-        log(f"{symbol}: signal, but order of ${qty * price:,.2f} is below the ${min_cost} minimum; raise --account")
+        why = "not enough free cash, other trades are using it" if cash_limited else "raise --account"
+        log(f"{symbol}: signal, but order of ${qty * price:,.2f} is below the ${min_cost} minimum; {why}")
         return
     if dry_run:
-        log(f"{symbol}: [dry-run] would BUY {qty} (~${qty * price:,.0f}) at ~{price:,.2f}, "
-            f"stop ~{price - stop_dist:,.2f}")
+        log(f"{symbol}: [dry-run] would BUY {qty} (~${qty * price:,.0f}) at ~{fp(price)}, "
+            f"stop ~{fp(price - stop_dist)}")
         return
     order = ex.create_order(symbol, "market", "buy", qty)
     fill = order.get("average") or price
@@ -137,7 +150,7 @@ def open_long(ex, symbol, state, account, risk, stop_dist, reason, entry_time, d
     stop_order = ex.create_order(symbol, "STOP_LOSS", "sell", sell_qty, None, {"stopPrice": stop})
     state["positions"][symbol] = dict(qty=sell_qty, entry=fill, stop=stop, stop_order_id=stop_order["id"],
                                       entry_time=entry_time)
-    log(f"{symbol}: BUY {sell_qty} at {fill:,.2f}, stop-loss order at {stop:,.2f}")
+    log(f"{symbol}: BUY {sell_qty} at {fp(fill)}, stop-loss order at {fp(stop)}")
     journal(dict(symbol=symbol, action="BUY", qty=sell_qty, price=fill, stop=stop, pnl_pct="",
                  reason=reason, order_id=order["id"]))
 
@@ -152,15 +165,15 @@ def close_long(ex, symbol, state, reason, dry_run=False):
     order = ex.create_order(symbol, "market", "sell", pos["qty"])
     px = order.get("average") or ex.fetch_ticker(symbol)["last"]
     pnl = px / pos["entry"] - 1
-    log(f"{symbol}: SELL {pos['qty']} at {px:,.2f} ({pnl:+.1%}), {reason}")
+    log(f"{symbol}: SELL {pos['qty']} at {fp(px)} ({pnl:+.1%}), {reason}")
     journal(dict(symbol=symbol, action="SELL", qty=pos["qty"], price=px, stop=pos["stop"],
                  pnl_pct=round(pnl * 100, 2), pnl_usdt=round(pos["qty"] * (px - pos["entry"]), 2),
                  reason=reason, order_id=order["id"]))
     del state["positions"][symbol]
 
 
-def step(ex, symbol, sig, state, account, risk, dry_run=False):
-    """Act on the last closed candle in `sig` for one symbol."""
+def step(ex, symbol, sig, state, account, risk, dry_run=False, cash=None):
+    """Act on the last closed candle in `sig` for one symbol. `cash`: see open_long."""
     bar = str(sig.index[-1].date())
     last = sig.iloc[-1]
 
@@ -175,18 +188,18 @@ def step(ex, symbol, sig, state, account, risk, dry_run=False):
         if last.exit:
             close_long(ex, symbol, state, "10-day low", dry_run)
         else:
-            log(f"{symbol}: HOLD since {pos['entry_time']} at {pos['entry']:,.2f}, stop {pos['stop']:,.2f}")
+            log(f"{symbol}: HOLD since {pos['entry_time']} at {fp(pos['entry'])}, stop {fp(pos['stop'])}")
     elif last.entry:
-        open_long(ex, symbol, state, account, risk, float(last.stop_dist), "close above 20-day high", bar, dry_run)
+        open_long(ex, symbol, state, account, risk, float(last.stop_dist), "close above 20-day high", bar, dry_run, cash)
     else:
-        log(f"{symbol}: WAIT; buy trigger is a daily close above {sig.high.tail(20).max():,.2f}")
+        log(f"{symbol}: WAIT; buy trigger is a daily close above {fp(sig.high.tail(20).max())}")
 
     if not dry_run:
         state["last_bar"][symbol] = bar
 
 
 def run_once(args):
-    market_data = ccxt.binance({"enableRateLimit": True})  # real prices for signals
+    market_data = binance(mirror=True)  # real prices for signals
     ex = market_data if args.dry_run else testnet_exchange()
     if args.dry_run:
         ex.load_markets()

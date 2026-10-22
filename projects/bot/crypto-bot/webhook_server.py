@@ -31,6 +31,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import ccxt
 
 import paper_trader as pt
+from fetch_data import binance
 from strategies import donchian_breakout
 
 ALLOWED = {"BTCUSDT": "BTC/USDT", "ETHUSDT": "ETH/USDT"}
@@ -184,7 +185,7 @@ def main():
     secret = os.getenv("WEBHOOK_SECRET", "")
     if len(secret) < 12:
         raise SystemExit("Set WEBHOOK_SECRET to a random phrase of 12+ characters first (see top of this file).")
-    market_data = ccxt.binance({"enableRateLimit": True})
+    market_data = binance(mirror=True)
     if args.dry_run:
         market_data.load_markets()
         ex = market_data

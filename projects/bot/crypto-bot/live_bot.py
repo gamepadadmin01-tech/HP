@@ -4,10 +4,15 @@ Every minute it:
   * reads live prices and checks each open trade's exchange stop-loss
   * updates live_status.json and the dashboard at http://localhost:8077
   * checks the kill-switch files (see below)
-Right after each daily close (00:00 UTC = 05:30 IST) it runs the Breakout rules and
-places orders, with a stop-loss order on the exchange for every buy.
+Right after each daily close (00:00 UTC = 05:30 IST) it runs the Breakout rules on every coin
+and places orders, with a stop-loss order on the exchange for every buy.
+
+Coins: BTC ETH SOL BNB XRP ADA DOGE LTC LINK AVAX by default (--coins to change), all sharing one
+account. Each trade risks 0.3% of the account (--risk); portfolio.py showed 10 coins only beat
+BTC+ETH alone at about this size, because altcoins tend to fall together.
 
 Safety:
+  shared cash        a new trade only gets money not already tied up in open trades
   --max-position     hard cap on any one position, in USDT (default 200)
   --max-daily-loss   stop opening trades for the rest of the UTC day after losing this
                      fraction of the account (default 0.03 = 3%); open stops stay in place
@@ -22,8 +27,9 @@ Modes:
 
 Telegram alerts (optional): set TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID.
 
-    python live_bot.py                      # testnet
-    python live_bot.py --account 500 --risk 0.01 --max-position 150
+    python live_bot.py                      # testnet, 10 coins, 0.3% risk per trade
+    python live_bot.py --account 500 --max-position 150
+    python live_bot.py --coins BTC ETH --risk 0.01      # the original two-coin setup
 """
 import argparse
 import json
@@ -39,9 +45,11 @@ import pandas as pd
 import requests
 
 import paper_trader as pt
+from fetch_data import binance
 from strategies import donchian_breakout
 
 HERE = pt.HERE
+COINS = ["BTC", "ETH", "SOL", "BNB", "XRP", "ADA", "DOGE", "LTC", "LINK", "AVAX"]
 STATUS_FILE = HERE / "live_status.json"
 LOOP_SECONDS = 60
 CONFIRM_PHRASE = "I_ACCEPT_REAL_MONEY_RISK"
@@ -77,10 +85,8 @@ MODE = "testnet"
 # ---------- exchanges ----------
 
 def public_data():
-    """Real Binance prices. Uses the public market-data mirror, which is reachable more reliably."""
-    ex = ccxt.binance({"enableRateLimit": True, "timeout": 20000})
-    ex.urls["api"]["public"] = "https://data-api.binance.vision/api/v3"
-    return ex
+    """Real Binance prices, spot only, from the public market-data mirror."""
+    return binance(mirror=True)
 
 
 def live_exchange():
@@ -89,7 +95,7 @@ def live_exchange():
         raise SystemExit(f"Live mode needs LIVE_TRADING_CONFIRM={CONFIRM_PHRASE} in the environment.")
     if not key or not secret:
         raise SystemExit("Live mode needs BINANCE_LIVE_API_KEY and BINANCE_LIVE_SECRET.")
-    ex = ccxt.binance({"apiKey": key, "secret": secret, "enableRateLimit": True, "timeout": 20000})
+    ex = binance(apiKey=key, secret=secret)
     if "testnet" in ex.urls["api"]["private"]:
         raise SystemExit("Live exchange unexpectedly points at the testnet.")
     restrictions = ex.sapi_get_account_apirestrictions()
@@ -110,11 +116,21 @@ class Bot:
         self.halted, self.halt_reason, self.errors, self.last_error = False, "", 0, ""
         self.trading_day = None
 
-    def account_size(self):
-        if MODE != "live":
-            return self.args.account
-        free = self.ex.fetch_balance()["free"].get("USDT", 0.0)
-        return min(self.args.account, free)  # never size off more than you said, or more than you have
+    def free_cash(self, state):
+        """Money a new trade may use: the account minus what open trades already hold.
+        Live, it is also never more than the USDT actually free on Binance."""
+        committed = sum(p["qty"] * p["entry"] for p in state["positions"].values())
+        cash = self.args.account - committed
+        if MODE == "live":
+            cash = min(cash, self.ex.fetch_balance()["free"].get("USDT", 0.0))
+        return max(cash, 0.0)
+
+    def prices(self):
+        try:  # one request for every coin
+            tickers = self.ex.fetch_tickers(pt.SYMBOLS)
+            return {s: float(tickers[s]["last"]) for s in pt.SYMBOLS}
+        except (AttributeError, KeyError, ccxt.NotSupported):
+            return {s: float(self.ex.fetch_ticker(s)["last"]) for s in pt.SYMBOLS}
 
     def realized_today(self):
         if not pt.JOURNAL_FILE.exists():
@@ -168,7 +184,7 @@ class Bot:
         for sym in list(state["positions"]):
             pt.check_stop(self.ex, sym, state)
         pt.save_state(state)
-        prices = {s: float(self.ex.fetch_ticker(s)["last"]) for s in pt.SYMBOLS}
+        prices = self.prices()
         self.kill_switches(state)
         loss_today = self.daily_loss_check(state, prices)
 
@@ -187,7 +203,7 @@ class Bot:
                     state["last_bar"][sym] = self.levels[sym]["candle"]
                 else:
                     sig = donchian_breakout(pt.daily_candles(self.data, sym))
-                    pt.step(self.ex, sym, sig, state, self.account_size(), self.args.risk)
+                    pt.step(self.ex, sym, sig, state, self.args.account, self.args.risk, cash=self.free_cash(state))
                 pt.save_state(state)
         self.write_status(state, prices, loss_today)
 
@@ -207,7 +223,7 @@ class Bot:
         tmp.replace(STATUS_FILE)
 
     def run_forever(self):
-        log(f"bot started: {MODE}, account {self.args.account:,.0f} USDT, risk {self.args.risk:.1%}, "
+        log(f"bot started: {MODE}, {len(pt.SYMBOLS)} coins, account {self.args.account:,.0f} USDT, risk {self.args.risk:.1%}, "
             f"max position {self.args.max_position:,.0f} USDT, daily loss limit {self.args.max_daily_loss:.0%}")
         while True:
             try:
@@ -255,7 +271,9 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--mode", choices=["testnet", "live"], default="testnet")
     ap.add_argument("--account", type=float, default=1000.0, help="account size the bot may use, USDT (default 1000)")
-    ap.add_argument("--risk", type=float, default=0.01, help="fraction of account lost if a stop is hit (default 0.01)")
+    ap.add_argument("--coins", nargs="+", default=COINS, metavar="COIN",
+                    help=f"coins to trade against USDT (default: {' '.join(COINS)})")
+    ap.add_argument("--risk", type=float, default=0.003, help="fraction of account lost if a stop is hit (default 0.003)")
     ap.add_argument("--max-position", type=float, default=200.0, help="largest single position, USDT (default 200)")
     ap.add_argument("--max-daily-loss", type=float, default=0.03, help="halt for the day after this loss (default 0.03)")
     ap.add_argument("--port", type=int, default=8077, help="dashboard port")
@@ -264,10 +282,17 @@ def main():
         raise SystemExit("--risk above 3% per trade is not allowed.")
 
     MODE = args.mode
+    pt.SYMBOLS = [f"{c.upper()}/USDT" for c in args.coins]
     pt.MAX_POSITION_USDT = args.max_position
     pt.STATE_FILE = HERE / f"{MODE}_state.json"
     pt.JOURNAL_FILE = HERE / f"{MODE}_journal.csv"
     ex = live_exchange() if MODE == "live" else pt.testnet_exchange()
+    missing = [s for s in pt.SYMBOLS if s not in ex.markets]
+    if missing:
+        raise SystemExit(f"Not tradable on Binance {MODE}: {', '.join(missing)}")
+    if args.account < 500 and len(pt.SYMBOLS) > 2:
+        _plain_log(f"note: with {args.account:,.0f} USDT some trades will be under Binance's 5 USDT minimum and get skipped; "
+                   f"500+ USDT is better for {len(pt.SYMBOLS)} coins")
     serve_dashboard(args.port)
     Bot(ex, public_data(), args).run_forever()
 

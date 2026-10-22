@@ -7,6 +7,11 @@ checks each trade's stop-loss on the exchange and updates the dashboard; right a
 close (00:00 UTC = 05:30 IST) it applies the Breakout rules and places orders. Every buy gets a
 stop-loss order **on Binance**, so the stop protects you even if your laptop is off.
 
+It trades **10 coins** (BTC ETH SOL BNB XRP ADA DOGE LTC LINK AVAX) from one account, risking
+**0.3% per trade** — the size at which `portfolio.py` showed 10 coins beating BTC+ETH alone. A new
+trade only gets cash that open trades aren't already using. `--coins BTC ETH --risk 0.01` goes back
+to the original two-coin setup.
+
 **No terminal needed — double-click these, in order:**
 1. `setup_keys.bat` — saves your testnet keys (and optional Telegram alerts) on this PC.
 2. `start_bot.bat` — starts the bot on the testnet; it restarts itself if it ever stops.
@@ -18,6 +23,7 @@ stop-loss order **on Binance**, so the stop protects you even if your laptop is 
 Your own limits can be passed to the launcher, e.g. `start_bot.bat --account 500 --max-position 150`.
 
 **Safety built in**
+- Shared cash: all open trades together can never use more than `--account`.
 - `--max-position` caps any single position (default 200 USDT); `--risk` is capped at 3% per trade.
 - `--max-daily-loss` (default 3%) halts new trades for the rest of the UTC day.
 - Create a file named `STOP` in this folder to block new trades; `FLATTEN` sells everything and halts.
@@ -32,13 +38,15 @@ Your own limits can be passed to the launcher, e.g. `start_bot.bat --account 500
 2. On Binance, create an API key with **only "Spot & Margin Trading"** enabled, **withdrawals disabled**,
    and restricted to your IP. The bot refuses to start with a key that can withdraw.
 3. Start small: `--account` set to money you can afford to lose entirely, `--max-position` well below it.
+   With 10 coins at 0.3%, use 500 USDT or more; below that some trades fall under Binance's
+   5 USDT minimum order and are skipped.
 4. Set the live variables yourself (never paste keys into chat):
    ```
    setx BINANCE_LIVE_API_KEY "..."
    setx BINANCE_LIVE_SECRET "..."
    setx LIVE_TRADING_CONFIRM "I_ACCEPT_REAL_MONEY_RISK"
    ```
-5. Open a new terminal: `start_bot.bat --mode live --account 300 --max-position 100`.
+5. Open a new terminal: `start_bot.bat --mode live --account 500 --max-position 100`.
    The dashboard badge turns red **LIVE**.
 
 **Keeping it running:** the laptop must stay on, awake and online (Settings → System → Power → Sleep:
@@ -112,6 +120,51 @@ rules). Keep the Breakout rules for trading. Per-year detail: `results/walk_forw
 win rate on its training years rose 38% → 44% and the average trade +1.02R → +1.59R, while on unseen
 years it stayed at ~30% and +0.3–0.45R, and the compounded result fell below the rules (+38% vs +50%).
 That is overfitting: it memorises the past instead of learning something that repeats.
+
+### Training bot v2: take-or-skip filter (`trade_filter.py`)
+
+A smaller job for the learner: the Breakout rule finds every trade and decides every exit; the bot
+only decides **take or skip** each buy signal. Each past trade rewards the market situation it started
+in with its result in R (trend, 4-week momentum, overbought, volatility, volume surge). A situation is
+skipped only after clearly losing over many trades (it is anchored to the average Breakout result), and
+it learns from 10 coins (BTC, ETH, SOL, BNB, XRP, ADA, DOGE, LTC, LINK, AVAX) for more examples.
+
+```
+python trade_filter.py      # walk-forward 2021-2026, 58 year x coin tests, a few seconds
+```
+
+Result (Oct 2026): **no value.** Same as the rules in 42 tests, better in 8, worse in 8; compounded
++860% vs +944% for the rules; average trade +0.83R vs +0.84R. Almost no situation reliably loses with
+Breakout — losses are capped near −1R while a few big winners pay for everything, so skipping trades
+mostly risks skipping a winner. A tempting pattern (volume-surge breakouts +1.97R in 2023–2025) failed
+on the years it wasn't found in (2018–2022: +1.59R vs +2.43R for ordinary volume).
+
+Conclusion from both training bots: on this data the edge comes from the rules plus the stop-loss and
+position sizing, not from predicting which trades win. Detail: `results/trade_filter_walk_forward.csv`.
+
+## Many coins in one account (`portfolio.py`)
+
+Breakout rules on several coins sharing **one** account (each trade risks a slice of the current
+balance, cash limits respected, delisted coins sold at their last price), 2021 to Oct 2026.
+Checked identical to `backtest.py` when run on a single coin.
+
+| at 1% risk per trade | BTC+ETH | 10 coins | 10 + 10 that crashed |
+|---|---|---|---|
+| Per year | +7.9% | +33.8% | +52.2% |
+| Worst drop | −12.1% | −43.3% | −52.4% |
+| Return / worst drop | 0.65 | 0.78 | 1.00 |
+| Sharpe | 0.78 | 0.98 | 1.13 |
+
+All four pre-set rules pass (better return/drop, better Sharpe, better in 4 of 6 years, still better
+with crashed coins FTT, LUNC, EOS, FIL, ICP, SAND, XLM, ETC, MATIC, POL added). **But:**
+- At 1% per trade the 10-coin drops are far bigger, because altcoins fall together. Matched to the
+  same worst drop (0.2% per trade) it earns +10.0%/yr vs +7.9%, Sharpe 0.98 vs 0.78.
+- Without 2021 (the altcoin mania), 10 coins at 1% is **no better** (return/drop 0.32 vs 0.33);
+  at **0.3% per trade** it clearly is (0.58 vs 0.33, Sharpe 0.71 vs 0.47).
+
+**So: trade 10 coins only with the risk per trade cut to about 0.25–0.3%.** At that size an account
+needs roughly 500 USDT or more, or some positions fall under Binance's 5 USDT minimum order.
+LUNC's own May-2022 collapse isn't in the data (Binance only has it from after).
 
 ## Practice simulator
 

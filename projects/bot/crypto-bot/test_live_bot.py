@@ -97,6 +97,33 @@ def main():
     assert bot.halted and bot.halt_reason.startswith("daily loss")
     print("ok  daily loss limit halts trading")
 
+    # 8. ten coins break out on the same day: each sized at 0.3% risk, all share the 1,000 USDT
+    pt.SYMBOLS = [f"{c}/USDT" for c in lb.COINS]
+    bot = fresh(tmp, last_close=130.0, price=130.0)
+    bot.args.risk, bot.args.max_position = 0.003, 200.0
+    pt.MAX_POSITION_USDT = 200.0
+    pt.save_state({"positions": {}, "last_bar": {s: day(2) for s in pt.SYMBOLS}})
+    bot.tick()
+    st = pt.load_state()
+    risk_each = [p["qty"] * (p["entry"] - p["stop"]) for p in st["positions"].values()]
+    committed = sum(p["qty"] * p["entry"] for p in st["positions"].values())
+    assert len(st["positions"]) == 10, len(st["positions"])
+    assert all(abs(r - 3.0) < 0.2 for r in risk_each), risk_each  # 0.3% of 1,000 = 3 USDT each
+    assert committed <= 1000.0 + 1e-6
+    print(f"ok  10 coins at once: each risks ~3 USDT (0.3%), {committed:,.0f} of 1,000 USDT in use")
+
+    # 9. shared cash: a small account can't over-buy; later coins are skipped once the cash is used
+    bot = fresh(tmp, last_close=130.0, price=130.0)
+    bot.args.account, bot.args.risk = 100.0, 0.03
+    pt.MAX_POSITION_USDT = 200.0
+    pt.save_state({"positions": {}, "last_bar": {s: day(2) for s in pt.SYMBOLS}})
+    bot.tick()
+    st = pt.load_state()
+    committed = sum(p["qty"] * p["entry"] for p in st["positions"].values())
+    assert committed <= 100.0 + 1e-6 and 1 <= len(st["positions"]) < 10, (committed, len(st["positions"]))
+    print(f"ok  shared cash: {len(st['positions'])} trades used {committed:,.2f} of 100 USDT, the rest were skipped")
+    pt.SYMBOLS = ["BTC/USDT", "ETH/USDT"]
+
     # 7. risk above 3% is refused at startup
     import sys
     sys.argv = ["live_bot.py", "--risk", "0.05"]

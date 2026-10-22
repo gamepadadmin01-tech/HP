@@ -11,10 +11,10 @@ results first, and paper trade before risking real money.
 """
 import argparse
 
-import ccxt
 import pandas as pd
 
 from backtest import run
+from fetch_data import binance
 from strategies import STRATEGIES, atr, ema, rsi, sma
 
 COINS = ["BTC/USDT", "ETH/USDT"]
@@ -55,7 +55,7 @@ def main():
     ap.add_argument("--risk", type=float, default=0.01, help="fraction of account to lose if stopped out")
     args = ap.parse_args()
 
-    ex = ccxt.binance({"enableRateLimit": True})
+    ex = binance(mirror=True)
     peg = candles(ex, "USDC/USDT", 30).close
     print(f"USDC/USDT peg: last {peg.iloc[-1]:.4f}, 30-day range {peg.min():.4f}-{peg.max():.4f}\n")
 

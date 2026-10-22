@@ -16,12 +16,24 @@ EXCHANGES = ["binance", "bybit", "okx", "kraken"]
 SYMBOLS = ["BTC/USDT", "ETH/USDT", "USDC/USDT"]
 TIMEFRAMES = ["1d", "4h"]
 START = "2018-01-01T00:00:00Z"
+MIRROR = "https://data-api.binance.vision/api/v3"  # Binance's public market-data mirror
+
+
+def binance(mirror=False, **config):
+    """A Binance SPOT connection. ccxt otherwise also loads the futures servers, which
+    time out from some networks and stall everything. mirror=True reads public prices
+    (candles, tickers) from Binance's market-data mirror, which is reachable more reliably."""
+    ex = ccxt.binance({"enableRateLimit": True, "timeout": 20000,
+                       "options": {"fetchMarkets": {"types": ["spot"]}}, **config})
+    if mirror:
+        ex.urls["api"]["public"] = MIRROR
+    return ex
 
 
 def pick_exchange():
     for name in EXCHANGES:
         try:
-            ex = getattr(ccxt, name)({"enableRateLimit": True})
+            ex = binance(mirror=True) if name == "binance" else getattr(ccxt, name)({"enableRateLimit": True})
             ex.load_markets()
             if all(s in ex.markets for s in SYMBOLS[:2]):
                 print(f"Using exchange: {name}")

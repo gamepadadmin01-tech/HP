@@ -10,7 +10,6 @@ import argparse
 import json
 from pathlib import Path
 
-import ccxt
 import pandas as pd
 
 import fetch_data
@@ -21,9 +20,7 @@ START = "2020-01-01T00:00:00Z"
 
 
 def download(symbol):
-    ex = ccxt.binance({"enableRateLimit": True, "timeout": 30000})
-    ex.urls["api"]["public"] = "https://data-api.binance.vision/api/v3"  # Binance's public market-data mirror
-    return fetch_data.fetch(ex, symbol, "1h", START)
+    return fetch_data.fetch(fetch_data.binance(mirror=True), symbol, "1h", START)
 
 
 def encode(df, decimals):

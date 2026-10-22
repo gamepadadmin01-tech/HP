@@ -63,6 +63,7 @@ code { background:var(--chip); border:1px solid var(--line); border-radius:4px; 
 const $ = id => document.getElementById(id);
 const f = (v, d = 2) => Number(v).toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d });
 const cls = v => v > 0 ? "pos" : v < 0 ? "neg" : "";
+const fp = v => Math.abs(v) >= 10 ? f(v) : Number(v).toPrecision(4);  // prices: 0.07123, not 0.07
 
 function parseCsv(text) {
   const [head, ...rows] = text.trim().split(/\r?\n/);
@@ -86,7 +87,7 @@ async function refresh() {
   else if (s.last_error) { b.className = "banner stale"; b.textContent = "Last error: " + s.last_error; }
   else { b.className = "banner"; }
 
-  $("prices").innerHTML = Object.entries(s.prices).map(([k, v]) => `<span>${k}</span><span>${f(v)}</span>`).join("");
+  $("prices").innerHTML = Object.entries(s.prices).map(([k, v]) => `<span>${k}</span><span>${fp(v)}</span>`).join("");
   $("today").innerHTML = `<span class="${cls(s.today_pnl_usdt)}">${s.today_pnl_usdt >= 0 ? "+" : ""}${f(s.today_pnl_usdt)} USDT</span>`;
   const limit = s.max_daily_loss * s.account;
   $("limitText").textContent = `daily loss limit −${f(limit)} USDT`;
@@ -97,15 +98,15 @@ async function refresh() {
   const pos = Object.entries(s.positions);
   $("positions").innerHTML = pos.length
     ? "<tr><th>Coin</th><th>Since</th><th>Qty</th><th>Entry</th><th>Price</th><th>Stop</th><th>P&L</th><th>R</th></tr>" +
-      pos.map(([k, p]) => `<tr><td>${k}</td><td>${p.entry_time}</td><td>${p.qty}</td><td>${f(p.entry)}</td><td>${f(p.price)}</td>` +
-        `<td>${f(p.stop)}</td><td class="${cls(p.pnl_usdt)}">${f(p.pnl_usdt)}</td><td class="${cls(p.pnl_r)}">${p.pnl_r}</td></tr>`).join("")
+      pos.map(([k, p]) => `<tr><td>${k}</td><td>${p.entry_time}</td><td>${p.qty}</td><td>${fp(p.entry)}</td><td>${fp(p.price)}</td>` +
+        `<td>${fp(p.stop)}</td><td class="${cls(p.pnl_usdt)}">${f(p.pnl_usdt)}</td><td class="${cls(p.pnl_r)}">${p.pnl_r}</td></tr>`).join("")
     : '<tr><td class="muted">No open positions. The bot is waiting for a breakout.</td></tr>';
 
   $("levels").innerHTML = "<tr><th>Coin</th><th>Last daily close</th><th>Buy if a day closes above</th><th>Distance</th><th>Exit if a day closes below</th></tr>" +
     Object.entries(s.levels).map(([k, l]) => {
       const px = s.prices[k] || l.last_close, d = l.buy_above / px - 1;
-      return `<tr><td>${k}</td><td>${f(l.last_close)} (${l.candle})</td><td>${f(l.buy_above)}</td><td>${(d * 100).toFixed(1)}% away</td>` +
-             `<td>${s.positions[k] ? f(l.exit_below) : '<span class="muted">only when in a trade</span>'}</td></tr>`;
+      return `<tr><td>${k}</td><td>${fp(l.last_close)} (${l.candle})</td><td>${fp(l.buy_above)}</td><td>${(d * 100).toFixed(1)}% away</td>` +
+             `<td>${s.positions[k] ? fp(l.exit_below) : '<span class="muted">only when in a trade</span>'}</td></tr>`;
     }).join("");
 
   try {
@@ -113,7 +114,7 @@ async function refresh() {
     $("trades").innerHTML = rows.length
       ? "<tr><th>Time (UTC)</th><th>Coin</th><th>Action</th><th>Qty</th><th>Price</th><th>Stop</th><th>P&L</th><th>Why</th></tr>" +
         rows.map(r => `<tr><td>${r.time.replace("T", " ").slice(0, 16)}</td><td>${r.symbol}</td><td>${r.action}</td><td>${r.qty}</td>` +
-          `<td>${r.price ? f(r.price) : ""}</td><td>${r.stop ? f(r.stop) : ""}</td>` +
+          `<td>${r.price ? fp(r.price) : ""}</td><td>${r.stop ? fp(r.stop) : ""}</td>` +
           `<td class="${cls(+r.pnl_usdt)}">${r.pnl_usdt ? f(r.pnl_usdt) + " (" + r.pnl_pct + "%)" : ""}</td><td>${r.reason}</td></tr>`).join("")
       : '<tr><td class="muted">No trades yet.</td></tr>';
   } catch { $("trades").innerHTML = '<tr><td class="muted">No trades yet.</td></tr>'; }
