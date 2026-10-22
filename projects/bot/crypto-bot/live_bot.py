@@ -54,7 +54,8 @@ from strategies import donchian_breakout
 HERE = pt.HERE
 COINS = ["BTC", "ETH", "SOL", "BNB", "XRP", "ADA", "DOGE", "LTC", "LINK", "AVAX"]
 STATUS_FILE = HERE / "live_status.json"
-LOOP_SECONDS = 60
+LOOP_SECONDS = 60   # check every minute while no trade is open
+FAST_SECONDS = 15   # check every 15 seconds while a trade is open (the stop itself sits on Binance)
 CONFIRM_PHRASE = "I_ACCEPT_REAL_MONEY_RISK"
 
 
@@ -144,6 +145,7 @@ class Bot:
         self.candles = {}                 # recent daily candles per coin, for the dashboard charts
         self.wake = threading.Event()     # set by the dashboard's buttons so the bot reacts at once
         self.equity_written = 0.0
+        self.open_trades, self.latency_ms = 0, None
 
     def free_cash(self, state):
         """Money a new trade may use: the account minus what open trades already hold.
@@ -155,11 +157,25 @@ class Bot:
         return max(cash, 0.0)
 
     def prices(self):
-        try:  # one request for every coin
-            tickers = self.ex.fetch_tickers(pt.SYMBOLS)
-            return {s: float(tickers[s]["last"]) for s in pt.SYMBOLS}
-        except (AttributeError, KeyError, ccxt.NotSupported):
-            return {s: float(self.ex.fetch_ticker(s)["last"]) for s in pt.SYMBOLS}
+        """Latest price of every coin in one light request; also measures how fast Binance answers."""
+        t0 = time.perf_counter()
+        try:
+            last = self.ex.fetch_last_prices(pt.SYMBOLS)
+            out = {s: float(last[s]["price"]) for s in pt.SYMBOLS}
+        except (AttributeError, KeyError, TypeError, ccxt.NotSupported):
+            out = {s: float(self.ex.fetch_ticker(s)["last"]) for s in pt.SYMBOLS}
+        self.latency_ms = round((time.perf_counter() - t0) * 1000)
+        return out
+
+    def next_wait(self, now=None):
+        """Seconds until the next check: every 15 s while a trade is open, else every minute,
+        and always wake 2 seconds after the daily close so orders go in right away."""
+        now = now or datetime.now(timezone.utc)
+        base = FAST_SECONDS if self.open_trades else LOOP_SECONDS
+        if self.errors:
+            base = min(LOOP_SECONDS * (2 ** (self.errors - 1)), 900)  # back off while something is failing
+        close = (now + pd.Timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+        return max(0.5, min(base, (close - now).total_seconds() + 2))
 
     def realized_today(self):
         if not pt.JOURNAL_FILE.exists():
@@ -262,7 +278,9 @@ class Bot:
                       equity=equity, realized_usdt=round(realized, 2), unrealized_usdt=round(unrealized, 2),
                       risk=self.args.risk, max_position=self.args.max_position,
                       max_daily_loss=self.args.max_daily_loss, last_error=self.last_error,
-                      coins=list(pt.SYMBOLS))
+                      coins=list(pt.SYMBOLS), latency_ms=self.latency_ms,
+                      check_every_s=FAST_SECONDS if positions else LOOP_SECONDS)
+        self.open_trades = len(positions)
         tmp = STATUS_FILE.with_suffix(".tmp")
         tmp.write_text(json.dumps(status, indent=2))
         tmp.replace(STATUS_FILE)
@@ -301,7 +319,7 @@ class Bot:
                     log(f"ERROR: {self.errors} failures in a row: {self.last_error}")
                 if self.errors == 1:
                     traceback.print_exc()
-            self.wake.wait(min(LOOP_SECONDS * (2 ** max(self.errors - 1, 0)), 900))  # a dashboard button cuts this short
+            self.wake.wait(self.next_wait())  # a dashboard button cuts this short
             self.wake.clear()
 
 

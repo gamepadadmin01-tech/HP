@@ -31,6 +31,13 @@ to the original two-coin setup.
 
 Your own limits can be passed to the launcher, e.g. `start_bot.bat --account 500 --max-position 150`.
 
+**Speed**
+- Stop-losses are orders sitting **on Binance**: Binance sells within milliseconds of the price
+  touching the stop, even if this laptop is off. Nothing on a laptop can react faster.
+- Buys and sells are market orders (filled at once); a request takes ~0.2–0.4 s from this laptop.
+- The bot wakes 2 seconds after each daily close to place orders, checks every 15 s while a trade is
+  open (to notice stop-outs) and every 60 s otherwise. The dashboard shows Binance's response time.
+
 **Safety built in**
 - Shared cash: all open trades together can never use more than `--account`.
 - `--max-position` caps any single position (default 200 USDT); `--risk` is capped at 3% per trade.

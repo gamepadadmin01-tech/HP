@@ -234,7 +234,10 @@ function renderHeader() {
   $("mode").textContent = S.mode.toUpperCase(); $("mode").className = "badge " + S.mode;
   document.title = (S.mode === "live" ? "LIVE · " : "") + "Breakout Bot";
   const age = (Date.now() - Date.parse(S.updated)) / 1000;
-  $("updated").textContent = `updated ${age < 90 ? Math.round(age) + "s" : Math.round(age / 60) + " min"} ago`;
+  $("updated").textContent = `updated ${age < 90 ? Math.round(age) + "s" : Math.round(age / 60) + " min"} ago` +
+    (S.latency_ms != null ? ` · Binance ${S.latency_ms} ms · checks every ${S.check_every_s}s` : "");
+  $("updated").title = "How long Binance took to answer the last price request, and how often the bot looks. " +
+    "Stop-losses sit on Binance itself and trigger instantly, whatever this says.";
   const paused = S.halted;
   $("state").className = "pill " + (age > 180 ? "off" : paused ? "pause" : "run");
   $("stateText").textContent = age > 180 ? "not updating" : paused ? "Paused" : "Running";

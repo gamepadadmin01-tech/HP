@@ -179,6 +179,27 @@ def main():
     print("ok  Pause -> halted; Resume -> trading; Sell everything -> all sold and paused; Resume works after it")
     lb.ACTIVITY_FILE = lb.EQUITY_FILE = None
 
+    # 11. timing: wakes 2 s after the daily close; 15 s checks while a trade is open; backs off on errors
+    from datetime import datetime as dt
+    bot = fresh(tmp)
+    w = bot.next_wait(dt(2026, 10, 23, 23, 59, 50, tzinfo=timezone.utc))
+    assert abs(w - 12) < 1e-6, w                                   # 10 s to midnight + 2 s
+    assert bot.next_wait(dt(2026, 10, 23, 12, 0, 0, tzinfo=timezone.utc)) == lb.LOOP_SECONDS
+    bot.open_trades = 1
+    assert bot.next_wait(dt(2026, 10, 23, 12, 0, 0, tzinfo=timezone.utc)) == lb.FAST_SECONDS
+    bot.errors = 3
+    assert bot.next_wait(dt(2026, 10, 23, 12, 0, 0, tzinfo=timezone.utc)) == 240
+    print("ok  timing: wakes 2 s after the daily close, every 15 s in a trade, every 60 s otherwise, backs off on errors")
+
+    # 12. the just-closed candle is kept even if today's candle isn't listed yet
+    class NoTodayYet(FakeData):
+        def fetch_ohlcv(self, symbol, tf, limit=200):
+            return super().fetch_ohlcv(symbol, tf, limit)[:-1]  # Binance hasn't created today's candle yet
+    a = pt.daily_candles(FakeData(), "BTC/USDT").index[-1]
+    b = pt.daily_candles(NoTodayYet(), "BTC/USDT").index[-1]
+    assert a == b and str(b.date()) == day(1), (a, b)
+    print("ok  yesterday's closed candle is used whether or not today's candle exists yet")
+
     # 7. risk above 3% is refused at startup
     import sys
     sys.argv = ["live_bot.py", "--risk", "0.05"]

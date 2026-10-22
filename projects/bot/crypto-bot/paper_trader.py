@@ -75,7 +75,8 @@ def daily_candles(market_data, symbol):
     rows = market_data.fetch_ohlcv(symbol, "1d", limit=200)
     df = pd.DataFrame(rows, columns=["time", "open", "high", "low", "close", "volume"])
     df["time"] = pd.to_datetime(df["time"], unit="ms", utc=True)
-    return df.set_index("time").iloc[:-1]  # drop the candle that is still forming
+    today = pd.Timestamp.now(tz="UTC").normalize()
+    return df.set_index("time").loc[lambda d: d.index < today]  # drop only today's candle, which is still forming
 
 
 def testnet_exchange():
