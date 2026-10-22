@@ -160,10 +160,17 @@ export function googleAvailable(): Promise<boolean> {
   if (!googleAvail) {
     googleAvail = (async () => {
       const b = androidBridge();
-      if (typeof b?.openUrl !== "function" || typeof b?.takeAuthReturn !== "function") return false;
+      // Truthiness, like every other bridge check in this app (e.g. startApkUpdate): a
+      // method on a WebView JavaScript interface is present or absent, nothing more.
+      if (!b?.openUrl || !b?.takeAuthReturn) return false;
       if (!globalThis.crypto?.subtle) return false;
       return api.googleEnabled();
     })();
+    // Remember a "yes" for the life of the app, but forget a "no": it may only mean the
+    // phone was offline, or the server had not switched Google on yet, and the next visit
+    // to the sign-in page should ask again instead of staying hidden until the app is killed.
+    const asked = googleAvail;
+    asked.then((ok) => { if (!ok && googleAvail === asked) googleAvail = null; });
   }
   return googleAvail;
 }
