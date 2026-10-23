@@ -209,7 +209,7 @@ export async function beginGoogleSignIn(): Promise<void> {
 /** The native door answered: { idToken } to redeem, { error: "cancelled" } if the person closed it,
  *  anything else (not available on this phone, a failure) means try the browser instead. */
 async function onNativeGoogleResult(raw: unknown) {
-  let data: { idToken?: string; error?: string } = {};
+  let data: { idToken?: string; error?: string; detail?: string } = {};
   try { data = JSON.parse(String(raw)); } catch { return; }
   const pending = nativePending;
   nativePending = null;

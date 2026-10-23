@@ -215,26 +215,34 @@ open class AdsBridge(activity: MainActivity) : UpdaterBridgeBase(activity) {
                                 try {
                                     reportGoogle(idToken = GoogleIdTokenCredential.createFrom(credential.data).idToken)
                                 } catch (e: GoogleIdTokenParsingException) {
-                                    reportGoogle(error = "unavailable")
+                                    reportGoogle(error = "unavailable", detail = "parse: " + e.message)
                                 }
                             } else {
-                                reportGoogle(error = "unavailable")
+                                reportGoogle(error = "unavailable", detail = "unexpected credential " + credential.type)
                             }
                         }
                         override fun onError(e: GetCredentialException) {
-                            reportGoogle(error = if (e is GetCredentialCancellationException) "cancelled" else "unavailable")
+                            // Only a real "I closed it" is a cancellation. Google ALSO reports a failed
+                            // account re-verification ("[16] Account reauth failed.", the phone's Google
+                            // account wants to be verified again) as a cancellation. That is not the person
+                            // backing out, so it must use the browser, not say "cancelled".
+                            val text = e.message.orEmpty()
+                            val reauth = text.contains("reauth", ignoreCase = true) || text.contains("[16]")
+                            reportGoogle(error = if (e is GetCredentialCancellationException && !reauth) "cancelled" else "unavailable",
+                                detail = e.javaClass.simpleName + " / " + e.type + " / " + e.message)
                         }
                     })
             } catch (t: Throwable) {
-                reportGoogle(error = "unavailable")
+                reportGoogle(error = "unavailable", detail = t.javaClass.simpleName + ": " + t.message)
             }
         }
     }
 
-    private fun reportGoogle(idToken: String? = null, error: String? = null) {
+    private fun reportGoogle(idToken: String? = null, error: String? = null, detail: String? = null) {
         val json = JSONObject()
         if (idToken != null) json.put("idToken", idToken)
         if (error != null) json.put("error", error)
+        if (detail != null) json.put("detail", detail.take(200))
         activity.evalJs("window.onNativeGoogleResult && window.onNativeGoogleResult(" +
             JSONObject.quote(json.toString()) + ")")
     }
