@@ -24,7 +24,13 @@ val admobTestAppId = "ca-app-pub-3940256099942544~3347511713"
 val admobTestRewardedId = "ca-app-pub-3940256099942544/5224354917"
 val admobLiveAppId = "ca-app-pub-5878015482565093~7268347358"        // ca-app-pub-XXXXXXXXXXXXXXXX~NNNNNNNNNN  (AdMob > Apps > App settings)
 val admobLiveRewardedId = "ca-app-pub-5878015482565093/2095058092"   // ca-app-pub-XXXXXXXXXXXXXXXX/NNNNNNNNNN  (AdMob > Ad units > the Rewarded unit)
-val admobLive = admobLiveAppId.isNotBlank() && admobLiveRewardedId.isNotBlank()
+// For test builds that go on the owner's OWN phone: `gradle assembleDirectRelease -PtestAds=true`
+// keeps Google's test ad units in the release build, so testing never creates live ad traffic.
+// Watching or tapping live ads on the developer's own devices is invalid traffic to AdMob, and
+// AdMob limited ad serving on 2026-10-23 for "invalid traffic concerns". Store and website
+// builds are built WITHOUT this flag and still carry the live ids.
+val admobTestAds = (findProperty("testAds") ?: "false").toString() == "true"
+val admobLive = admobLiveAppId.isNotBlank() && admobLiveRewardedId.isNotBlank() && !admobTestAds
 
 android {
     namespace = "com.gamepad.client"
