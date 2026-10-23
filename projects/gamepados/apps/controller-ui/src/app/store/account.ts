@@ -122,11 +122,19 @@ export async function deleteAccount(password: string): Promise<void> {
 
 // ─── Sign in with Google ──────────────────────────────────────────────────────
 //
-// Google refuses OAuth inside an embedded WebView, so the flow runs in the phone's
-// browser and comes back through the gamepados://auth deep link (MainActivity keeps
-// the result until we ask for it with takeAuthReturn). `verifier` stays on the phone
-// until we redeem the one-time code; that is what stops another app from firing the
-// deep link with ITS code and signing us in as someone else.
+// Two doors, one account.
+//
+// 1. NATIVE (preferred): on phones with Google Play services the app opens Android's own
+//    Google account chooser over the app and gets an ID token back, with no browser. A
+//    server-issued single-use nonce binds that token to this attempt (see google.js).
+// 2. BROWSER (fallback): Google refuses OAuth inside an embedded WebView, so otherwise the
+//    flow runs in the phone's browser and comes back through the gamepados://auth deep link
+//    (MainActivity keeps the result until we ask for it with takeAuthReturn). `verifier`
+//    stays on the phone until we redeem the one-time code; that is what stops another app
+//    from firing the deep link with ITS code and signing us in as someone else.
+//
+// Anything that stops the native door (no Google Play services, no account on the phone, an
+// error) falls through to the browser, so the button always has a way to work.
 // See website/backend/google.js and docs/GOOGLE_SIGNIN_SETUP.md.
 
 const GOOGLE_PENDING_KEY = "google_signin_pending";
@@ -152,6 +160,10 @@ function b64url(bytes: Uint8Array): string {
 }
 
 let googleAvail: Promise<boolean> | null = null;
+/** The public web client id the server reports, which Android's account chooser needs. */
+let googleWebClientId: string | undefined;
+/** The native attempt in flight: the nonce we asked the server for. */
+let nativePending: { nonce: string; at: number } | null = null;
 
 /** True only where the flow can actually work: inside the app (it needs the browser
  *  hand-off and the deep-link return), with SHA-256 available, and switched on at the
@@ -164,7 +176,9 @@ export function googleAvailable(): Promise<boolean> {
       // method on a WebView JavaScript interface is present or absent, nothing more.
       if (!b?.openUrl || !b?.takeAuthReturn) return false;
       if (!globalThis.crypto?.subtle) return false;
-      return api.googleEnabled();
+      const cfg = await api.googleConfig();
+      googleWebClientId = cfg.webClientId;
+      return cfg.enabled;
     })();
     // Remember a "yes" for the life of the app, but forget a "no": it may only mean the
     // phone was offline, or the server had not switched Google on yet, and the next visit
@@ -175,8 +189,48 @@ export function googleAvailable(): Promise<boolean> {
   return googleAvail;
 }
 
-/** Open Google's sign-in in the browser. The result arrives later through onGoogleResult. */
+/** Start Google sign-in. The result arrives later through onGoogleResult. Uses Android's own
+ *  account chooser where the app has it, and the browser where it does not or it fails. */
 export async function beginGoogleSignIn(): Promise<void> {
+  const b = androidBridge();
+  if (b?.googleSignInNative && googleWebClientId) {
+    try {
+      const nonce = await api.googleNonce();
+      nativePending = { nonce, at: Date.now() };
+      b.googleSignInNative(googleWebClientId, nonce);
+      return;
+    } catch {
+      nativePending = null;   // no nonce (offline?) or the call failed: the browser flow below reports what is wrong
+    }
+  }
+  await beginBrowserGoogleSignIn();
+}
+
+/** The native door answered: { idToken } to redeem, { error: "cancelled" } if the person closed it,
+ *  anything else (not available on this phone, a failure) means try the browser instead. */
+async function onNativeGoogleResult(raw: unknown) {
+  let data: { idToken?: string; error?: string } = {};
+  try { data = JSON.parse(String(raw)); } catch { return; }
+  const pending = nativePending;
+  nativePending = null;
+  if (!pending || Date.now() - pending.at > GOOGLE_PENDING_MS) return;   // stale or unexpected: ignore
+  if (data.idToken) {
+    try {
+      const r = await api.googleIdToken(data.idToken, pending.nonce);
+      adopt(r.token, r.user);
+      emitGoogle({ ok: true });
+    } catch (e) {
+      emitGoogle({ ok: false, message: (e as api.ApiError).message || "Google sign-in didn't work. Try again." });
+    }
+    return;
+  }
+  if (data.error === "cancelled") { emitGoogle({ ok: false, message: GOOGLE_MESSAGES.cancelled }); return; }
+  try { await beginBrowserGoogleSignIn(); }
+  catch { emitGoogle({ ok: false, message: "Couldn't open Google sign-in. Try again." }); }
+}
+
+/** Open Google's sign-in in the browser (the fallback door). */
+async function beginBrowserGoogleSignIn(): Promise<void> {
   const verifier = b64url(crypto.getRandomValues(new Uint8Array(32)));          // 43 chars
   const challenge = b64url(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier))));
   try { localStorage.setItem(GOOGLE_PENDING_KEY, JSON.stringify({ verifier, at: Date.now() })); } catch { /* private mode: the return will say it expired */ }
@@ -219,6 +273,7 @@ function checkAuthReturn() {
 }
 
 if (typeof window !== "undefined") {
+  (window as any).onNativeGoogleResult = onNativeGoogleResult;   // called by AdsBridge.googleSignInNative
   window.addEventListener("gamepados:auth-return", checkAuthReturn);
   window.addEventListener("focus", checkAuthReturn);
   document.addEventListener("visibilitychange", () => { if (!document.hidden) checkAuthReturn(); });

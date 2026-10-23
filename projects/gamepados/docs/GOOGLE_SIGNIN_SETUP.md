@@ -31,6 +31,27 @@ app: `controller-ui/src/app/api/account.ts`, `store/account.ts`, `components/Acc
 and `MainActivity.kt` + `AndroidManifest.xml` for the `gamepados://auth` link;
 website: `frontend/account.html`, `css/account.css`, `js/account.js`.
 
+## The app's own account chooser (added 2026-10-23)
+
+On phones with Google Play services (the playstore, direct and uptodown builds), **Continue with
+Google** now opens Android's own Google account chooser *over the app*: no browser, one tap. The app
+asks the server for a single-use nonce (`GET /api/account/google/nonce`), gives it to Google, gets an
+ID token back, and posts both to `POST /api/account/google/idtoken`. The server checks Google's
+signature against Google's published keys, the issuer, the audience (our web client id), the expiry,
+the nonce and a verified email, then answers with the same kind of session as every other sign-in.
+If anything stops this (no Google Play services, no account on the phone, an error) the app
+**falls back to the browser flow above**, so the button always has a way to work. The aptoide,
+amazonstore, indusstore and apkpure builds have no Google libraries and always use the browser.
+
+**One extra Google Cloud step for this** (the Railway variables stay exactly as they are):
+1. Credentials → Create credentials → OAuth client ID → Application type **Android**.
+2. Package name `com.gamepad.client`, SHA-1 of the release key:
+   `70:88:DC:FE:59:6A:9D:EA:15:5C:22:FE:C7:D3:C7:D2:5B:20:61:EC` (used by the direct and Uptodown builds).
+3. Repeat once more with the **Play App Signing** SHA-1 (Play Console → App integrity → App signing →
+   "SHA-1 certificate fingerprint") for installs from Google Play, because Google re-signs those.
+Without the right SHA-1 the native chooser fails and the app quietly uses the browser instead.
+The Android clients live in the same project as the Web client; the Web client id stays the audience.
+
 ## One-time setup (about 10 minutes, in your Google account)
 
 1. Open **https://console.cloud.google.com** and pick (or create) a project, e.g. *GamepadOS*.

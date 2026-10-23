@@ -106,14 +106,26 @@ export function login(email: string, password: string) {
 }
 
 // ── Sign in with Google (system browser + one-time code; see website/backend/google.js) ──
-/** Is Google sign-in switched on at the server? Older servers have no such route: false. */
-export async function googleEnabled(): Promise<boolean> {
+/** Is Google sign-in switched on at the server, and which web client id does it use?
+ *  Older servers have no such route (or no client id): { enabled: false } / no id. */
+export async function googleConfig(): Promise<{ enabled: boolean; webClientId?: string }> {
   try {
-    const r = await request<{ success: true; enabled: boolean }>("/google/config");
-    return r.enabled === true;
+    const r = await request<{ success: true; enabled: boolean; webClientId?: string }>("/google/config");
+    return { enabled: r.enabled === true, webClientId: typeof r.webClientId === "string" && r.webClientId ? r.webClientId : undefined };
   } catch {
-    return false;
+    return { enabled: false };
   }
+}
+
+/** A single-use nonce for the native flow: Google writes it into the ID token, we check it comes back. */
+export async function googleNonce(): Promise<string> {
+  const r = await request<{ success: true; nonce: string }>("/google/nonce");
+  return r.nonce;
+}
+
+/** Trade the ID token from Android's own Google account chooser (plus our nonce) for a session. */
+export function googleIdToken(idToken: string, nonce: string) {
+  return request<{ success: true; token: string; user: User }>("/google/idtoken", { idToken, nonce });
 }
 
 /** Where the browser goes to start the flow. `challenge` is SHA-256(verifier), base64url. */

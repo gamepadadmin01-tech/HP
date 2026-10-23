@@ -1,6 +1,15 @@
 package com.gamepad.client
 
 import android.webkit.JavascriptInterface
+import android.os.CancellationSignal
+import androidx.core.content.ContextCompat
+import androidx.credentials.CredentialManager
+import androidx.credentials.CredentialManagerCallback
+import androidx.credentials.CustomCredential
+import androidx.credentials.GetCredentialRequest
+import androidx.credentials.GetCredentialResponse
+import androidx.credentials.exceptions.GetCredentialCancellationException
+import androidx.credentials.exceptions.GetCredentialException
 import com.google.android.gms.ads.AdError
 import com.google.android.gms.ads.AdRequest
 import com.google.android.gms.ads.FullScreenContentCallback
@@ -12,6 +21,9 @@ import com.google.android.gms.ads.rewarded.ServerSideVerificationOptions
 import com.google.android.ump.ConsentInformation
 import com.google.android.ump.ConsentRequestParameters
 import com.google.android.ump.UserMessagingPlatform
+import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
+import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
+import com.google.android.libraries.identity.googleid.GoogleIdTokenParsingException
 import org.json.JSONObject
 
 // Rewarded ads — playstore, direct and uptodown only (build.gradle.kts wires src/ads/java into those
@@ -173,6 +185,58 @@ open class AdsBridge(activity: MainActivity) : UpdaterBridgeBase(activity) {
             earned = true
             if (!signedIn) activity.creditGuestAdReward()
         }
+    }
+
+    // ── Sign in with Google, through Android's own account chooser ─────────────────
+    //
+    // Lives in this class only because it is the flavour split that already means "this build
+    // carries Google Play services" (playstore, direct, uptodown). The other store builds have
+    // no such method, so the UI sees it is absent and uses the browser flow instead.
+    //
+    // JS passes the public web client id (the audience of the ID token) and a nonce it got from
+    // our server. The result comes back as window.onNativeGoogleResult(json), json =
+    //   { idToken }                 the token to trade for a session, or
+    //   { error: "cancelled" }      the person closed the chooser, or
+    //   { error: "unavailable" }    this phone cannot do it (no Google Play services, no account,
+    //                               a configuration problem): JS then uses the browser flow.
+    @JavascriptInterface
+    fun googleSignInNative(webClientId: String, nonce: String) {
+        activity.runOnUiThread {
+            try {
+                val option = GetSignInWithGoogleOption.Builder(webClientId).setNonce(nonce).build()
+                val request = GetCredentialRequest.Builder().addCredentialOption(option).build()
+                CredentialManager.create(activity).getCredentialAsync(
+                    activity, request, CancellationSignal(), ContextCompat.getMainExecutor(activity),
+                    object : CredentialManagerCallback<GetCredentialResponse, GetCredentialException> {
+                        override fun onResult(result: GetCredentialResponse) {
+                            val credential = result.credential
+                            if (credential is CustomCredential &&
+                                credential.type == GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
+                                try {
+                                    reportGoogle(idToken = GoogleIdTokenCredential.createFrom(credential.data).idToken)
+                                } catch (e: GoogleIdTokenParsingException) {
+                                    reportGoogle(error = "unavailable")
+                                }
+                            } else {
+                                reportGoogle(error = "unavailable")
+                            }
+                        }
+                        override fun onError(e: GetCredentialException) {
+                            reportGoogle(error = if (e is GetCredentialCancellationException) "cancelled" else "unavailable")
+                        }
+                    })
+            } catch (t: Throwable) {
+                reportGoogle(error = "unavailable")
+            }
+        }
+    }
+
+    private fun reportGoogle(idToken: String? = null, error: String? = null) {
+        val json = JSONObject()
+        if (idToken != null) json.put("idToken", idToken)
+        if (error != null) json.put("error", error)
+        activity.evalJs("window.onNativeGoogleResult && window.onNativeGoogleResult(" +
+            JSONObject.quote(json.toString()) + ")")
     }
 
     private fun report(status: String, message: String?, guest: Boolean = false) {

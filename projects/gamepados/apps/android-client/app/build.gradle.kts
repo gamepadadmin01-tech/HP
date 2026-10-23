@@ -537,5 +537,11 @@ dependencies {
         // The ads SDK asks for WorkManager 2.7.0 (2021), whose Room rules predate R8 full mode and
         // crashed the first 1.4.6 build at launch; the current release has correct rules (see proguard-rules.pro).
         add("${flavor}Implementation", "androidx.work:work-runtime:2.12.0")
+        // Sign in with Google through Android's own account chooser (no browser), in the same three
+        // flavours that already carry Google Play services. The other store builds do not get it and
+        // use the browser flow; see AdsBridge.googleSignInNative and store/account.ts.
+        add("${flavor}Implementation", "androidx.credentials:credentials:1.5.0")
+        add("${flavor}Implementation", "androidx.credentials:credentials-play-services-auth:1.5.0")
+        add("${flavor}Implementation", "com.google.android.libraries.identity.googleid:googleid:1.1.1")
     }
 }
