@@ -32,6 +32,22 @@ export function requestDashboardTab(tab: DashTab): void {
   listeners.forEach((fn) => fn(tab));
 }
 
+// "Open the sign-in screen", from anywhere (the free-time pop-up). Same shape as the
+// tab request above, including the pending case for a request made from another view.
+const signInListeners = new Set<() => void>();
+let signInPending = false;
+
+export function requestSignIn(): void {
+  if (signInListeners.size === 0) { signInPending = true; return; }
+  signInListeners.forEach((fn) => fn());
+}
+
+export function onSignInRequest(fn: () => void): () => void {
+  signInListeners.add(fn);
+  if (signInPending) { signInPending = false; fn(); }
+  return () => { signInListeners.delete(fn); };
+}
+
 export function onDashboardTabRequest(fn: Listener): () => void {
   listeners.add(fn);
   // Deliver anything that arrived before this listener existed, once.

@@ -74,6 +74,11 @@ export interface AndroidBridge {
   sendPlaytimeTicket?(base64Ticket: string): void;
   getGuestTrialState?(): string;
   setGuestTrialActive?(active: boolean): string;
+  /** 1.4.11+: the server's guest numbers (store/appConfig.ts), clamped again natively. */
+  setGuestRules?(welcomeSeconds: number, adRewardSeconds: number, adCapSeconds: number): string;
+  /** 1.4.11+: add the free time the server just granted. Credits only while less than
+   *  belowSeconds is left; answers the snapshot plus { credited }. */
+  creditGuestFreeTime?(seconds: number, belowSeconds: number): string;
 
   /** Rewarded ads (AdsBridge.kt) — playstore, direct and uptodown builds only;
    *  absent everywhere else, so always feature-detect. showRewardedAd answers on
@@ -119,6 +124,25 @@ export function nativeGuestTrial(active?: boolean): GuestTrialSnapshot | null {
     throw new Error("Could not read the free trial clock.");
   }
   return value;
+}
+
+/** Give the phone's clock the server's guest numbers. A no-op on APKs older than 1.4.11. */
+export function nativeSetGuestRules(welcomeSeconds: number, adRewardSeconds: number, adCapSeconds: number): void {
+  const b = bridge();
+  if (!b?.setGuestRules) return;
+  b.setGuestRules(welcomeSeconds, adRewardSeconds, adCapSeconds);
+}
+
+/** Add server-granted free time on the phone. null = this APK cannot (older than 1.4.11). */
+export function nativeCreditGuestFreeTime(seconds: number, belowSeconds: number): { credited: boolean } | null {
+  const b = bridge();
+  if (!b?.creditGuestFreeTime) return null;
+  try {
+    const v = JSON.parse(b.creditGuestFreeTime(seconds, belowSeconds));
+    return { credited: v?.credited === true };
+  } catch {
+    return { credited: false };
+  }
 }
 
 /** Call a bridge method, returning `fallback` if the bridge, the method, or the

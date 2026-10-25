@@ -28,10 +28,39 @@ internal class GuestQuota(
         const val LIMIT_MS = 0L
         const val WELCOME_MS = 30 * 60 * 1000L
         const val AD_CAP_MS = 60 * 60 * 1000L
+        const val AD_REWARD_MS = 30 * 60 * 1000L
+        private const val MINUTE = 60 * 1000L
+        private const val HOUR = 60 * MINUTE
     }
     var active = false
         private set
     private var lastElapsed: Long? = null
+
+    /** The rules, from the server since 1.4.11 (app's store/appConfig.ts → [setRules]). These are
+     *  the defaults until it answers, and what an offline phone keeps using. */
+    var welcomeMs = WELCOME_MS
+        private set
+    var adRewardMs = AD_REWARD_MS
+        private set
+    var adCapMs = AD_CAP_MS
+        private set
+
+    /** Take the server's numbers, CLAMPED: a wrong value can make the rules a little more or less
+     *  generous, never unlimited. */
+    fun setRules(welcomeSeconds: Long, adRewardSeconds: Long, adCapSeconds: Long) {
+        welcomeMs = (welcomeSeconds * 1000).coerceIn(0, 2 * HOUR)
+        adRewardMs = (adRewardSeconds * 1000).coerceIn(5 * MINUTE, HOUR)
+        adCapMs = (adCapSeconds * 1000).coerceIn(30 * MINUTE, 3 * HOUR)
+    }
+
+    /** "Get free time" (shown only while ads are switched off): the server granted [ms]. Credited
+     *  only while less than [belowMs] is left, so a guest can hold at most just under
+     *  belowMs + ms. Both are clamped to an hour. Returns whether it was credited. */
+    fun creditFreeTime(ms: Long, belowMs: Long): Boolean {
+        if (remainingMs() >= belowMs.coerceIn(MINUTE, HOUR)) return false
+        credit(ms.coerceIn(MINUTE, HOUR))
+        return true
+    }
 
     fun advance(wall: Long, elapsed: Long) {
         val delta = lastElapsed?.let { (elapsed - it).coerceAtLeast(0) } ?: 0
@@ -67,13 +96,13 @@ internal class GuestQuota(
     /** Grant the one-time 30 minutes if this install never had them. Returns true when it did. */
     fun ensureWelcome(): Boolean {
         if (welcomeGranted) return false
-        credit(WELCOME_MS)
+        credit(welcomeMs)
         welcomeGranted = true
         return true
     }
 
-    /** May this player be offered another ad? Only while under an hour is left. */
-    fun canEarnAd(): Boolean = remainingMs() < AD_CAP_MS
+    /** May this player be offered another ad? Only while under the cap (an hour) is left. */
+    fun canEarnAd(): Boolean = remainingMs() < adCapMs
 
     private fun nextMidnight(now: Long): Long = Calendar.getInstance(TimeZone.getTimeZone(zoneId)).run {
         timeInMillis = now

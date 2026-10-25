@@ -8,7 +8,8 @@ import { QRScanOverlay } from "./components/Dialogs";
 import { PlaytimeLockout } from "./components/PlaytimeLockout";
 import { PlaytimeToast } from "./components/PlaytimeToast";
 import { beginPlay, endPlay, getPlaytimeState, isBlocked, onPlaytimeChange } from "./store/playtime";
-import { onDashboardTabRequest, requestDashboardTab } from "./store/navIntent";
+import { onDashboardTabRequest, onSignInRequest, requestDashboardTab } from "./store/navIntent";
+import { KillScreen, NoticeLine } from "./components/AppControl";
 import { LaunchNotice } from "./components/LaunchNotice";
 import { CalmConnect } from "./components/CalmConnect";
 import { CalmSettings as TabSystem } from "./components/CalmSettings";
@@ -2851,6 +2852,8 @@ function TabHome({ realTelemetry, onLaunch, onConnect, onLaunchEditor, selectedP
     <div className="calm-home">
       {/* The visible intro lines were removed (owner request, 2026-10-12). The heading stays for screen readers and for the UI tests. */}
       <h1 className="sr-only" data-testid="home-heading">Home</h1>
+      {/* One line from the server (admin portal → App control); tap for the whole message. */}
+      <NoticeLine />
       <ConnectionSummary telemetry={realTelemetry} onClick={onConnect} />
       <div className="calm-section-heading"><h2>Your loadout</h2><span>{controllers.length.toString().padStart(2, "0")} {controllers.length === 1 ? "LAYOUT" : "LAYOUTS"}</span></div>
       <div className="calm-library" data-count={controllers.length}>
@@ -3518,6 +3521,8 @@ function DashboardScreen({
   // out-of-playtime overlay sending the user to Account to see the plans.
   // Without this it could only call onBack() and would land on Home.
   useEffect(() => onDashboardTabRequest((t) => changeTab(t)));
+  // The free-time pop-up's "Sign in for unlimited time" (components/AppControl.tsx).
+  useEffect(() => onSignInRequest(() => openProfile()));
 
   // Register a global hook so handleAndroidBack (App level) can close our dialog
   // instead of navigating to scanner when the Android back gesture fires during keyboard use.
@@ -4434,6 +4439,9 @@ export default function App() {
           now={() => Date.now()}
         />
       )}
+      {/* A build switched off from the admin portal: a full-screen lock above everything,
+          with a button to this build's store. Renders nothing otherwise. */}
+      <KillScreen />
     </div>
   );
 }

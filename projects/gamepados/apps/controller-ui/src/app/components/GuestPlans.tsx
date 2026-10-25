@@ -10,6 +10,8 @@ import { AccountAuth } from "./AccountAuth";
 import { PlanCard } from "./PlanPanel";
 import { AdRewardButton } from "./AdRewardButton";
 import { getAdState, onAdChange } from "../store/rewardedAd";
+import { getAppConfig, onAppConfigChange, outOfTimeText } from "../store/appConfig";
+import { AdsDownNote } from "./AppControl";
 
 /** Kept mounted across sign-in so the selected plan is not lost at checkout. */
 export function GuestPlans() {
@@ -22,6 +24,7 @@ export function GuestPlans() {
   const reduced = useReducedMotion();
   // Re-render when an ad lands: the phone's clock (guestTrial) just grew.
   useSyncExternalStore(onAdChange, getAdState, getAdState);
+  useSyncExternalStore(onAppConfigChange, getAppConfig, getAppConfig);   // ads on/off and the time rules
   const playComingSoon = getAppInfo().channel === "playstore";
   useEffect(() => {
     if (playComingSoon) { setLoading(false); return; }
@@ -44,10 +47,11 @@ export function GuestPlans() {
   if (playComingSoon) return <section className="guest-plans space-y-4">
     <div className="guest-trial-summary"><Clock size={22} aria-hidden="true" /><div>
       <h2 className="text-lg font-semibold calm-ink">Your play time</h2>
-      <p className="text-sm mt-1 calm-muted">{expired ? "Your free time is used up. Watch an ad for 30 more minutes." : `${formatDuration(trial.remainingSeconds)} to play. No sign-in needed.`}</p>
+      <p className="text-sm mt-1 calm-muted">{expired ? outOfTimeText({ guest: true, playstore: true }) : `${formatDuration(trial.remainingSeconds)} to play. No sign-in needed.`}</p>
     </div></div>
     {/* Play build: rewarded ads are the ONLY way to more time -- no plans, no
         Lifetime, no link to buy on the website (owner's decision, 2026-09-30). */}
+    <AdsDownNote />
     <div className="flex justify-center"><AdRewardButton /></div>
   </section>;
 
@@ -58,11 +62,12 @@ export function GuestPlans() {
         <h2 className="text-lg font-semibold calm-ink">{selected ? "Your selected plan" : expired ? "Keep playing your way" : "Your play time"}</h2>
         <p className="text-sm mt-1 calm-muted">
           {selected ? chosen?.displayName || "Choose a plan below"
-            : expired ? "Your free time is used up. Watch an ad for 30 more minutes, or get Lifetime."
+            : expired ? outOfTimeText({ guest: true, playstore: false })
             : `${formatDuration(trial.remainingSeconds)} to play. No sign-in needed.`}
         </p>
       </div>
     </div>
+    {!selected && <AdsDownNote />}
     {!selected && <div className="flex justify-center"><AdRewardButton /></div>}
     {selected && <button className="guest-back" onClick={() => setSelected(null)}>
       <ArrowLeft size={16} /> Back to plans

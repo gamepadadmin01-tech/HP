@@ -46,6 +46,10 @@ import { getBillingState, refresh as refreshBilling } from "./billing";
 import { getAppInfo, sendPlaytimeTicket } from "../platform/native";
 import { readJson, writeJson, KEYS } from "./storage";
 import { guestTrial } from "./guestTrial";
+import { outOfTimeText } from "./appConfig";
+
+/** The signed-in out-of-time line, built from the current rules (appConfig). */
+const outOfTime = () => outOfTimeText({ guest: false, playstore: getAppInfo().channel === "playstore" });
 
 export type PlaytimeStatus =
   /** Controller closed. */
@@ -350,7 +354,7 @@ function tick() {
   saveLocal(local);
   const left = remaining();
   if (left !== null && left <= 0) {
-    block("You're out of play time. Watch an ad for 30 more minutes.");
+    block(outOfTime());
     return;
   }
   checkWarnings(left);
@@ -387,7 +391,7 @@ async function beat(myGeneration: number) {
       // so, which is why this is terminal rather than retried.
       const payload = (err as ApiError & { payload?: { usedSeconds?: number; resetsAt?: string } }).payload;
       if (payload?.resetsAt) reconcile(payload.usedSeconds ?? local.usedSeconds, payload.resetsAt);
-      block(err.message || "You're out of play time. Watch an ad for 30 more minutes.");
+      block(err.message || outOfTime());
       return;
     }
 
@@ -461,7 +465,7 @@ export async function beginPlay(): Promise<void> {
     reconcile(Math.max(local.usedSeconds, ent.today.usedSeconds), ent.resetsAt);
     const left = remaining();
     if (left !== null && left <= 0) {
-      publish("blocked", "You're out of play time. Watch an ad for 30 more minutes.");
+      publish("blocked", outOfTime());
       return;
     }
   }
@@ -479,7 +483,7 @@ export async function beginPlay(): Promise<void> {
     const err = e instanceof ApiError ? e : null;
 
     if (err && err.code === "QUOTA_EXHAUSTED") {
-      publish("blocked", err.message || "You're out of play time. Watch an ad for 30 more minutes.");
+      publish("blocked", err.message || outOfTime());
       return;
     }
     if (err && err.code === "SESSION_EXISTS") {
@@ -519,7 +523,7 @@ export async function beginPlay(): Promise<void> {
   // server had recorded.
   const leftNow = remaining();
   if (leftNow !== null && leftNow <= 0) {
-    block("You're out of play time. Watch an ad for 30 more minutes.");
+    block(outOfTime());
     return;
   }
 
@@ -579,9 +583,7 @@ function publishGuest() {
     resetsAt: period,
     // Play sells nothing (2026-09-30): an ad is the only way to more time there.
     message: blocked
-      ? (getAppInfo().channel === "playstore"
-        ? "Your play time is used up. Watch an ad for 30 more minutes."
-        : "Your play time is used up. Watch an ad for 30 more minutes, or get Lifetime.")
+      ? outOfTimeText({ guest: true, playstore: getAppInfo().channel === "playstore" })
       : "",
   });
 }

@@ -22,6 +22,7 @@ import { getSession } from "./account";
 import { getBillingState, refresh as refreshBilling } from "./billing";
 import { guestTrial } from "./guestTrial";
 import { adsSupported, showRewardedAd } from "../platform/native";
+import { getAppConfig, ruleWords } from "./appConfig";
 
 export type AdPhase = "idle" | "loading" | "crediting" | "done" | "error";
 export type AdState = { phase: AdPhase; message: string };
@@ -74,7 +75,7 @@ export function canShowAdButton(): boolean {
   // older native side without the field falls back to the same sum here.
   if (!getSession()) {
     const t = guestTrial();
-    return t.canEarnAd ?? t.remainingSeconds < 3600;
+    return t.canEarnAd ?? t.remainingSeconds < getAppConfig().guest.adCapSeconds;
   }
   const ent = getBillingState().entitlement;
   // Until the plan is known, say nothing: offering an ad to a Lifetime holder
@@ -123,29 +124,38 @@ async function handle(r: NativeResult) {
   if (r.status === "rewarded") {
     if (r.guest || !getSession()) {
       guestTrial();                      // re-read the phone's clock: the bank just grew
-      settle("done", "+30 minutes added. They never expire.");
+      settle("done", `+${ruleWords().reward} added. They never expire.`);
       credited.forEach((fn) => fn());
       return;
     }
-    set({ phase: "crediting", message: "Adding your 30 minutes…" });
+    set({ phase: "crediting", message: `Adding your ${ruleWords().reward}…` });
     // Google calls our server a moment after the ad ends; poll until the bank
     // shows it. Usually the first or second read.
     for (let i = 0; i < 10; i++) {
       await sleep(i === 0 ? 1200 : 2000);
       try { await refreshBilling(); } catch { /* refresh fails soft */ }
       if (bankNow() > bankBefore) {
-        settle("done", "+30 minutes added. They never expire.");
+        settle("done", `+${ruleWords().reward} added. They never expire.`);
         credited.forEach((fn) => fn());
         return;
       }
     }
     // Google retries its callback, so a slow server is not a lost reward.
-    settle("done", "Your 30 minutes are on the way — they will appear in a moment.");
+    settle("done", "Your time is on the way. It will appear in a moment.");
     credited.forEach((fn) => fn());
     return;
   }
-  if (r.status === "closed") { settle("error", "Watch the ad to the end to get the 30 minutes."); return; }
+  if (r.status === "closed") { settle("error", `Watch the ad to the end to get the ${ruleWords().reward}.`); return; }
   settle("error", r.message || "No ad is available right now. Try again in a minute.");
+}
+
+/** Time added another way (the guest "Get free time" button): shown like an ad's result and
+ *  told to the same listeners, so the out-of-time screen restarts play and every plans screen
+ *  re-reads the phone's clock. */
+export function announceExtraTime(message: string) {
+  guestTrial();
+  settle("done", message);
+  credited.forEach((fn) => fn());
 }
 
 (window as unknown as { onRewardedAdResult?: (json: string) => void }).onRewardedAdResult = (json: string) => {

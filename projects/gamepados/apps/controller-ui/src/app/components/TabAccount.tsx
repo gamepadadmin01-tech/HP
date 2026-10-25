@@ -11,6 +11,7 @@ import { autoSyncEnabled, setAutoSyncEnabled } from "../store/prefs";
 import { PlanPanel } from "./PlanPanel";
 import { GuestPlans } from "./GuestPlans";
 import { CalmSwitch } from "./CalmSettings";
+import { RateAppCard } from "./AppControl";
 
 // ─── GamepadOS Account ────────────────────────────────────────────────────────
 //
@@ -47,6 +48,7 @@ export function TabAccount({
         <button data-testid="account-signin-toggle-button" className="guest-back" onClick={onSignIn}>
           Already have an account? Sign in
         </button>
+        <RateAppCard />
       </div>
     );
   }
@@ -81,6 +83,8 @@ export function TabAccount({
           tab is opened to check, and because a limit the user cannot find is
           indistinguishable from a limit that appeared without warning. ── */}
       <PlanPanel />
+
+      <RateAppCard />
 
       {/* ── The user's own layouts ── */}
       <Section title="Controller Library">

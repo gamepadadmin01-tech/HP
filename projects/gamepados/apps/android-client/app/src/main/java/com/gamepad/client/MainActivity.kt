@@ -883,6 +883,16 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback, android.hardwa
                     return guestTrial.setActive(on)
                 }
 
+                /** 1.4.11+: the server's guest rules (GET /api/app-config), clamped in GuestQuota. */
+                @android.webkit.JavascriptInterface
+                fun setGuestRules(welcomeSeconds: Int, adRewardSeconds: Int, adCapSeconds: Int): String =
+                    guestTrial.setRules(welcomeSeconds, adRewardSeconds, adCapSeconds)
+
+                /** 1.4.11+: "Get free time", after the server granted it (POST /api/guest/free-time). */
+                @android.webkit.JavascriptInterface
+                fun creditGuestFreeTime(seconds: Int, belowSeconds: Int): String =
+                    guestTrial.creditFreeTime(seconds, belowSeconds)
+
                 /**
                  * Send a playtime capability ticket to the PC server.
                  *

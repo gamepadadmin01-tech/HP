@@ -22,6 +22,12 @@ internal class GuestTrial(context: Context, private val onExpired: () -> Unit) {
         // The one-time 30 minutes (2026-09-30): granted on the first launch of a build that has
         // this rule — including existing installs, once — and never again (flag persisted).
         synchronized(this) {
+            // The server's rules from the last launch (1.4.11+), before anything is granted.
+            quota.setRules(
+                prefs.getLong("ruleWelcomeS", GuestQuota.WELCOME_MS / 1000),
+                prefs.getLong("ruleRewardS", GuestQuota.AD_REWARD_MS / 1000),
+                prefs.getLong("ruleCapS", GuestQuota.AD_CAP_MS / 1000),
+            )
             if (quota.ensureWelcome()) {
                 prefs.edit().putLong("bankMs", quota.bankMs).putBoolean("welcomeGranted", true).apply()
             }
@@ -70,14 +76,31 @@ internal class GuestTrial(context: Context, private val onExpired: () -> Unit) {
 
     @Synchronized fun exhausted(): Boolean { advance(); return quota.remainingMs() == 0L }
 
-    /** A rewarded ad finished while signed out (AdsBridge): bank [AD_REWARD_MS]. Signed-in players are
-     *  credited by the server instead, from Google's signed callback, never from here. */
+    /** A rewarded ad finished while signed out (AdsBridge): bank one ad's worth (the server's number,
+     *  30 minutes by default). Signed-in players are credited by the server instead, from Google's
+     *  signed callback, never from here. */
     @Synchronized fun creditAd(): String {
         advance()
-        quota.credit(AD_REWARD_MS)
+        quota.credit(quota.adRewardMs)
         prefs.edit().putLong("bankMs", quota.bankMs).apply()
         return snapshot()
     }
 
-    companion object { const val AD_REWARD_MS = 30 * 60 * 1000L }
+    /** The server's guest rules (store/appConfig.ts), clamped in [GuestQuota.setRules] and kept for
+     *  the next launch, which may be offline. */
+    @Synchronized fun setRules(welcomeSeconds: Int, adRewardSeconds: Int, adCapSeconds: Int): String {
+        quota.setRules(welcomeSeconds.toLong(), adRewardSeconds.toLong(), adCapSeconds.toLong())
+        prefs.edit().putLong("ruleWelcomeS", quota.welcomeMs / 1000).putLong("ruleRewardS", quota.adRewardMs / 1000)
+            .putLong("ruleCapS", quota.adCapMs / 1000).apply()
+        return snapshot()
+    }
+
+    /** "Get free time": the server has just granted it (POST /api/guest/free-time). Answers the
+     *  snapshot plus "credited"; false when the player already holds belowSeconds or more. */
+    @Synchronized fun creditFreeTime(seconds: Int, belowSeconds: Int): String {
+        advance()
+        val credited = quota.creditFreeTime(seconds * 1000L, belowSeconds * 1000L)
+        if (credited) prefs.edit().putLong("bankMs", quota.bankMs).apply()
+        return JSONObject(snapshot()).put("credited", credited).toString()
+    }
 }

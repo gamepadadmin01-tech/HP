@@ -12,29 +12,53 @@ import { getSession, onSessionChange } from "../store/account";
 import { getBillingState, onBillingChange, formatDuration } from "../store/billing";
 import { guestTrial } from "../store/guestTrial";
 import { adCapReached, canShowAdButton, getAdState, onAdChange, onAdCredited, watchAd } from "../store/rewardedAd";
-import { adPrivacyOptionsRequired, preloadRewardedAd, showAdPrivacyOptions } from "../platform/native";
+import { adPrivacyOptionsRequired, adsSupported, preloadRewardedAd, showAdPrivacyOptions } from "../platform/native";
+import { getAppConfig, onAppConfigChange, ruleWords } from "../store/appConfig";
+import { DisabledAdButton, FreeTimeButton, RateAppLink } from "./AppControl";
 
 const ACCENT = "var(--calm-accent, #abc8db)";
 const MUTED = "var(--calm-muted, #a6b0b3)";
 const GOOD = "var(--calm-good, #a7cfb6)";
 const DANGER = "var(--calm-error, #ffaba6)";
 
-export function AdRewardButton({ onCredited }: { onCredited?: () => void }) {
+export function AdRewardButton({ onCredited, onSignIn }: { onCredited?: () => void; onSignIn?: () => void }) {
   const ad = useSyncExternalStore(onAdChange, getAdState, getAdState);
   const billing = useSyncExternalStore(onBillingChange, getBillingState, getBillingState);
   const session = useSyncExternalStore(onSessionChange, getSession, getSession);
+  const cfg = useSyncExternalStore(onAppConfigChange, getAppConfig, getAppConfig);
+  const words = ruleWords();
 
-  useEffect(() => { preloadRewardedAd(); }, []);
+  // While ads are switched off nothing is preloaded: there is nothing to load.
+  useEffect(() => { if (cfg.ads.available) preloadRewardedAd(); }, [cfg.ads.available]);
   useEffect(() => (onCredited ? onAdCredited(onCredited) : undefined), [onCredited]);
 
+  // Ads switched off at the server (store/appConfig.ts). The ad button stays where players expect
+  // it, visibly disabled; guests get "Get free time" beside it. Signed-in players are unlimited
+  // while the switch is on, so they see nothing here (also while their plan is still loading).
+  if (adsSupported() && !cfg.ads.available) {
+    if (session && (billing.entitlement?.unlimited ?? true)) return null;
+    return (
+      <div className="w-full max-w-xs" data-testid="ads-down-block">
+        <div className="grid gap-2" style={{ gridTemplateColumns: session ? "1fr" : "1fr 1fr" }}>
+          <DisabledAdButton rewardSeconds={cfg.guest.adRewardSeconds} />
+          {!session && <FreeTimeButton onSignIn={onSignIn} />}
+        </div>
+        <p role="status" className="text-xs mt-2 text-center" style={{ color: ad.phase === "done" ? GOOD : MUTED }}>
+          {ad.phase === "done" ? ad.message : "Ads aren't working right now."}
+        </p>
+        <RateAppLink />
+      </div>
+    );
+  }
+
   if (!canShowAdButton()) {
-    // Over an hour held (2026-09-30 cap): no button, but say why -- and keep
+    // Over the cap (an hour) held: no button, but say why -- and keep
     // the "+30 minutes added" that pushed them over visible for its moment.
     if (!adCapReached()) return null;
     const done = ad.phase === "done" ? ad.message : "";
     return <p role="status" className="w-full max-w-xs text-xs text-center"
       style={{ color: done ? GOOD : MUTED }}>
-      {done || "You have an hour or more saved. Ads come back when it drops below an hour."}
+      {done || `You have ${words.cap} or more saved. Ads come back when it drops below ${words.cap}.`}
     </p>;
   }
 
@@ -60,14 +84,14 @@ export function AdRewardButton({ onCredited }: { onCredited?: () => void }) {
         }}
       >
         {busy ? <Loader2 size={16} className="animate-spin" /> : <PlayCircle size={16} />}
-        {busy ? ad.message : "Watch an ad · +30 min"}
+        {busy ? ad.message : `Watch an ad · +${words.rewardShort}`}
       </button>
       <p role="status" className="text-xs mt-2 text-center"
         style={{ color: note ? (ad.phase === "error" ? DANGER : GOOD) : MUTED }}>
         {note
           || (bank > 0
             ? `Saved: ${formatDuration(bank)} · never expires`
-            : "Optional. Each ad adds 30 minutes that never expire.")}
+            : `Optional. Each ad adds ${words.reward} that never expire.`)}
       </p>
       {adPrivacyOptionsRequired() && (
         <button className="text-xs mt-1 w-full text-center underline" style={{ color: MUTED }}
@@ -75,6 +99,7 @@ export function AdRewardButton({ onCredited }: { onCredited?: () => void }) {
           Ad privacy choices
         </button>
       )}
+      <RateAppLink />
     </div>
   );
 }

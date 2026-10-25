@@ -84,6 +84,47 @@ class GuestQuotaTest {
         assertEquals(75 * min, under.remainingMs())
         assertFalse(under.canEarnAd())
     }
+    // 1.4.11: the rules come from the server, clamped here.
+    @Test fun serverRulesAreUsedAndClamped() {
+        val q = GuestQuota(zoneId = "UTC")
+        q.setRules(45 * 60, 20 * 60, 90 * 60)
+        assertTrue(q.ensureWelcome())
+        assertEquals(45 * min, q.bankMs)                       // the welcome follows the server
+        assertEquals(20 * min, q.adRewardMs)
+        assertTrue(q.canEarnAd())                              // 45 < 90-minute cap
+        q.setRules(Long.MAX_VALUE / 2000, 0, 0)                // absurd values
+        assertEquals(120 * min, q.welcomeMs)                   // at most 2 hours
+        assertEquals(5 * min, q.adRewardMs)                    // at least 5 minutes an ad
+        assertEquals(30 * min, q.adCapMs)                      // cap at least 30 minutes
+        q.setRules(-5, 999_999, 999_999)
+        assertEquals(0L, q.welcomeMs)
+        assertEquals(60 * min, q.adRewardMs)                   // at most an hour an ad
+        assertEquals(180 * min, q.adCapMs)                     // cap at most 3 hours
+    }
+    @Test fun defaultsUntilTheServerAnswers() {
+        val q = GuestQuota(zoneId = "UTC")
+        assertEquals(30 * min, q.welcomeMs)
+        assertEquals(30 * min, q.adRewardMs)
+        assertEquals(60 * min, q.adCapMs)
+    }
+    // "Get free time": only while under the threshold, so a guest holds at most 59 min.
+    @Test fun freeTimeOnlyUnderThirtyMinutes() {
+        val q = GuestQuota(zoneId = "UTC", bankMs = 29 * min + 59_000, welcomeGranted = true)
+        q.advance(noon, 0)
+        assertTrue(q.creditFreeTime(30 * min, 30 * min))       // 29:59 left → allowed
+        assertEquals(59 * min + 59_000, q.remainingMs())       // the most anyone can hold
+        assertFalse(q.creditFreeTime(30 * min, 30 * min))      // now over 30 → refused
+        assertEquals(59 * min + 59_000, q.remainingMs())
+        val exact = GuestQuota(zoneId = "UTC", bankMs = 30 * min, welcomeGranted = true)
+        assertFalse(exact.creditFreeTime(30 * min, 30 * min))  // exactly 30 → refused
+    }
+    @Test fun freeTimeAmountsAreClamped() {
+        val q = GuestQuota(zoneId = "UTC", welcomeGranted = true)
+        q.advance(noon, 0)
+        assertTrue(q.creditFreeTime(10 * 60 * min, 10 * 60 * min)) // asked for 10 hours
+        assertEquals(60 * min, q.bankMs)                        // got at most an hour
+        assertFalse(q.creditFreeTime(30 * min, 10 * 60 * min))  // threshold clamped to an hour too
+    }
     @Test fun normalTiltWrapsButKeepsSmallMovement() {
         assertEquals(10f, GyroAngle.shortest(370f), 0.001f)
         assertEquals(-10f, GyroAngle.shortest(-370f), 0.001f)

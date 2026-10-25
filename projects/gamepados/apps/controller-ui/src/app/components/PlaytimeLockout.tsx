@@ -13,8 +13,9 @@
 import React from "react";
 import { motion } from "framer-motion";
 import { Clock } from "lucide-react";
-import { requestDashboardTab } from "../store/navIntent";
+import { requestDashboardTab, requestSignIn } from "../store/navIntent";
 import { beginPlay, clearBlock } from "../store/playtime";
+import { ruleWords } from "../store/appConfig";
 import { AdRewardButton } from "./AdRewardButton";
 import { getAppInfo } from "../platform/native";
 
@@ -54,13 +55,14 @@ export function PlaytimeLockout({
       </h2>
 
       <p className="text-sm text-center mt-2 max-w-xs leading-relaxed" style={{ color: MUTED }}>
-        {message || "You're out of play time. Watch an ad for 30 more minutes."}
+        {message || `You're out of play time. Watch an ad for ${ruleWords().reward} more.`}
       </p>
 
       {/* The quickest way back in: 30 minutes for an ad, then play resumes
           without leaving this screen. Absent where ads are (see AdRewardButton). */}
       <div className="mt-7 w-full flex justify-center">
-        <AdRewardButton onCredited={() => { clearBlock(); void beginPlay(); }} />
+        <AdRewardButton onCredited={() => { clearBlock(); void beginPlay(); }}
+          onSignIn={() => { onBack(); requestSignIn(); }} />
       </div>
 
       {/* Ask for the Account tab BEFORE leaving. onBack() alone returns to

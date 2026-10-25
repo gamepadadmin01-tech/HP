@@ -34,6 +34,8 @@ import { Collapse } from "./Collapse";
 import { FADE } from "../motion";
 import { getAppInfo } from "../platform/native";
 import { AdRewardButton } from "./AdRewardButton";
+import { AdsDownNote } from "./AppControl";
+import { getAppConfig, onAppConfigChange, ruleWords } from "../store/appConfig";
 
 const ACCENT = "var(--calm-accent, #abc8db)";
 const MUTED = "var(--calm-muted, #a6b0b3)";
@@ -80,6 +82,8 @@ function planBullets(p: CataloguePlan): string[] {
 
 export function PlanPanel() {
   const state = useSyncExternalStore(onBillingChange, getBillingState, getBillingState);
+  useSyncExternalStore(onAppConfigChange, getAppConfig, getAppConfig);   // the time rules can change
+  const words = ruleWords();
 
   // One read on mount. The panel is not on the input path, so a network call
   // here costs nothing that matters.
@@ -187,6 +191,7 @@ export function PlanPanel() {
   return (
     <>
       <Section title="Your plan">
+        <div className="mb-3"><AdsDownNote /></div>
         <Panel>
           {/* ── What you have ── */}
           <div className="flex items-center gap-3 p-4">
@@ -205,7 +210,7 @@ export function PlanPanel() {
                       ? `${isGift ? "Gift · unlimited until" : "Unlimited until"} ${formatDate(ent.endsAt)}`
                       : "Unlimited playtime")
                   : noDaily
-                    ? "30 free minutes to start, then 30 more per ad"
+                    ? `${words.welcome} free to start, then ${words.reward} more per ad`
                     : `${formatDuration(ent.today.limitSeconds || 0)} a day`}
               </p>
             </div>
@@ -234,9 +239,9 @@ export function PlanPanel() {
               />}
               <p className="text-xs mt-2" style={{ color: exhausted ? DANGER : MUTED }}>
                 {exhausted
-                  ? "You're out of play time — watch an ad for 30 more minutes."
+                  ? `You're out of play time — watch an ad for ${words.reward} more.`
                   : noDaily
-                    ? "Your time never expires. Ads add 30 minutes while under an hour is left."
+                    ? `Your time never expires. Ads add ${words.reward} while under ${words.cap} is left.`
                   : freeGone
                     ? `Today's free time is used — playing from your ad time. ${formatResetsAt(ent.resetsAt)}`
                     : formatResetsAt(ent.resetsAt)}
@@ -277,6 +282,7 @@ export function PlanPanel() {
  * wrapper is what keeps the cards clipped while it grows.
  */
 function PlansDisclosure({ title, offers }: { title: string; offers: CataloguePlan[] }) {
+  const words = ruleWords();
   const [open, setOpen] = useState(false);
 
   // The cheapest thing on offer. Shown closed so the row still answers "what
@@ -326,7 +332,7 @@ function PlansDisclosure({ title, offers }: { title: string; offers: CataloguePl
             {offers.map((p) => <PlanCard key={p.code} plan={p} />)}
             <p className="text-xs leading-relaxed px-1" style={{ color: MUTED }}>
               Prices include GST. Access starts immediately, so purchases are final
-              and non-refundable — try your free 30 minutes first.
+              and non-refundable — try your free {words.welcome} first.
             </p>
           </div>
         </Collapse>
