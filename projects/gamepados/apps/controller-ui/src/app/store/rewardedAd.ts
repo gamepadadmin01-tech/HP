@@ -88,7 +88,7 @@ export function canShowAdButton(): boolean {
  *  more: the button is hidden and a short note says why. */
 export function adCapReached(): boolean {
   if (!adsSupported() || canShowAdButton()) return false;
-  if (!getSession()) return true;
+  if (!getSession()) return !guestTrial().unlimited;   // open play: no ad, and no "you hold an hour" note
   const ent = getBillingState().entitlement;
   return !!ent && !ent.unlimited && ent.adTime?.canEarn === false;
 }

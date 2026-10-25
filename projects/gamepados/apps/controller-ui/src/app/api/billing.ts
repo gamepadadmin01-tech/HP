@@ -194,6 +194,12 @@ export function getPlans(channel: string, currency = "INR") {
   return request<{ success: true } & Catalogue>(`/api/billing/plans${q}`);
 }
 
+/** Public. Is "open play" switched on at the server (everyone plays unlimited)? The server never
+ *  says until when: it is ended by the owner, not by a date the app could show or count down to. */
+export function getOpenPlay() {
+  return request<{ success: true; open: boolean }>("/api/billing/open-play");
+}
+
 export function getMe(token: string) {
   return request<{ success: true } & Entitlement>("/api/billing/me", { token });
 }

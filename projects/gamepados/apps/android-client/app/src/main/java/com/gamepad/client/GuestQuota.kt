@@ -22,12 +22,19 @@ internal class GuestQuota(
     var lastWall: Long = 0,
     var bankMs: Long = 0,
     var welcomeGranted: Boolean = false,
+    /** Open play: while the wall clock is before this, nothing is charged and the quota reports
+     *  unlimited. It is a short LEASE the app renews from the server (see [setOpenPlay]); 0 = off. */
+    var openUntilMs: Long = 0,
 ) {
     companion object {
         /** Daily free time. 0 since 2026-09-30: all play time comes from the bank. */
         const val LIMIT_MS = 0L
         const val WELCOME_MS = 30 * 60 * 1000L
         const val AD_CAP_MS = 60 * 60 * 1000L
+        /** What an open-play phone reports as "left", for UI code that only reads remaining time. */
+        const val OPEN_REMAINING_MS = 24 * 60 * 60 * 1000L
+        /** No lease is ever longer than this, whatever the app asks or the clock says. */
+        const val OPEN_MAX_TTL_MS = 2 * 60 * 60 * 1000L
     }
     var active = false
         private set
@@ -36,6 +43,11 @@ internal class GuestQuota(
     fun advance(wall: Long, elapsed: Long) {
         val delta = lastElapsed?.let { (elapsed - it).coerceAtLeast(0) } ?: 0
         val now = maxOf(wall, lastWall + delta)
+        if (openUntilMs - now > OPEN_MAX_TTL_MS) openUntilMs = 0   // implausibly far ahead: never trust it
+        // Only the part of this step AFTER the open-play lease ended is charged, so a long gap that
+        // straddles the end (a sleeping phone, a late tick) is not billed for the open part.
+        val freePart = if (openUntilMs > 0) (minOf(now, openUntilMs) - (now - delta)).coerceIn(0L, delta) else 0L
+        val billed = delta - freePart
         if (resetsAt <= 0) resetsAt = nextMidnight(now)
         if (now >= resetsAt) {
             val today = Calendar.getInstance(TimeZone.getTimeZone(zoneId)).apply {
@@ -43,9 +55,9 @@ internal class GuestQuota(
                 set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0)
                 set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
             }.timeInMillis
-            usedMs = if (active) minOf(delta, (now - today).coerceAtLeast(0)) else 0
+            usedMs = if (active) minOf(billed, (now - today).coerceAtLeast(0)) else 0
             resetsAt = nextMidnight(now)
-        } else if (active) usedMs += delta
+        } else if (active) usedMs += billed
         // Anything played past the daily free time (now: all of it) comes out of the bank.
         if (usedMs > LIMIT_MS) { bankMs = (bankMs - (usedMs - LIMIT_MS)).coerceAtLeast(0); usedMs = LIMIT_MS }
         usedMs = usedMs.coerceIn(0, LIMIT_MS)
@@ -58,8 +70,17 @@ internal class GuestQuota(
         active = on && remainingMs() > 0
     }
 
+    /** Is open play on right now? Read against the last clock reading, so call [advance] first. */
+    fun isOpen(): Boolean = openUntilMs > lastWall
+
+    /** Switch open play on for [ttlMs] (at most [OPEN_MAX_TTL_MS]) from [wall], or off. Time is not
+     *  charged while it is on, and the bank is left exactly as it was. */
+    fun setOpenPlay(open: Boolean, ttlMs: Long, wall: Long) {
+        openUntilMs = if (open) wall + ttlMs.coerceIn(0, OPEN_MAX_TTL_MS) else 0
+    }
+
     /** How long they can play right now: the daily free time (none) plus the bank. */
-    fun remainingMs(): Long = freeRemainingMs() + bankMs
+    fun remainingMs(): Long = if (isOpen()) maxOf(OPEN_REMAINING_MS, freeRemainingMs() + bankMs) else freeRemainingMs() + bankMs
     fun freeRemainingMs(): Long = (LIMIT_MS - usedMs).coerceAtLeast(0)
 
     fun credit(ms: Long) { if (ms > 0) bankMs += ms }
@@ -73,7 +94,7 @@ internal class GuestQuota(
     }
 
     /** May this player be offered another ad? Only while under an hour is left. */
-    fun canEarnAd(): Boolean = remainingMs() < AD_CAP_MS
+    fun canEarnAd(): Boolean = !isOpen() && remainingMs() < AD_CAP_MS
 
     private fun nextMidnight(now: Long): Long = Calendar.getInstance(TimeZone.getTimeZone(zoneId)).run {
         timeInMillis = now

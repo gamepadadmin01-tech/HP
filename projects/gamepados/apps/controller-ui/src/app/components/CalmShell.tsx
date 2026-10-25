@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useSyncExternalStore } from "react";
 import { ArrowRight, ChevronRight, Clock3, Monitor, Moon, Sun, Wifi } from "lucide-react";
 import { motion, useReducedMotion } from "framer-motion";
 import { KEYS, readString, writeString } from "../store/storage";
@@ -6,6 +6,7 @@ import { linkHint, linkState, type LinkTelemetry } from "../linkState";
 import { guestTrial } from "../store/guestTrial";
 import { formatDuration } from "../store/billing";
 import { getSession, onSessionChange } from "../store/account";
+import { isOpenPlay, onOpenPlayChange } from "../store/openPlay";
 import { requestDashboardTab } from "../store/navIntent";
 
 type Appearance = "light" | "dark";
@@ -79,12 +80,16 @@ export function ConnectionSummary({ telemetry, onClick }: { telemetry?: LinkTele
 
 export function DashboardAllowance() {
   const [session, setSession] = useState(getSession);
-  const [remaining, setRemaining] = useState(() => guestTrial().remainingSeconds);
+  const [trial, setTrial] = useState(() => guestTrial());
+  const remaining = trial.remainingSeconds;
+  const openPlay = useSyncExternalStore(onOpenPlayChange, isOpenPlay, isOpenPlay);
   useEffect(() => onSessionChange(() => setSession(getSession())), []);
+  // The phone is told about open play a moment after launch: show it as soon as it knows.
+  useEffect(() => { if (!session) setTrial(guestTrial()); }, [openPlay, session]);
   useEffect(() => {
     if (session) return;
     // No gameplay clock is started here. Refresh on resume/focus only.
-    const update = () => setRemaining(guestTrial().remainingSeconds);
+    const update = () => setTrial(guestTrial());
     const timer = window.setInterval(update, 30000);
     const visible = () => { if (!document.hidden) update(); };
     window.addEventListener("focus", update);
@@ -96,7 +101,8 @@ export function DashboardAllowance() {
   return <button type="button" className="calm-allowance" data-testid="daily-allowance" onClick={() => requestDashboardTab("account")}>
     <span className="console-allowance-icon"><Clock3 size={20} aria-hidden="true" /></span>
     <span className="calm-grow"><span className="console-eyebrow">{session ? "YOUR MEMBERSHIP" : "YOUR PLAY TIME"}</span>
-      <strong>{session ? "Your plan & playtime" : remaining > 0 ? <><span data-testid="remaining-playtime">{formatDuration(remaining)}</span> <small>left</small></> : "Watch an ad for 30 minutes"}</strong>
+      <strong>{session ? "Your plan & playtime" : trial.unlimited ? "Unlimited playtime" : remaining > 0 ? <><span data-testid="remaining-playtime">{formatDuration(remaining)}</span> <small>left</small></> : "Watch an ad for 30 minutes"}</strong>
+      {openPlay && <small data-testid="open-play-note" style={{ display: "block", marginTop: 2, opacity: 0.85 }}>Unlimited for everyone for now: rewarded ads are temporarily unavailable.</small>}
     </span>
     <span className="sr-only">{session ? "View account" : "View plans"}</span>
     <span className="calm-allowance-go" data-testid="view-plans-button" aria-hidden="true"><ChevronRight size={19} /></span>
