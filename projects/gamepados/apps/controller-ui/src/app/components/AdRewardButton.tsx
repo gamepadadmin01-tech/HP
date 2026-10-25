@@ -14,7 +14,7 @@ import { guestTrial } from "../store/guestTrial";
 import { adCapReached, canShowAdButton, getAdState, onAdChange, onAdCredited, watchAd } from "../store/rewardedAd";
 import { adPrivacyOptionsRequired, adsSupported, preloadRewardedAd, showAdPrivacyOptions } from "../platform/native";
 import { getAppConfig, onAppConfigChange, ruleWords } from "../store/appConfig";
-import { DisabledAdButton, FreeTimeButton, RateAppLink } from "./AppControl";
+import { DisabledAdButton, FreeTimeButton } from "./AppControl";
 
 const ACCENT = "var(--calm-accent, #abc8db)";
 const MUTED = "var(--calm-muted, #a6b0b3)";
@@ -43,10 +43,8 @@ export function AdRewardButton({ onCredited, onSignIn }: { onCredited?: () => vo
           <DisabledAdButton rewardSeconds={cfg.guest.adRewardSeconds} />
           {!session && <FreeTimeButton onSignIn={onSignIn} />}
         </div>
-        <p role="status" className="text-xs mt-2 text-center" style={{ color: ad.phase === "done" ? GOOD : MUTED }}>
-          {ad.phase === "done" ? ad.message : "Ads aren't working right now."}
-        </p>
-        <RateAppLink />
+        {/* The plans screen already says why ads are off (AdsDownNote); only a fresh result shows here. */}
+        {ad.phase === "done" && <p role="status" className="text-xs mt-2 text-center" style={{ color: GOOD }}>{ad.message}</p>}
       </div>
     );
   }
@@ -99,7 +97,6 @@ export function AdRewardButton({ onCredited, onSignIn }: { onCredited?: () => vo
           Ad privacy choices
         </button>
       )}
-      <RateAppLink />
     </div>
   );
 }

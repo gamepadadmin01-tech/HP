@@ -44,7 +44,7 @@ export function GuestPlans() {
   const offers = catalogue?.plans.filter(p => p.code !== "FREE" && p.purchasable) || [];
   const chosen = offers.find(p => p.code === selected);
 
-  if (playComingSoon) return <section className="guest-plans space-y-4">
+  if (playComingSoon) return <section className="guest-plans space-y-3">
     <div className="guest-trial-summary"><Clock size={22} aria-hidden="true" /><div>
       <h2 className="text-lg font-semibold calm-ink">Your play time</h2>
       <p className="text-sm mt-1 calm-muted">{expired ? outOfTimeText({ guest: true, playstore: true }) : `${formatDuration(trial.remainingSeconds)} to play. No sign-in needed.`}</p>
@@ -55,7 +55,7 @@ export function GuestPlans() {
     <div className="flex justify-center"><AdRewardButton /></div>
   </section>;
 
-  return <section className="guest-plans space-y-4">
+  return <section className="guest-plans space-y-3">
     <div className="guest-trial-summary">
       <Clock size={22} aria-hidden="true" />
       <div>

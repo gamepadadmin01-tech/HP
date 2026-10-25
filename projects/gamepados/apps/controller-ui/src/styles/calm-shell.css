@@ -58,6 +58,7 @@
 .gp-shell .calm-main::-webkit-scrollbar,.gp-shell .calm-connect-scroll::-webkit-scrollbar { display: none; }
 .gp-shell .calm-home-content,.gp-shell .calm-legacy-content { max-width: 620px; margin: auto; padding: 26px 22px 30px; }
 .gp-shell .calm-intro { margin-bottom: 26px; }
+.gp-shell .calm-account .calm-intro { margin-bottom: 18px; }
 .gp-shell .calm-intro h1 { color: var(--calm-ink); font: 600 33px/1.16 var(--calm-display); letter-spacing: -1.5px; margin: 8px 0 8px; }
 .gp-shell .calm-intro p { font-size: 14px; line-height: 1.55; color: var(--calm-muted); margin: 0; }
 .gp-shell .console-home-intro { margin-bottom: 23px; }
@@ -193,7 +194,7 @@
 .gp-shell .calm-account :is(button,input) { min-height: 48px; }
 .gp-shell .calm-account button { border-radius: 9px; }
 .gp-shell .calm-account input { min-width: 0; font-size: 16px; }
-.gp-shell .guest-trial-summary { background: var(--calm-tint); border: 1px solid var(--calm-line); border-radius: 12px; padding: 20px; align-items: center; }
+.gp-shell .guest-trial-summary { background: var(--calm-tint); border: 1px solid var(--calm-line); border-radius: 12px; padding: 14px 16px; align-items: center; }
 .gp-shell .guest-trial-summary > svg { color: var(--calm-accent); flex-shrink: 0; }
 .gp-shell .guest-trial-summary h2 { font-size: 18px; }
 .gp-shell .guest-trial-summary p { font-size: 12px; }

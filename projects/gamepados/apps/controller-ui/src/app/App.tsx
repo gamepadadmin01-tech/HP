@@ -3562,8 +3562,8 @@ function DashboardScreen({
       <main ref={mainRef} className="calm-main">
         <div className={authOpen ? 'console-auth-content' : tab === "home" ? "calm-home-content" : "calm-legacy-content"}>
           {/* Update banner. Renders nothing unless an update is actually
-              available, and is hidden on Settings because that tab shows the full
-              update block — otherwise the same notice would appear twice. */}
+              available. Shown on every tab since 1.4.11: Settings no longer has its
+              own "App" block with the full update section. */}
           <motion.div key={authOpen ? 'sign-in' : tab} initial={reduceShellMotion || !dashboardEntered.current ? false : { opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: reduceShellMotion ? 0 : .22, ease: [.22, 1, .36, 1] }}>
             {authOpen ? <SignInScreen onBack={closeSignIn} /> : <>
             {tab === "home"   && <TabHome realTelemetry={realTelemetry} onLaunch={onLaunch} onConnect={onBack}
@@ -3576,7 +3576,7 @@ function DashboardScreen({
               onNewLayout={openBlueprintDialog}
               pendingEditPad={pendingEditPad}
               onClearPendingEditPad={() => setPendingEditPad(null)} />}
-            {tab === "system" && <TabSystem gyroOn={gyroOn} setGyroOn={setGyroOn} gyroMaxAngle={gyroMaxAngle} setGyroMaxAngle={setGyroMaxAngle} gyroWheel={gyroWheel} setGyroWheel={setGyroWheel} gyroWheelRange={gyroWheelRange} setGyroWheelRange={setGyroWheelRange} gyroMode={gyroMode} setGyroMode={setGyroMode} gyroDeadzone={gyroDeadzone} setGyroDeadzone={setGyroDeadzone} gyroHaptic={gyroHaptic} setGyroHaptic={setGyroHaptic} gyroThrottle={gyroThrottle} setGyroThrottle={setGyroThrottle} gyroIdleDetect={gyroIdleDetect} setGyroIdleDetect={setGyroIdleDetect} rumbleOn={rumbleOn} setRumbleOn={setRumbleOn}><AppSupport privacyUrl={PRIVACY_URL} updateChecker={<UpdateChecker />} feedback={<FeedbackCard />} /></TabSystem>}
+            {tab === "system" && <TabSystem gyroOn={gyroOn} setGyroOn={setGyroOn} gyroMaxAngle={gyroMaxAngle} setGyroMaxAngle={setGyroMaxAngle} gyroWheel={gyroWheel} setGyroWheel={setGyroWheel} gyroWheelRange={gyroWheelRange} setGyroWheelRange={setGyroWheelRange} gyroMode={gyroMode} setGyroMode={setGyroMode} gyroDeadzone={gyroDeadzone} setGyroDeadzone={setGyroDeadzone} gyroHaptic={gyroHaptic} setGyroHaptic={setGyroHaptic} gyroThrottle={gyroThrottle} setGyroThrottle={setGyroThrottle} gyroIdleDetect={gyroIdleDetect} setGyroIdleDetect={setGyroIdleDetect} rumbleOn={rumbleOn} setRumbleOn={setRumbleOn} />}
             {tab === "account" && (
               <TabAccount
                 customPadsCount={customPads.length}
@@ -3586,11 +3586,12 @@ function DashboardScreen({
                 rumbleOn={rumbleOn}
                 onOpenSystem={() => changeTab("system")}
                 onSignIn={openProfile}
+                support={<AppSupport privacyUrl={PRIVACY_URL} feedback={<FeedbackCard />} />}
               />
             )}
             </>}
           </motion.div>
-          {!authOpen && tab !== "system" && <div className="calm-existing-update"><UpdateChecker compact /></div>}
+          {!authOpen && <div className="calm-existing-update"><UpdateChecker compact /></div>}
         </div>
       </main>
 

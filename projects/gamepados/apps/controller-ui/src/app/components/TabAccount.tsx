@@ -1,9 +1,8 @@
-import React, { useMemo, useState, useSyncExternalStore } from "react";
+import React, { useState, useSyncExternalStore } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { SPRING, FADE } from "../motion";
 import { Edit3, ChevronRight, Vibrate, LogOut, Mail, RefreshCw, Cloud, CloudOff, Trash2 } from "lucide-react";
-import { getAppInfo, openUrl, testRumble } from "../platform/native";
-import { INSTAGRAM_URL } from "../social";
+import { openUrl, testRumble } from "../platform/native";
 import { getSession, onSessionChange, signOut, deleteAccount } from "../store/account";
 import { ApiError } from "../api/account";
 import { getSyncState, onSyncChange, syncNow, lastSyncedAt, cancelScheduledSync } from "../store/sync";
@@ -11,7 +10,6 @@ import { autoSyncEnabled, setAutoSyncEnabled } from "../store/prefs";
 import { PlanPanel } from "./PlanPanel";
 import { GuestPlans } from "./GuestPlans";
 import { CalmSwitch } from "./CalmSettings";
-import { RateAppCard } from "./AppControl";
 
 // ─── GamepadOS Account ────────────────────────────────────────────────────────
 //
@@ -28,6 +26,7 @@ export function TabAccount({
   rumbleOn,
   onOpenSystem,
   onSignIn,
+  support,
 }: {
   customPadsCount: number;
   gyroHaptic: boolean;
@@ -36,19 +35,21 @@ export function TabAccount({
   rumbleOn: boolean;
   onOpenSystem: () => void;
   onSignIn: () => void;
+  /** Feedback, contact and the privacy policy (AppSupport), last on the page. */
+  support?: React.ReactNode;
 }) {
   const session = useSyncExternalStore(onSessionChange, getSession, getSession);
 
   // Plans remain a separate destination; the header goes directly to sign-in.
   if (!session) {
     return (
-      <div className="calm-account space-y-6 pb-10">
+      <div className="calm-account space-y-4 pb-8">
         <div className="calm-intro"><span className="console-eyebrow">GOOD GAMES DESERVE MORE TIME</span><h1 data-testid="account-heading">Stay in the game.</h1><p>Your playtime. Your pace. Your pick.</p></div>
         <GuestPlans key="guest-plans" />
         <button data-testid="account-signin-toggle-button" className="guest-back" onClick={onSignIn}>
           Already have an account? Sign in
         </button>
-        <RateAppCard />
+        {support}
       </div>
     );
   }
@@ -56,7 +57,7 @@ export function TabAccount({
   const { user } = session;
 
   return (
-    <div data-testid="profile-screen" className="calm-account space-y-6 pb-10">
+    <div data-testid="profile-screen" className="calm-account space-y-4 pb-8">
       <div className="calm-intro"><span className="console-eyebrow">THE PLAYER BEHIND THE CONTROLLER</span><h1 data-testid="account-heading">Your player profile.</h1><p>All your play, in one place.</p></div>
       <GuestPlans key="guest-plans" />
       {/* ── Identity ── */}
@@ -83,8 +84,6 @@ export function TabAccount({
           tab is opened to check, and because a limit the user cannot find is
           indistinguishable from a limit that appeared without warning. ── */}
       <PlanPanel />
-
-      <RateAppCard />
 
       {/* ── The user's own layouts ── */}
       <Section title="Controller Library">
@@ -125,6 +124,8 @@ export function TabAccount({
         </Panel>
       </Section>
 
+
+      {support}
 
       {/* ── Destructive actions, last ── */}
       <Section title="Session">
@@ -465,46 +466,21 @@ function RumbleTest({ on }: { on: boolean }) {
   );
 }
 
-/** App help is available in Settings, with or without an account. */
-export function AppSupport({ privacyUrl, updateChecker, feedback }: { privacyUrl: string; updateChecker: React.ReactNode; feedback: React.ReactNode }) {
-  const app = useMemo(() => getAppInfo(), []);
-  // Support and App are two panels, each built from the same rows as the rest of
-  // the page — no cards nested inside cards, one heading per section.
-  const support = (
+/** Support, at the end of the Plans page (signed in or not): feedback, contact, and the privacy
+ *  policy as one quiet line. The policy link must stay reachable inside the app (Google Play user
+ *  data policy), but it does not need its own section. */
+export function AppSupport({ privacyUrl, feedback }: { privacyUrl: string; feedback: React.ReactNode }) {
+  return (
     <Section title="Support">
-      <Panel>{feedback}</Panel>
-    </Section>
-  );
-
-  const appPanel = (
-    <Section title="App">
       <Panel>
-        <div className="p-4">
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-bold"
-              style={{ fontFamily: "system-ui, sans-serif", color: "var(--calm-accent, #abc8db)" }}>GAMEPADOS</span>
-            {app.version && (
-              <span className="text-xs font-semibold" style={{ color: "var(--calm-muted, #a6b0b3)" }}>v{app.version}</span>
-            )}
-          </div>
-          <p className="text-xs leading-relaxed mt-2" style={{ color: "var(--calm-muted, #a6b0b3)" }}>
-            Turn your phone into a low-latency wireless or USB controller for your PC.
-          </p>
-        </div>
-        {updateChecker}
-        <button onClick={() => openUrl(INSTAGRAM_URL)}
-          className="w-full flex items-center justify-between p-4 hover:bg-white/[0.03] transition-colors text-left">
-          <span className="text-sm font-medium calm-ink">Follow us on Instagram</span>
-          <ChevronRight size={16} style={{ color: "var(--calm-muted, #a6b0b3)" }} />
-        </button>
-        <button onClick={() => openUrl(privacyUrl)}
-          className="w-full flex items-center justify-between p-4 hover:bg-white/[0.03] transition-colors text-left">
-          <span className="text-sm font-medium calm-ink">Privacy policy</span>
-          <ChevronRight size={16} style={{ color: "var(--calm-muted, #a6b0b3)" }} />
+        {feedback}
+        <button onClick={() => openUrl(privacyUrl)} data-testid="privacy-policy-link"
+          className="w-full flex items-center justify-between px-4 py-3 text-left"
+          style={{ borderTop: "1px solid var(--calm-line, #343c3f)", minHeight: 0 }}>
+          <span className="text-xs" style={{ color: "var(--calm-muted, #a6b0b3)" }}>Privacy policy</span>
+          <ChevronRight size={14} style={{ color: "var(--calm-muted, #a6b0b3)" }} />
         </button>
       </Panel>
     </Section>
   );
-
-  return <div className="calm-app-support">{support}{appPanel}</div>;
 }

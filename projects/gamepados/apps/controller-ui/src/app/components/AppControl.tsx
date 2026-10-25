@@ -4,14 +4,13 @@
 //   FreeTimeButton   guests only, while ads are off: tap → server → time on the phone
 //   NoticeLine       the one-line notice at the top of Home; tap for the whole text
 //   KillScreen       this build was switched off: a full-screen lock with an update button
-//   RateAppCard/Link let players rate the app from Account and from the ad area
 //
 // Everything that pops up is a Sheet: rendered into <body> (so it sits above the controller
 // and any transformed container), frosted see-through backdrop, one card in the middle.
 
 import React, { useEffect, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
-import { Bell, ChevronRight, Gift, Loader2, RefreshCw, Star, X } from "lucide-react";
+import { Bell, ChevronRight, Gift, Loader2, RefreshCw, X } from "lucide-react";
 import { API_ORIGIN } from "../api/account";
 import { getAppConfig, minutesShort, minutesText, onAppConfigChange, refreshAppConfig } from "../store/appConfig";
 import { getSession, onSessionChange } from "../store/account";
@@ -19,7 +18,7 @@ import { guestTrial } from "../store/guestTrial";
 import { announceExtraTime } from "../store/rewardedAd";
 import { requestSignIn } from "../store/navIntent";
 import { getAppInfo, nativeCreditGuestFreeTime, openUrl } from "../platform/native";
-import { getInstallId, markFeedbackSent, submitRating } from "../feedback";
+import { getInstallId } from "../feedback";
 
 const ACCENT = "var(--calm-accent, #abc8db)";
 const MUTED = "var(--calm-muted, #a6b0b3)";
@@ -276,80 +275,4 @@ export function KillScreen() {
       {info.version && <p style={{ fontSize: 11.5, color: SOFT, opacity: 0.75, marginTop: 12 }}>You have version {info.version}.</p>}
     </div>
   </Sheet>;
-}
-
-// ── Rate the app ────────────────────────────────────────────────────────────
-
-function RateSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const [stars, setStars] = useState(0);
-  const [note, setNote] = useState("");
-  const [sent, setSent] = useState(false);
-  useEffect(() => { if (open) { setStars(0); setNote(""); setSent(false); } }, [open]);
-  const send = () => {
-    if (!stars) return;
-    submitRating(stars, Date.now(), note);     // queued offline, delivered to the portal's App ratings
-    markFeedbackSent();
-    setSent(true);
-  };
-  return <Sheet open={open} onClose={onClose} label="Rate GamepadOS">
-    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-      <SheetIcon tint="rgba(240,196,120,0.14)" color="#f0c478"><Star size={22} /></SheetIcon>
-      <button aria-label="Close" onClick={onClose} style={{ background: "none", border: "none", color: SOFT, padding: 4 }}><X size={18} /></button>
-    </div>
-    {sent ? <>
-      <h2 style={{ fontSize: 19, fontWeight: 700 }}>Thank you!</h2>
-      <p style={{ fontSize: 13.5, lineHeight: 1.55, color: SOFT, marginTop: 8 }}>We read every rating. It helps us make GamepadOS better.</p>
-      <div style={{ marginTop: 16 }}><PrimaryButton onClick={onClose}>Done</PrimaryButton></div>
-    </> : <>
-      <h2 style={{ fontSize: 19, fontWeight: 700 }}>How is GamepadOS for you?</h2>
-      <div role="radiogroup" aria-label="Your rating" style={{ display: "flex", gap: 6, justifyContent: "center", margin: "16px 0 12px" }}>
-        {[1, 2, 3, 4, 5].map((n) => (
-          <button key={n} role="radio" aria-checked={stars === n} aria-label={`${n} star${n > 1 ? "s" : ""}`} onClick={() => setStars(n)}
-            data-testid={`rate-star-${n}`}
-            style={{ background: "none", border: "none", padding: 4, color: n <= stars ? "#f0c478" : "rgba(255,255,255,0.25)" }}>
-            <Star size={32} fill={n <= stars ? "#f0c478" : "none"} />
-          </button>
-        ))}
-      </div>
-      <textarea value={note} onChange={(e) => setNote(e.target.value.slice(0, 1000))} rows={3}
-        placeholder={stars && stars <= 3 ? "What should we fix? (optional)" : "Anything you'd like to tell us? (optional)"}
-        style={{ width: "100%", borderRadius: 12, padding: "10px 12px", fontSize: 14, resize: "none",
-          background: "rgba(255,255,255,0.05)", border: `1px solid ${CARD_LINE}`, color: INK, outline: "none" }} />
-      <div style={{ marginTop: 14 }}><PrimaryButton onClick={send} disabled={!stars}>Send rating</PrimaryButton></div>
-    </>}
-  </Sheet>;
-}
-
-/** Account tab: a small card. */
-export function RateAppCard() {
-  const [open, setOpen] = useState(false);
-  return <>
-    <div data-testid="rate-app-card" style={{
-      display: "flex", alignItems: "center", gap: 12, padding: "14px 14px", borderRadius: 16,
-      background: "var(--calm-surface, rgba(255,255,255,0.04))", border: "1px solid var(--calm-line, rgba(255,255,255,0.10))",
-    }}>
-      <Star size={18} aria-hidden="true" style={{ color: "#f0c478", flex: "none" }} />
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 14, fontWeight: 700, color: "var(--calm-ink, #eef2f3)" }}>Enjoying GamepadOS?</div>
-        <div style={{ fontSize: 12, color: MUTED }}>Rate the app and tell us what to improve.</div>
-      </div>
-      <button onClick={() => setOpen(true)} data-testid="rate-app-button" style={{
-        padding: "8px 12px", borderRadius: 10, fontSize: 13, fontWeight: 600, flex: "none",
-        background: "transparent", color: ACCENT, border: "1px solid var(--calm-line, rgba(255,255,255,0.16))",
-      }}>Rate</button>
-    </div>
-    <RateSheet open={open} onClose={() => setOpen(false)} />
-  </>;
-}
-
-/** Under the ad buttons: one quiet link. */
-export function RateAppLink() {
-  const [open, setOpen] = useState(false);
-  return <>
-    <button onClick={() => setOpen(true)} data-testid="rate-app-link"
-      className="text-xs mt-2 w-full text-center" style={{ color: MUTED, background: "none", border: "none" }}>
-      ★ Rate the app
-    </button>
-    <RateSheet open={open} onClose={() => setOpen(false)} />
-  </>;
 }
