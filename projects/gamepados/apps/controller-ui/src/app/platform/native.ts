@@ -74,9 +74,6 @@ export interface AndroidBridge {
   sendPlaytimeTicket?(base64Ticket: string): void;
   getGuestTrialState?(): string;
   setGuestTrialActive?(active: boolean): string;
-  /** Open play for a signed-out phone (1.4.11+): while `open`, the native clock stops counting and
-   *  reports unlimited, for at most ttlSeconds unless told again. Absent from older APKs. */
-  setGuestOpenPlay?(open: boolean, ttlSeconds: number): string;
 
   /** Rewarded ads (AdsBridge.kt) — playstore, direct and uptodown builds only;
    *  absent everywhere else, so always feature-detect. showRewardedAd answers on
@@ -112,8 +109,6 @@ export function isNative(): boolean {
 export type GuestTrialSnapshot = {
   remainingSeconds: number; limitSeconds: number; resetsAt: number;
   freeRemainingSeconds?: number; bankSeconds?: number; canEarnAd?: boolean;
-  /** 1.4.11+: open play is on for this phone, nothing is being counted. */
-  unlimited?: boolean;
 };
 export function nativeGuestTrial(active?: boolean): GuestTrialSnapshot | null {
   const b = bridge();
@@ -124,13 +119,6 @@ export function nativeGuestTrial(active?: boolean): GuestTrialSnapshot | null {
     throw new Error("Could not read the free trial clock.");
   }
   return value;
-}
-
-/** Tell the phone's own clock whether open play is on. A no-op on APKs older than 1.4.11. */
-export function nativeGuestOpenPlay(open: boolean, ttlSeconds: number): void {
-  const b = bridge();
-  if (!b?.setGuestOpenPlay) return;
-  b.setGuestOpenPlay(open, ttlSeconds);
 }
 
 /** Call a bridge method, returning `fallback` if the bridge, the method, or the

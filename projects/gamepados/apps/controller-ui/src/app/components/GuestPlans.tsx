@@ -37,16 +37,14 @@ export function GuestPlans() {
 
   if (session && !selected) return null;
   const trial = guestTrial();
-  const unlimited = !!trial.unlimited;     // open play (server switch): nothing is counted
-  const expired = !unlimited && trial.remainingSeconds <= 0;
+  const expired = trial.remainingSeconds <= 0;
   const offers = catalogue?.plans.filter(p => p.code !== "FREE" && p.purchasable) || [];
   const chosen = offers.find(p => p.code === selected);
 
   if (playComingSoon) return <section className="guest-plans space-y-4">
     <div className="guest-trial-summary"><Clock size={22} aria-hidden="true" /><div>
       <h2 className="text-lg font-semibold calm-ink">Your play time</h2>
-      <p className="text-sm mt-1 calm-muted">{unlimited ? "Play time is unlimited for now: rewarded ads are temporarily unavailable. No sign-in needed."
-        : expired ? "Your free time is used up. Watch an ad for 30 more minutes." : `${formatDuration(trial.remainingSeconds)} to play. No sign-in needed.`}</p>
+      <p className="text-sm mt-1 calm-muted">{expired ? "Your free time is used up. Watch an ad for 30 more minutes." : `${formatDuration(trial.remainingSeconds)} to play. No sign-in needed.`}</p>
     </div></div>
     {/* Play build: rewarded ads are the ONLY way to more time -- no plans, no
         Lifetime, no link to buy on the website (owner's decision, 2026-09-30). */}
@@ -60,7 +58,6 @@ export function GuestPlans() {
         <h2 className="text-lg font-semibold calm-ink">{selected ? "Your selected plan" : expired ? "Keep playing your way" : "Your play time"}</h2>
         <p className="text-sm mt-1 calm-muted">
           {selected ? chosen?.displayName || "Choose a plan below"
-            : unlimited ? "Play time is unlimited for now: rewarded ads are temporarily unavailable."
             : expired ? "Your free time is used up. Watch an ad for 30 more minutes, or get Lifetime."
             : `${formatDuration(trial.remainingSeconds)} to play. No sign-in needed.`}
         </p>

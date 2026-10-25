@@ -569,13 +569,6 @@ function publishGuest() {
   const trial = guestTrial();
   const period = new Date(trial.resetsAt).toISOString();
   if (period !== state.resetsAt) warned = new Set();
-  // Open play (server switch, 1.4.11+): the phone says nothing is being counted. The tick keeps
-  // running, so the moment the phone's lease ends the normal countdown (or the block) resumes.
-  if (trial.unlimited) {
-    clearAlerts();
-    set({ status: "unlimited", remainingSeconds: null, limitSeconds: null, resetsAt: period, message: "" });
-    return;
-  }
   const blocked = trial.remainingSeconds <= 0;
   if (blocked) { clearTimers(); clearAlerts(); }
   else checkWarnings(trial.remainingSeconds);

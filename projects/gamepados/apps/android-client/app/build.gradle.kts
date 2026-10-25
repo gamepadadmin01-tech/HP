@@ -265,8 +265,8 @@ android {
         //      Google" through the phone's browser and the gamepados://auth link. The Google button
         //      stays hidden until the server reports it switched on, so this build is safe against
         //      a server that has no Google routes yet.
-        versionCode = 65
-        versionName = "1.4.11"
+        versionCode = 64
+        versionName = "1.4.10"
 
         // AdMob test IDs by default; the release build type swaps in the live ones (see top of file).
         buildConfigField("String", "ADMOB_REWARDED_ID", "\"$admobTestRewardedId\"")

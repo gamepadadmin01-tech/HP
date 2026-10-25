@@ -883,12 +883,6 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback, android.hardwa
                     return guestTrial.setActive(on)
                 }
 
-                /** Open play for a signed-out phone (1.4.11+), relayed by the app from the server's
-                 *  /api/billing/open-play. A lease of [ttlSeconds], renewed by the app; see GuestTrial. */
-                @android.webkit.JavascriptInterface
-                fun setGuestOpenPlay(open: Boolean, ttlSeconds: Int): String =
-                    guestTrial.setOpenPlay(open, ttlSeconds.toLong())
-
                 /**
                  * Send a playtime capability ticket to the PC server.
                  *

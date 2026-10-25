@@ -16,7 +16,6 @@ internal class GuestTrial(context: Context, private val onExpired: () -> Unit) {
         prefs.getLong("lastWall", 0),
         prefs.getLong("bankMs", 0),
         prefs.getBoolean("welcomeGranted", false),
-        prefs.getLong("openUntilMs", 0),
     )
 
     init {
@@ -49,8 +48,7 @@ internal class GuestTrial(context: Context, private val onExpired: () -> Unit) {
         quota.advance(System.currentTimeMillis(), SystemClock.elapsedRealtime())
         prefs.edit().putLong("usedMs", quota.usedMs).putLong("resetsAt", quota.resetsAt)
             .putLong("lastWall", quota.lastWall).putString("zone", quota.zoneId)
-            .putLong("bankMs", quota.bankMs).putBoolean("welcomeGranted", quota.welcomeGranted)
-            .putLong("openUntilMs", quota.openUntilMs).apply()
+            .putLong("bankMs", quota.bankMs).putBoolean("welcomeGranted", quota.welcomeGranted).apply()
     }
 
     @Synchronized fun setActive(on: Boolean): String {
@@ -66,21 +64,8 @@ internal class GuestTrial(context: Context, private val onExpired: () -> Unit) {
             .put("freeRemainingSeconds", quota.freeRemainingMs() / 1000.0)
             .put("bankSeconds", quota.bankMs / 1000.0)
             .put("canEarnAd", quota.canEarnAd())
-            .put("unlimited", quota.isOpen())
             .put("limitSeconds", GuestQuota.LIMIT_MS / 1000)
             .put("resetsAt", quota.resetsAt).toString()
-    }
-
-    /** Open play for this phone (the server's OPEN_PLAY_UNTIL switch, relayed by the app): nothing is
-     *  charged while it is on. [ttlSeconds] is a lease the app renews; it ends by itself if the app
-     *  stops hearing from the server, so "unlimited" can never outlast the server's say-so for long.
-     *  The ticker is left alone on purpose: when the lease ends mid-play, its next beat finds the
-     *  bank (possibly empty) and stops the input exactly as a normal expiry does. */
-    @Synchronized fun setOpenPlay(open: Boolean, ttlSeconds: Long): String {
-        advance()
-        quota.setOpenPlay(open, ttlSeconds * 1000L, System.currentTimeMillis())
-        prefs.edit().putLong("openUntilMs", quota.openUntilMs).apply()
-        return snapshot()
     }
 
     @Synchronized fun exhausted(): Boolean { advance(); return quota.remainingMs() == 0L }
