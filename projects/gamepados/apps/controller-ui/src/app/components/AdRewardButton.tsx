@@ -75,8 +75,8 @@ export function AdRewardButton({ onCredited, onSignIn }: { onCredited?: () => vo
         onClick={() => { watchAd(); }}
         className="w-full py-3.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2"
         style={{
-          background: "rgba(79,134,198,0.14)",
-          border: "1px solid rgba(79,134,198,0.35)",
+          background: "var(--calm-tint)",
+          border: "1px solid var(--calm-accent)",
           color: ACCENT,
           opacity: busy ? 0.75 : 1,
         }}

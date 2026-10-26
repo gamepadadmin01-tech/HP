@@ -8,10 +8,9 @@ import { guestTrial } from "../store/guestTrial";
 import { formatDuration } from "../store/billing";
 import { AccountAuth } from "./AccountAuth";
 import { PlanCard } from "./PlanPanel";
-import { AdRewardButton } from "./AdRewardButton";
 import { getAdState, onAdChange } from "../store/rewardedAd";
 import { getAppConfig, onAppConfigChange, outOfTimeText } from "../store/appConfig";
-import { AdsDownNote } from "./AppControl";
+import { FreeCard, FreeDivider, freePlayAvailable } from "./FreePlay";
 
 /** Kept mounted across sign-in so the selected plan is not lost at checkout. */
 export function GuestPlans() {
@@ -44,47 +43,52 @@ export function GuestPlans() {
   const offers = catalogue?.plans.filter(p => p.code !== "FREE" && p.purchasable) || [];
   const chosen = offers.find(p => p.code === selected);
 
+  // The Plans page order (owner, 2026-10-26): what you have, then Lifetime as the one big
+  // choice, then "or keep playing free" with everything about free time in one card. Sign-in
+  // and Support follow in TabAccount.
+  const status = <div className="guest-status" data-testid="guest-status">
+    <Clock size={16} aria-hidden="true" />
+    <span>{expired
+      ? outOfTimeText({ guest: true, playstore: playComingSoon })
+      : <><b>{formatDuration(trial.remainingSeconds)} left</b> · No sign-in needed</>}</span>
+  </div>;
+
+  // Play build: rewarded ads are the ONLY way to more time -- no plans, no
+  // Lifetime, no link to buy on the website (owner's decision, 2026-09-30).
   if (playComingSoon) return <section className="guest-plans space-y-3">
-    <div className="guest-trial-summary"><Clock size={22} aria-hidden="true" /><div>
-      <h2 className="text-lg font-semibold calm-ink">Your play time</h2>
-      <p className="text-sm mt-1 calm-muted">{expired ? outOfTimeText({ guest: true, playstore: true }) : `${formatDuration(trial.remainingSeconds)} to play. No sign-in needed.`}</p>
-    </div></div>
-    {/* Play build: rewarded ads are the ONLY way to more time -- no plans, no
-        Lifetime, no link to buy on the website (owner's decision, 2026-09-30). */}
-    <AdsDownNote />
-    <div className="flex justify-center"><AdRewardButton /></div>
+    {status}
+    <FreeCard />
   </section>;
 
-  return <section className="guest-plans space-y-3">
-    <div className="guest-trial-summary">
-      <Clock size={22} aria-hidden="true" />
-      <div>
-        <h2 className="text-lg font-semibold calm-ink">{selected ? "Your selected plan" : expired ? "Keep playing your way" : "Your play time"}</h2>
-        <p className="text-sm mt-1 calm-muted">
-          {selected ? chosen?.displayName || "Choose a plan below"
-            : expired ? outOfTimeText({ guest: true, playstore: false })
-            : `${formatDuration(trial.remainingSeconds)} to play. No sign-in needed.`}
-        </p>
-      </div>
-    </div>
-    {!selected && <AdsDownNote />}
-    {!selected && <div className="flex justify-center"><AdRewardButton /></div>}
-    {selected && <button className="guest-back" onClick={() => setSelected(null)}>
+  if (selected) return <section className="guest-plans space-y-3">
+    <button className="guest-back" onClick={() => setSelected(null)}>
       <ArrowLeft size={16} /> Back to plans
-    </button>}
-    {selected && !session ? <div className="guest-checkout">
+    </button>
+    {!session ? <div className="guest-checkout">
       <p className="mb-4 text-sm calm-muted">Sign in to attach this purchase to your account. You can review the plan again before paying.</p>
       <AccountAuth />
-    </div> : <>
-      {loading ? <div className="console-plans-loading" role="status" aria-label="Loading plans" data-testid="plans-loading"><motion.div animate={reduced ? {} : { opacity: [.4, 1, .4] }} transition={{ duration: 1.4, repeat: Infinity }}><i /><i /></motion.div><motion.div animate={reduced ? {} : { opacity: [.4, 1, .4] }} transition={{ duration: 1.4, repeat: Infinity, delay: .2 }}><i /><i /></motion.div></div>
-        : error ? <motion.div className="console-plans-error" initial={{ opacity: 0 }} animate={{ opacity: 1 }}><CloudOff size={26} /><p role="status" className="text-sm calm-muted">{error}</p><button data-testid="plans-retry-button" className="guest-back mt-2" onClick={() => setAttempt(a => a + 1)}>Try again</button></motion.div>
-        : catalogue?.purchasable ? <div className="space-y-3">
-          {(selected && chosen ? [chosen] : offers).map(plan => <PlanCard key={plan.code} plan={plan}
-            onChoose={session ? undefined : p => setSelected(p.code)} />)}
-          {offers.length === 0 && <p className="text-sm calm-muted">No plans are available for purchase right now.</p>}
-          <p className="text-xs calm-muted">{session ? "Payment is confirmed before access is added." : "Compare first. Sign in only when you choose to buy."}</p>
-        </div> : <p className="text-sm calm-muted">Purchases are not available in this build.</p>}
-    </>}
+    </div> : chosen ? <div className="space-y-3">
+      <PlanCard plan={chosen} />
+      <p className="text-xs calm-muted">Payment is confirmed before access is added.</p>
+    </div> : null}
+  </section>;
+
+  const plans = loading
+    ? <div className="console-plans-loading" role="status" aria-label="Loading plans" data-testid="plans-loading"><motion.div animate={reduced ? {} : { opacity: [.4, 1, .4] }} transition={{ duration: 1.4, repeat: Infinity }}><i /><i /></motion.div></div>
+    : error
+      ? <motion.div className="console-plans-error" initial={{ opacity: 0 }} animate={{ opacity: 1 }}><CloudOff size={26} /><p role="status" className="text-sm calm-muted">{error}</p><button data-testid="plans-retry-button" className="guest-back mt-2" onClick={() => setAttempt(a => a + 1)}>Try again</button></motion.div>
+      : catalogue?.purchasable && offers.length
+        ? <div className="space-y-2">
+          {offers.map(plan => <PlanCard key={plan.code} plan={plan} onChoose={p => setSelected(p.code)} />)}
+          <p className="text-xs calm-muted">Compare first. Sign in only when you choose to buy.</p>
+        </div>
+        : null;
+
+  return <section className="guest-plans space-y-3">
+    {status}
+    {plans}
+    {plans && freePlayAvailable() && <FreeDivider />}
+    <FreeCard />
   </section>;
 }
 

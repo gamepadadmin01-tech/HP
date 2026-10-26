@@ -10,7 +10,7 @@
 
 import React, { useEffect, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
-import { Bell, ChevronRight, Gift, Loader2, RefreshCw, X } from "lucide-react";
+import { AlertTriangle, Bell, ChevronRight, Gift, Loader2, RefreshCw, X } from "lucide-react";
 import { API_ORIGIN } from "../api/account";
 import { getAppConfig, minutesShort, minutesText, onAppConfigChange, refreshAppConfig } from "../store/appConfig";
 import { getSession, onSessionChange } from "../store/account";
@@ -19,24 +19,27 @@ import { announceExtraTime } from "../store/rewardedAd";
 import { requestSignIn } from "../store/navIntent";
 import { getAppInfo, nativeCreditGuestFreeTime, openUrl } from "../platform/native";
 import { getInstallId } from "../feedback";
+import { useShellAppearance } from "./CalmShell";
 
-const ACCENT = "var(--calm-accent, #abc8db)";
-const MUTED = "var(--calm-muted, #a6b0b3)";
-const GOOD = "var(--calm-good, #a7cfb6)";
-const DANGER = "var(--calm-error, #ffaba6)";
-// Sheets live in <body>, outside the themed dashboard, so they carry their own colours.
-const CARD_BG = "rgba(22,27,31,0.94)";
-const CARD_LINE = "rgba(255,255,255,0.10)";
-const INK = "#eef2f3";
-const SOFT = "#a9b4b8";
+// Theme tokens (styles/calm-shell.css). Sheets render into <body>, so Sheet wraps them in a
+// .gp-shell element carrying the current light/dark theme: these resolve exactly as on the page.
+const ACCENT = "var(--calm-accent)";
+const MUTED = "var(--calm-muted)";
+const GOOD = "var(--calm-good)";
+const DANGER = "var(--calm-error)";
+const CARD_BG = "var(--calm-surface)";
+const CARD_LINE = "var(--calm-line)";
+const INK = "var(--calm-ink)";
+const SOFT = "var(--calm-muted)";
 
 const useConfig = () => useSyncExternalStore(onAppConfigChange, getAppConfig, getAppConfig);
 const useSession = () => useSyncExternalStore(onSessionChange, getSession, getSession);
 
+
 // ── The shared pop-up ───────────────────────────────────────────────────────
 
-function Sheet({ open, onClose, children, label, z = 2000, dim = 0.55 }: {
-  open: boolean; onClose?: () => void; children: React.ReactNode; label: string; z?: number; dim?: number;
+function Sheet({ open, onClose, children, label, z = 2000 }: {
+  open: boolean; onClose?: () => void; children: React.ReactNode; label: string; z?: number;
 }) {
   useEffect(() => {
     if (!open || !onClose) return;
@@ -44,23 +47,28 @@ function Sheet({ open, onClose, children, label, z = 2000, dim = 0.55 }: {
     window.addEventListener("keydown", key);
     return () => window.removeEventListener("keydown", key);
   }, [open, onClose]);
+  // The app's own light/dark setting, so a sheet in <body> matches the page under it.
+  const { appearance: theme } = useShellAppearance();
   if (!open || typeof document === "undefined") return null;
   return createPortal(
-    <div role="dialog" aria-modal="true" aria-label={label}
-      onClick={onClose ? (e) => { if (e.target === e.currentTarget) onClose(); } : undefined}
-      style={{
-        position: "fixed", inset: 0, zIndex: z, display: "flex", alignItems: "center", justifyContent: "center",
-        padding: "max(20px, env(safe-area-inset-top)) 20px max(20px, env(safe-area-inset-bottom))",
-        background: `rgba(6,8,11,${dim})`, backdropFilter: "blur(16px) saturate(1.15)", WebkitBackdropFilter: "blur(16px) saturate(1.15)",
-        animation: "gpSheetIn 0.22s ease-out",
-      }}>
-      <style>{`@keyframes gpSheetIn{from{opacity:0}to{opacity:1}}@keyframes gpCardIn{from{opacity:0;transform:translateY(10px) scale(0.98)}to{opacity:1;transform:none}}`}</style>
-      <div style={{
-        width: "100%", maxWidth: 380, maxHeight: "100%", overflowY: "auto", borderRadius: 22, padding: "22px 20px 18px",
-        background: CARD_BG, border: `1px solid ${CARD_LINE}`, boxShadow: "0 24px 60px rgba(0,0,0,0.45)", color: INK,
-        fontFamily: "var(--calm-body, system-ui, sans-serif)", animation: "gpCardIn 0.26s cubic-bezier(0.2,0.8,0.2,1)",
-      }}>
-        {children}
+    <div className="gp-shell" data-calm-theme={theme} style={{ background: "transparent" }}>
+      <div role="dialog" aria-modal="true" aria-label={label}
+        onClick={onClose ? (e) => { if (e.target === e.currentTarget) onClose(); } : undefined}
+        style={{
+          position: "fixed", inset: 0, zIndex: z, display: "flex", alignItems: "center", justifyContent: "center",
+          padding: "max(20px, env(safe-area-inset-top)) 20px max(20px, env(safe-area-inset-bottom))",
+          background: theme === "light" ? "rgba(24,24,26,0.32)" : "rgba(0,0,0,0.55)",
+          backdropFilter: "blur(14px) saturate(1.1)", WebkitBackdropFilter: "blur(14px) saturate(1.1)",
+          animation: "gpSheetIn 0.2s ease-out",
+        }}>
+        <style>{`@keyframes gpSheetIn{from{opacity:0}to{opacity:1}}@keyframes gpCardIn{from{opacity:0;transform:translateY(10px) scale(0.98)}to{opacity:1;transform:none}}`}</style>
+        <div style={{
+          width: "100%", maxWidth: 380, maxHeight: "100%", overflowY: "auto", borderRadius: 16, padding: "22px 20px 18px",
+          background: CARD_BG, border: `1px solid ${CARD_LINE}`, boxShadow: "0 24px 60px rgba(0,0,0,0.35)", color: INK,
+          fontFamily: "var(--calm-body)", animation: "gpCardIn 0.24s cubic-bezier(0.2,0.8,0.2,1)",
+        }}>
+          {children}
+        </div>
       </div>
     </div>,
     document.body,
@@ -69,20 +77,20 @@ function Sheet({ open, onClose, children, label, z = 2000, dim = 0.55 }: {
 
 function PrimaryButton({ children, onClick, disabled }: { children: React.ReactNode; onClick: () => void; disabled?: boolean }) {
   return <button onClick={onClick} disabled={disabled} style={{
-    width: "100%", padding: "13px 16px", borderRadius: 14, border: "none", fontSize: 14, fontWeight: 700,
-    background: "#cfe3ef", color: "#13222b", opacity: disabled ? 0.5 : 1,
+    width: "100%", minHeight: 48, padding: "12px 16px", borderRadius: 12, border: "none", fontSize: 14, fontWeight: 600,
+    background: ACCENT, color: "var(--calm-on-accent)", opacity: disabled ? 0.5 : 1,
   }}>{children}</button>;
 }
 
 function QuietButton({ children, onClick }: { children: React.ReactNode; onClick: () => void }) {
   return <button onClick={onClick} style={{
-    width: "100%", padding: "12px 16px", borderRadius: 14, fontSize: 14, fontWeight: 600, marginTop: 8,
-    background: "transparent", color: SOFT, border: `1px solid ${CARD_LINE}`,
+    width: "100%", minHeight: 48, padding: "12px 16px", borderRadius: 12, fontSize: 14, fontWeight: 600, marginTop: 8,
+    background: "transparent", color: INK, border: `1px solid ${CARD_LINE}`,
   }}>{children}</button>;
 }
 
-function SheetIcon({ children, tint = "rgba(171,200,219,0.14)", color = "#abc8db" }: { children: React.ReactNode; tint?: string; color?: string }) {
-  return <div style={{ width: 48, height: 48, borderRadius: 16, display: "grid", placeItems: "center", background: tint, color, marginBottom: 14 }}>{children}</div>;
+function SheetIcon({ children, tint = "var(--calm-tint)", color = ACCENT }: { children: React.ReactNode; tint?: string; color?: string }) {
+  return <div style={{ width: 46, height: 46, borderRadius: 12, display: "grid", placeItems: "center", background: tint, color, marginBottom: 14 }}>{children}</div>;
 }
 
 // ── Plans screens: why ads are off ──────────────────────────────────────────
@@ -91,11 +99,10 @@ export function AdsDownNote() {
   const cfg = useConfig();
   if (cfg.ads.available || !cfg.ads.message) return null;
   return <div role="status" data-testid="ads-down-note" style={{
-    display: "flex", gap: 10, alignItems: "flex-start", padding: "12px 14px", borderRadius: 14, fontSize: 13, lineHeight: 1.5,
-    background: "var(--calm-warning-bg, rgba(240,196,120,0.10))", border: "1px solid var(--calm-warning, rgba(240,196,120,0.45))",
-    color: "var(--calm-ink, #eef2f3)",
+    display: "flex", gap: 10, alignItems: "flex-start", padding: "11px 12px", borderRadius: 10, fontSize: 13, lineHeight: 1.5,
+    background: "var(--calm-warning-bg)", color: INK,
   }}>
-    <span aria-hidden="true" style={{ fontSize: 15, lineHeight: 1.3 }}>⚠️</span>
+    <AlertTriangle size={16} aria-hidden="true" style={{ flex: "none", marginTop: 2, color: "var(--calm-warning)" }} />
     <span>{cfg.ads.message}</span>
   </div>;
 }
@@ -106,8 +113,8 @@ export function DisabledAdButton({ rewardSeconds }: { rewardSeconds: number }) {
   return <button disabled data-testid="watch-ad-button-disabled" aria-disabled="true"
     className="w-full rounded-xl text-sm font-semibold flex flex-col items-center justify-center"
     style={{
-      padding: "10px 8px", minHeight: 58, cursor: "not-allowed", opacity: 0.42,
-      background: "rgba(79,134,198,0.08)", border: "1px dashed rgba(79,134,198,0.35)", color: ACCENT,
+      padding: "10px 8px", minHeight: 58, cursor: "not-allowed", opacity: 0.75,
+      background: "var(--calm-soft)", border: `1px dashed ${CARD_LINE}`, color: MUTED,
     }}>
     <span>Watch an ad</span>
     <small style={{ fontSize: 11, fontWeight: 500, marginTop: 2 }}>+{minutesShort(rewardSeconds)} · not working now</small>
@@ -183,7 +190,7 @@ export function FreeTimeButton({ onSignIn }: { onSignIn?: () => void }) {
       className="w-full rounded-xl text-sm font-semibold flex flex-col items-center justify-center"
       style={{
         padding: "10px 8px", minHeight: 58, opacity: disabled ? 0.5 : 1,
-        background: "rgba(103,178,138,0.16)", border: "1px solid rgba(103,178,138,0.45)", color: GOOD,
+        background: "var(--calm-good-bg)", border: "1px solid var(--calm-good)", color: GOOD,
       }}>
       <span className="flex items-center gap-1.5">{phase === "loading" ? <Loader2 size={15} className="animate-spin" /> : <Gift size={15} />} Get free time</span>
       <small style={{ fontSize: 11, fontWeight: 500, marginTop: 2 }}>
@@ -192,12 +199,12 @@ export function FreeTimeButton({ onSignIn }: { onSignIn?: () => void }) {
     </button>
 
     <Sheet open={phase !== "idle"} onClose={phase === "loading" ? undefined : close} label={ft.title}>
-      <SheetIcon tint="rgba(103,178,138,0.16)" color="#a7cfb6">{phase === "loading" ? <Loader2 size={22} className="animate-spin" /> : <Gift size={22} />}</SheetIcon>
+      <SheetIcon tint="var(--calm-good-bg)" color={GOOD}>{phase === "loading" ? <Loader2 size={22} className="animate-spin" /> : <Gift size={22} />}</SheetIcon>
       <h2 style={{ fontSize: 19, fontWeight: 700, lineHeight: 1.25, fontFamily: "var(--calm-display, system-ui, sans-serif)" }}>{ft.title}</h2>
       <p style={{ fontSize: 13.5, lineHeight: 1.55, color: SOFT, marginTop: 8 }}>{ft.body}</p>
       <div role="status" style={{
         marginTop: 14, padding: "11px 13px", borderRadius: 12, fontSize: 13.5, lineHeight: 1.45,
-        background: phase === "error" ? "rgba(255,171,166,0.10)" : "rgba(255,255,255,0.05)",
+        background: phase === "error" ? "var(--calm-soft)" : phase === "done" ? "var(--calm-good-bg)" : "var(--calm-soft)",
         color: phase === "error" ? DANGER : phase === "done" ? GOOD : SOFT,
       }}>
         {phase === "loading" && "Adding your free time…"}
@@ -225,8 +232,8 @@ export function NoticeLine() {
   return <>
     <button data-testid="notice-line" onClick={() => setOpen(true)} style={{
       width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 14, textAlign: "left",
-      background: "var(--calm-tint, rgba(171,200,219,0.10))", border: "1px solid var(--calm-line, rgba(255,255,255,0.10))",
-      color: "var(--calm-ink, #eef2f3)", marginBottom: 14,
+      background: CARD_BG, border: `1px solid ${CARD_LINE}`,
+      color: INK, marginBottom: 14,
     }}>
       <Bell size={15} aria-hidden="true" style={{ flex: "none", color: ACCENT }} />
       <span style={{ flex: 1, minWidth: 0, fontSize: 13, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{text}</span>
@@ -262,10 +269,10 @@ export function KillScreen() {
   if (!kill) return null;
   const info = getAppInfo();
   const store = STORE_NAMES[info.channel];
-  return <Sheet open label="Update required" z={2147483000} dim={0.5}>
+  return <Sheet open label="Update required" z={2147483000}>
     <div data-testid="kill-screen" style={{ textAlign: "center" }}>
       <div style={{ display: "flex", justifyContent: "center" }}>
-        <SheetIcon tint="rgba(207,227,239,0.14)" color="#cfe3ef"><RefreshCw size={22} /></SheetIcon>
+        <SheetIcon><RefreshCw size={22} /></SheetIcon>
       </div>
       <h2 style={{ fontSize: 20, fontWeight: 700, fontFamily: "var(--calm-display, system-ui, sans-serif)" }}>Update GamepadOS</h2>
       <p style={{ fontSize: 14, lineHeight: 1.6, color: SOFT, marginTop: 10 }}>{kill.message}</p>

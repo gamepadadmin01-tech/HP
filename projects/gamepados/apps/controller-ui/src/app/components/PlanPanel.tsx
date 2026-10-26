@@ -22,7 +22,7 @@
 
 import React, { useEffect, useState, useSyncExternalStore } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Infinity as InfinityIcon, Clock, Ticket, RefreshCw, Check, ChevronDown, Zap } from "lucide-react";
+import { Infinity as InfinityIcon, Clock, Ticket, RefreshCw, Check, Zap } from "lucide-react";
 import type { CataloguePlan, PlanCode } from "../api/billing";
 import {
   getBillingState, onBillingChange, refresh, redeemPromo,
@@ -30,11 +30,9 @@ import {
 } from "../store/billing";
 import { purchase } from "../store/purchase";
 import { localUsedSeconds } from "../store/playtime";
-import { Collapse } from "./Collapse";
 import { FADE } from "../motion";
 import { getAppInfo } from "../platform/native";
-import { AdRewardButton } from "./AdRewardButton";
-import { AdsDownNote } from "./AppControl";
+import { FreeCard, FreeDivider, freePlayAvailable } from "./FreePlay";
 import { getAppConfig, onAppConfigChange, ruleWords } from "../store/appConfig";
 
 const ACCENT = "var(--calm-accent, #abc8db)";
@@ -191,7 +189,6 @@ export function PlanPanel() {
   return (
     <>
       <Section title="Your plan">
-        <div className="mb-3"><AdsDownNote /></div>
         <Panel>
           {/* ── What you have ── */}
           <div className="flex items-center gap-3 p-4">
@@ -246,23 +243,26 @@ export function PlanPanel() {
                     ? `Today's free time is used — playing from your ad time. ${formatResetsAt(ent.resetsAt)}`
                     : formatResetsAt(ent.resetsAt)}
               </p>
-              <div className="mt-4 flex justify-center"><AdRewardButton /></div>
             </div>
           )}
         </Panel>
       </Section>
 
-      {/* ── Upgrade ── Absent entirely where the channel forbids it, and
-          collapsed by default: three full-height cards pushed the rest of the
-          account page below the fold, so the plans read as the point of the
-          screen rather than as an option. The cheapest price stays on the
-          closed row, which is the one number worth showing unprompted. */}
+      {/* ── The plans: the one big choice, shown open (owner, 2026-10-26: plans are the point of
+          this page; they used to sit behind a collapsed row). Absent where the channel forbids it
+          and for anyone already unlimited. ── */}
       {offers.length > 0 && (
-        <PlansDisclosure
+        <PlansHero
           title={ent.plan === "FREE" ? "Play without the limit" : "Change plan"}
           offers={offers}
         />
       )}
+
+      {/* ── Then free: one card with the ads message and the ad button. ── */}
+      {!ent.unlimited && freePlayAvailable() && <>
+        {offers.length > 0 && <FreeDivider />}
+        <FreeCard />
+      </>}
 
       {ent.plan !== "LIFETIME" && <Section title="Have a code?">
         <Panel><PromoRow /></Panel>
@@ -274,68 +274,17 @@ export function PlanPanel() {
 
 // ─── Pieces ───────────────────────────────────────────────────────────────────
 
-/**
- * The upgrade rail, closed until asked for.
- *
- * Animates height rather than swapping display, so it reads as one surface
- * opening instead of the page jumping. `overflow-hidden` on the animated
- * wrapper is what keeps the cards clipped while it grows.
- */
-function PlansDisclosure({ title, offers }: { title: string; offers: CataloguePlan[] }) {
+/** The plans, open: the biggest thing on the page after the player's own status. */
+function PlansHero({ title, offers }: { title: string; offers: CataloguePlan[] }) {
   const words = ruleWords();
-  const [open, setOpen] = useState(false);
-
-  // The cheapest thing on offer. Shown closed so the row still answers "what
-  // would this cost me?" without being opened. Suppressed when any plan takes
-  // its price from the store, since we must not render our own figure there.
-  const anyFromStore = offers.some((p) => p.priceFromStore);
-  const cheapest = anyFromStore
-    ? null
-    : offers.reduce((a, b) => (a.priceMinor <= b.priceMinor ? a : b));
-
   return (
     <Section title={title}>
-      <div className="rounded-xl overflow-hidden"
-        style={{ background: "var(--calm-surface, #202527)", border: "1px solid var(--calm-line, #343c3f)" }}>
-        <button
-          onClick={() => setOpen((v) => !v)}
-          aria-expanded={open}
-          className="w-full flex items-center justify-between p-4 text-left">
-          <div className="min-w-0">
-            <p className="text-sm font-bold calm-ink">
-              {offers.length} plan{offers.length > 1 ? "s" : ""}
-            </p>
-            <p className="text-xs mt-0.5" style={{ color: MUTED }}>
-              {cheapest
-                ? `From ${formatPrice(cheapest.priceMinor, cheapest.currency)} · tap to compare`
-                : "Tap to see what is available"}
-            </p>
-          </div>
-          {/* A CSS transform, not a Framer animation: rotation is a compositor
-              property and this avoids running a second animation loop next to
-              the one opening the panel. */}
-          <span style={{
-            color: MUTED, display: "flex",
-            transform: open ? "rotate(180deg)" : "rotate(0deg)",
-            transition: "transform 200ms ease",
-          }}>
-            <ChevronDown size={17} />
-          </span>
-        </button>
-
-        {/* Was animate={{ height: "auto" }}. Framer writes a pixel height every
-            frame and height is a LAYOUT property, so each frame reflowed the
-            whole account column underneath — that was the stutter. Collapse
-            transitions a grid row in CSS instead, with no JS in the loop. */}
-        <Collapse open={open}>
-          <div className="px-3 pb-3 space-y-2.5">
-            {offers.map((p) => <PlanCard key={p.code} plan={p} />)}
-            <p className="text-xs leading-relaxed px-1" style={{ color: MUTED }}>
-              Prices include GST. Access starts immediately, so purchases are final
-              and non-refundable — try your free {words.welcome} first.
-            </p>
-          </div>
-        </Collapse>
+      <div className="space-y-2.5">
+        {offers.map((p) => <PlanCard key={p.code} plan={p} />)}
+        <p className="text-xs leading-relaxed px-1" style={{ color: MUTED }}>
+          Prices include GST. Access starts immediately, so purchases are final
+          and non-refundable — try your free {words.welcome} first.
+        </p>
       </div>
     </Section>
   );

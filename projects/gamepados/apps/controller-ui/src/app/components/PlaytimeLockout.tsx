@@ -18,9 +18,13 @@ import { beginPlay, clearBlock } from "../store/playtime";
 import { ruleWords } from "../store/appConfig";
 import { AdRewardButton } from "./AdRewardButton";
 import { getAppInfo } from "../platform/native";
+import { useShellAppearance } from "./CalmShell";
 
-const MUTED = "#7C8AA0";
-const ACCENT = "#5D90CB";
+// The app's theme tokens (styles/calm-shell.css); the wrapper below carries .gp-shell and the
+// current light/dark theme, because this screen sits over the controller, outside the dashboard.
+const MUTED = "var(--calm-muted)";
+const ACCENT = "var(--calm-accent)";
+
 
 export function PlaytimeLockout({
   message,
@@ -32,25 +36,27 @@ export function PlaytimeLockout({
   resetsAt?: string | null;
   onBack: () => void;
 }) {
+  const { appearance } = useShellAppearance();
   return (
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.2 }}
-      className="absolute inset-0 flex flex-col items-center justify-center px-8"
+      className="gp-shell absolute inset-0 flex flex-col items-center justify-center px-8"
+      data-calm-theme={appearance}
       // Above the pad, below nothing. The controller underneath has already
       // stopped streaming — this is not what stops it, and must not be the only
       // thing standing between a spent quota and input reaching the PC.
-      style={{ zIndex: 40, background: "rgba(4,6,12,0.97)" }}
+      style={{ zIndex: 40, background: "var(--calm-paper)" }}
     >
       <div className="p-3.5 rounded-2xl mb-5"
-        style={{ background: "rgba(79,134,198,0.10)", color: ACCENT }}>
+        style={{ background: "var(--calm-tint)", color: ACCENT }}>
         <Clock size={26} />
       </div>
 
-      <h2 className="text-lg font-bold text-white text-center"
-        style={{ fontFamily: "'Space Grotesk',sans-serif" }}>
+      <h2 className="text-lg font-bold text-center"
+        style={{ fontFamily: "var(--calm-display)", color: "var(--calm-ink)" }}>
         You&rsquo;re out of play time
       </h2>
 
@@ -72,9 +78,9 @@ export function PlaytimeLockout({
         onClick={() => { requestDashboardTab("account"); onBack(); }}
         className="mt-4 w-full max-w-xs py-3.5 rounded-xl text-sm font-semibold"
         style={{
-          background: "rgba(79,134,198,0.14)",
-          border: "1px solid rgba(79,134,198,0.35)",
-          color: ACCENT,
+          background: "transparent",
+          border: "1px solid var(--calm-line)",
+          color: "var(--calm-ink)",
         }}
       >
         {/* The Play build sells nothing -- "plans" would point at nothing there. */}

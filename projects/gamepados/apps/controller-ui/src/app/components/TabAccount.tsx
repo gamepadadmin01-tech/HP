@@ -44,10 +44,11 @@ export function TabAccount({
   if (!session) {
     return (
       <div className="calm-account space-y-4 pb-8">
-        <div className="calm-intro"><span className="console-eyebrow">GOOD GAMES DESERVE MORE TIME</span><h1 data-testid="account-heading">Stay in the game.</h1><p>Your playtime. Your pace. Your pick.</p></div>
+        {/* The big intro was removed (owner, 2026-10-26): the plans come first. Kept for screen readers and tests. */}
+        <h1 className="sr-only" data-testid="account-heading">Plans</h1>
         <GuestPlans key="guest-plans" />
-        <button data-testid="account-signin-toggle-button" className="guest-back" onClick={onSignIn}>
-          Already have an account? Sign in
+        <button data-testid="account-signin-toggle-button" className="calm-signin-line" onClick={onSignIn}>
+          Sign in for unlimited time · <b>Already have an account?</b>
         </button>
         {support}
       </div>
@@ -58,8 +59,13 @@ export function TabAccount({
 
   return (
     <div data-testid="profile-screen" className="calm-account space-y-4 pb-8">
-      <div className="calm-intro"><span className="console-eyebrow">THE PLAYER BEHIND THE CONTROLLER</span><h1 data-testid="account-heading">Your player profile.</h1><p>All your play, in one place.</p></div>
+      <h1 className="sr-only" data-testid="account-heading">Your plan and profile</h1>
       <GuestPlans key="guest-plans" />
+      {/* ── Plan, quota and upgrades ── Placed first because it is what this
+          tab is opened to check, and because a limit the user cannot find is
+          indistinguishable from a limit that appeared without warning. ── */}
+      <PlanPanel />
+
       {/* ── Identity ── */}
       <section className="calm-profile flex flex-col items-center pt-1">
         <div className="w-20 h-20 rounded-full flex items-center justify-center mb-3"
@@ -80,10 +86,6 @@ export function TabAccount({
         </p>
       </section>
 
-      {/* ── Plan, quota and upgrades ── Placed first because it is what this
-          tab is opened to check, and because a limit the user cannot find is
-          indistinguishable from a limit that appeared without warning. ── */}
-      <PlanPanel />
 
       {/* ── The user's own layouts ── */}
       <Section title="Controller Library">

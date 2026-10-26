@@ -198,6 +198,15 @@
 .gp-shell .guest-trial-summary > svg { color: var(--calm-accent); flex-shrink: 0; }
 .gp-shell .guest-trial-summary h2 { font-size: 18px; }
 .gp-shell .guest-trial-summary p { font-size: 12px; }
+/* Plans page order (2026-10-26): status line → Lifetime → "or keep playing free" → free card → sign-in → Support. */
+.gp-shell .guest-status { display: flex; align-items: center; gap: 8px; padding: 11px 14px; border-radius: 12px; background: var(--calm-surface); border: 1px solid var(--calm-line); font-size: 13px; line-height: 1.45; color: var(--calm-muted); }
+.gp-shell .guest-status b { color: var(--calm-ink); font-weight: 600; }
+.gp-shell .guest-status > svg { color: var(--calm-accent); flex-shrink: 0; }
+.gp-shell .calm-free-divider { display: flex; align-items: center; gap: 12px; margin: 10px 0 2px; font: 600 10px var(--calm-body); letter-spacing: 1.6px; text-transform: uppercase; color: var(--calm-muted); }
+.gp-shell .calm-free-divider::before, .gp-shell .calm-free-divider::after { content: ""; flex: 1; height: 1px; background: var(--calm-line); }
+.gp-shell .calm-free-card { display: grid; gap: 12px; padding: 14px; border-radius: 12px; background: var(--calm-surface); border: 1px solid var(--calm-line); }
+.gp-shell .calm-account .calm-signin-line { width: 100%; min-height: 44px; font-size: 13px; color: var(--calm-muted); background: transparent; border: none; }
+.gp-shell .calm-signin-line b { color: var(--calm-accent); font-weight: 600; }
 .gp-shell .guest-checkout { border-radius: 12px; background: var(--calm-surface); border: 1px solid var(--calm-line); padding: 18px; }
 .gp-shell .guest-back { color: var(--calm-accent); background: var(--calm-soft); border: 1px solid var(--calm-line); font-size: 12px; padding: 12px 14px; min-height: 48px; width: 100%; justify-content: center; }
 .gp-shell .calm-profile { background: var(--calm-surface); border: 1px solid var(--calm-line); border-radius: 12px; padding: 25px 20px; }
