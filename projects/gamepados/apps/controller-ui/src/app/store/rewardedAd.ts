@@ -20,6 +20,7 @@
 
 import { getSession } from "./account";
 import { getBillingState, refresh as refreshBilling } from "./billing";
+import { claimUnityAd } from "../api/billing";
 import { guestTrial } from "./guestTrial";
 import { adsSupported, showRewardedAd } from "../platform/native";
 import { getAppConfig, ruleWords } from "./appConfig";
@@ -118,7 +119,7 @@ export function watchAd(): boolean {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-type NativeResult = { status: "rewarded" | "closed" | "failed" | "consent"; message?: string; guest?: boolean };
+type NativeResult = { status: "rewarded" | "closed" | "failed" | "consent"; message?: string; guest?: boolean; claim?: string };
 
 async function handle(r: NativeResult) {
   if (r.status === "rewarded") {
@@ -129,7 +130,25 @@ async function handle(r: NativeResult) {
       return;
     }
     set({ phase: "crediting", message: `Adding your ${ruleWords().reward}…` });
-    // Google calls our server a moment after the ad ends; poll until the bank
+    // Unity builds (direct, uptodown): there is no signed callback, so the phone hands over a
+    // one-time claim id and WE ask the server to credit it (it applies the 30-minute rule).
+    const session = getSession();
+    if (r.claim && session) {
+      try {
+        const out = await claimUnityAd(session.token, r.claim);
+        await refreshBilling().catch(() => { /* refresh fails soft */ });
+        if (out.credited) {
+          settle("done", `+${ruleWords().reward} added. They never expire.`);
+          credited.forEach((fn) => fn());
+        } else {
+          settle("error", `You already have ${ruleWords().cap} or more saved, so this ad added nothing.`);
+        }
+      } catch {
+        settle("error", "Couldn't add your time. Check your internet and watch the ad again.");
+      }
+      return;
+    }
+    // AdMob: Google calls our server a moment after the ad ends; poll until the bank
     // shows it. Usually the first or second read.
     for (let i = 0; i < 10; i++) {
       await sleep(i === 0 ? 1200 : 2000);

@@ -205,6 +205,15 @@ export function redeemPromo(token: string, code: string) {
   );
 }
 
+/** A finished Unity rewarded ad (direct and uptodown builds). `nonce` is the one-time claim id the
+ *  phone made for that ad; the server credits it once, and only under its 30-minute rule. */
+export function claimUnityAd(token: string, nonce: string) {
+  return request<{ success: true; credited: boolean; reason?: string }>(
+    "/api/ads/unity/claim",
+    { body: { nonce }, token },
+  );
+}
+
 // ─── Razorpay (direct build only) ─────────────────────────────────────────────
 
 export type RazorpayOrder = {

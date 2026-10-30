@@ -272,6 +272,14 @@ android {
         buildConfigField("String", "ADMOB_REWARDED_ID", "\"$admobTestRewardedId\"")
         manifestPlaceholders["admobAppId"] = admobTestAppId
 
+        // Which ad network plays the rewarded ad: "admob" (playstore) or "unity" (direct, uptodown —
+        // set in the flavours below, 2026-10-30). The Unity ids are public identifiers, not secrets.
+        // UNITY_TEST_MODE shows Unity's test ads only; a live release build turns it off with the AdMob IDs.
+        buildConfigField("String", "AD_NETWORK", "\"admob\"")
+        buildConfigField("String", "UNITY_GAME_ID", "\"800418226\"")
+        buildConfigField("String", "UNITY_REWARDED_PLACEMENT", "\"BP_Rewarded_Android\"")
+        buildConfigField("boolean", "UNITY_TEST_MODE", "true")
+
         ndk {
             // Broad device coverage (universal APK for sideload + in-app updater):
             //  arm64-v8a   — all modern phones/tablets (primary)
@@ -305,6 +313,7 @@ android {
             dimension = "distribution"
             buildConfigField("Boolean", "SELF_UPDATE_ENABLED", "true")
             buildConfigField("String", "DISTRIBUTION_CHANNEL", "\"direct\"")
+            buildConfigField("String", "AD_NETWORK", "\"unity\"")
         }
         create("playstore") {
             dimension = "distribution"
@@ -320,6 +329,7 @@ android {
             dimension = "distribution"
             buildConfigField("Boolean", "SELF_UPDATE_ENABLED", "false")
             buildConfigField("String", "DISTRIBUTION_CHANNEL", "\"uptodown\"")
+            buildConfigField("String", "AD_NETWORK", "\"unity\"")
         }
         create("amazonstore") {
             dimension = "distribution"
@@ -372,6 +382,14 @@ android {
             getByName(flavor).java.srcDir("src/noads/java")
             getByName(flavor).kotlin.srcDir("src/noads/java")
         }
+        // Unity rewarded ads (2026-10-30): the real UnityRewarded in direct and uptodown, an inert stub
+        // in playstore (which stays on AdMob) so AdsBridge compiles the same in all three.
+        listOf("direct", "uptodown").forEach { flavor ->
+            getByName(flavor).java.srcDir("src/unityads/java")
+            getByName(flavor).kotlin.srcDir("src/unityads/java")
+        }
+        getByName("playstore").java.srcDir("src/nounity/java")
+        getByName("playstore").kotlin.srcDir("src/nounity/java")
         // Payments (owner's call, 2026-09-30). BillingBridge comes from exactly ONE of:
         //  - src/razorpay/java: the Razorpay checkout (BillingBridge + RazorpayActivity) — direct
         //    (website) and uptodown. It extends whichever UpdaterBridge that flavour has.
@@ -421,6 +439,7 @@ android {
             if (admobLive) {
                 buildConfigField("String", "ADMOB_REWARDED_ID", "\"$admobLiveRewardedId\"")
                 manifestPlaceholders["admobAppId"] = admobLiveAppId
+                buildConfigField("boolean", "UNITY_TEST_MODE", "false")
             } else {
                 println("WARNING: AdMob live IDs are blank in app/build.gradle.kts -- this RELEASE build shows Google TEST ads and earns nothing.")
             }
@@ -533,6 +552,10 @@ dependencies {
     add("directImplementation", "com.razorpay:checkout:1.6.38")
     // Uptodown sells Lifetime with the same checkout since 2026-09-30 (owner's call).
     add("uptodownImplementation", "com.razorpay:checkout:1.6.38")
+
+    // Unity Ads (rewarded) — the website APK (direct) and uptodown only; the Play build stays on AdMob.
+    add("directImplementation", "com.unity3d.ads:unity-ads:4.16.6")
+    add("uptodownImplementation", "com.unity3d.ads:unity-ads:4.16.6")
 
     // AdMob rewarded ads + Google's consent form (UMP) — playstore, direct and uptodown ONLY
     // (owner's call, 2026-09-29). The other store builds must not carry an ad SDK at all.

@@ -51,7 +51,13 @@ import org.json.JSONObject
 // that canRequestAds() stays true across launches. adPrivacyOptionsRequired/showAdPrivacyOptions
 // let the settings screen offer "Ad privacy choices", which the EEA requires to be reachable.
 //
-// Results reach JS as window.onRewardedAdResult(json), json = { status, message?, guest? } where
+// ## Which network plays the ad
+//
+// BuildConfig.AD_NETWORK: "admob" in the playstore build (everything above), "unity" in direct and
+// uptodown (UnityRewarded, from 2026-10-30). With Unity a signed-in player's finished ad is reported
+// with a one-time `claim` id and the page asks the server to credit it (/api/ads/unity/claim).
+//
+// Results reach JS as window.onRewardedAdResult(json), json = { status, message?, guest?, claim? } where
 // status is "rewarded" | "closed" (dismissed before the reward) | "failed" | "consent".
 open class AdsBridge(activity: MainActivity) : UpdaterBridgeBase(activity) {
 
@@ -63,6 +69,10 @@ open class AdsBridge(activity: MainActivity) : UpdaterBridgeBase(activity) {
 
     private val consent: ConsentInformation by lazy { UserMessagingPlatform.getConsentInformation(activity) }
 
+    /** direct and uptodown play Unity's rewarded ad; playstore stays on AdMob (build.gradle.kts). */
+    private val useUnity = BuildConfig.AD_NETWORK == "unity"
+    private val unity by lazy { UnityRewarded(activity) }
+
     @JavascriptInterface
     fun adsAvailable(): Boolean = true
 
@@ -72,6 +82,7 @@ open class AdsBridge(activity: MainActivity) : UpdaterBridgeBase(activity) {
         activity.runOnUiThread {
             gatherConsent { problem ->
                 if (problem != null) { report("consent", problem); return@gatherConsent }
+                if (useUnity) { showUnity(userId); return@gatherConsent }
                 startSdk()
                 val ready = ad
                 if (ready != null) show(ready, userId)
@@ -86,8 +97,41 @@ open class AdsBridge(activity: MainActivity) : UpdaterBridgeBase(activity) {
     fun preloadRewardedAd() {
         activity.runOnUiThread {
             if (!consent.canRequestAds()) return@runOnUiThread
+            if (useUnity) {
+                unity.start(personalisedAds()) { problem -> if (problem == null) unity.loadThen { } }
+                return@runOnUiThread
+            }
             startSdk()
             if (ad == null) load()
+        }
+    }
+
+    /** False where Google's form says the player has privacy choices to make (EEA/UK-style regions):
+     *  Unity then serves ads without tracking. Everywhere else it is the normal, personalised kind. */
+    private fun personalisedAds(): Boolean =
+        consent.privacyOptionsRequirementStatus != ConsentInformation.PrivacyOptionsRequirementStatus.REQUIRED
+
+    /** The Unity version of a tap: start the SDK, make sure an ad is ready, play it.
+     *
+     *  Unity has no signed message to our server (it only sends one after Support enables it), so
+     *  for a signed-in player the phone reports a one-time claim number with "rewarded"; the page
+     *  then POSTs it to /api/ads/unity/claim and the server applies the 30-minute rule. A signed-out
+     *  player is banked on the phone, exactly like with AdMob. */
+    private fun showUnity(userId: String) {
+        unity.start(personalisedAds()) { startProblem ->
+            if (startProblem != null) { report("failed", startProblem); return@start }
+            unity.loadThen { loadProblem ->
+                if (loadProblem != null) { report("failed", loadProblem); return@loadThen }
+                val signedIn = userId.isNotBlank()
+                unity.show { watched, problem ->
+                    when {
+                        problem != null -> report("failed", problem)
+                        !watched -> report("closed", null, guest = !signedIn)
+                        signedIn -> report("rewarded", null, claim = java.util.UUID.randomUUID().toString())
+                        else -> { activity.creditGuestAdReward(); report("rewarded", null, guest = true) }
+                    }
+                }
+            }
         }
     }
 
@@ -247,9 +291,10 @@ open class AdsBridge(activity: MainActivity) : UpdaterBridgeBase(activity) {
             JSONObject.quote(json.toString()) + ")")
     }
 
-    private fun report(status: String, message: String?, guest: Boolean = false) {
+    private fun report(status: String, message: String?, guest: Boolean = false, claim: String? = null) {
         val json = JSONObject().put("status", status).put("guest", guest)
         if (message != null) json.put("message", message)
+        if (claim != null) json.put("claim", claim)
         activity.evalJs("window.onRewardedAdResult && window.onRewardedAdResult(" +
             JSONObject.quote(json.toString()) + ")")
     }
