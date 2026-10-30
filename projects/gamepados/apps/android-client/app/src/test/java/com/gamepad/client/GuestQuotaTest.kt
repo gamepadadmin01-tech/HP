@@ -4,7 +4,7 @@ import org.junit.Assert.*
 import org.junit.Test
 
 // Signed-out play time, rules of 2026-09-30: no daily free time, a ONE-TIME 30 minutes,
-// ads stack and never expire, ads offered only while under an hour is left.
+// ads stack and never expire, ads offered only while under 30 minutes are left (2026-10-30).
 class GuestQuotaTest {
     private val noon = 1789128000000L
     private val min = 60000L
@@ -73,15 +73,15 @@ class GuestQuotaTest {
         val restored = GuestQuota(q.usedMs, q.resetsAt, q.zoneId, q.lastWall, q.bankMs, q.welcomeGranted)
         assertEquals(45 * min, restored.bankMs)
     }
-    @Test fun adsOfferedOnlyUnderAnHour() {
-        val q = GuestQuota(zoneId = "UTC", bankMs = 59 * min + 59_000, welcomeGranted = true)
-        assertTrue(q.canEarnAd())                              // 59:59 left: one more allowed
+    @Test fun adsOfferedOnlyUnderThirtyMinutes() {
+        val q = GuestQuota(zoneId = "UTC", bankMs = 29 * min + 59_000, welcomeGranted = true)
+        assertTrue(q.canEarnAd())                              // 29:59 left: one more allowed
         q.credit(1000)
-        assertFalse(q.canEarnAd())                             // exactly an hour: no more
-        val under = GuestQuota(zoneId = "UTC", bankMs = 45 * min, welcomeGranted = true)
+        assertFalse(q.canEarnAd())                             // exactly 30 minutes: no more
+        val under = GuestQuota(zoneId = "UTC", bankMs = 15 * min, welcomeGranted = true)
         assertTrue(under.canEarnAd())
         under.credit(30 * min)                                 // one ad still adds the full 30
-        assertEquals(75 * min, under.remainingMs())
+        assertEquals(45 * min, under.remainingMs())
         assertFalse(under.canEarnAd())
     }
     // 1.4.11: the rules come from the server, clamped here.
@@ -105,7 +105,7 @@ class GuestQuotaTest {
         val q = GuestQuota(zoneId = "UTC")
         assertEquals(30 * min, q.welcomeMs)
         assertEquals(30 * min, q.adRewardMs)
-        assertEquals(60 * min, q.adCapMs)
+        assertEquals(30 * min, q.adCapMs)
     }
     // "Get free time": only while under the threshold, so a guest holds at most 59 min.
     @Test fun freeTimeOnlyUnderThirtyMinutes() {

@@ -71,7 +71,7 @@ function bankNow(): number {
 /** Whether the button belongs on screen at all. */
 export function canShowAdButton(): boolean {
   if (!adsSupported()) return false;
-  // Ads only while under an hour is left (2026-09-30). The phone says so; an
+  // Ads only while under 30 minutes are left (an hour until 2026-10-30). The phone says so; an
   // older native side without the field falls back to the same sum here.
   if (!getSession()) {
     const t = guestTrial();
@@ -85,7 +85,7 @@ export function canShowAdButton(): boolean {
   return ent.adTime?.canEarn !== false;
 }
 
-/** Ads exist here and this player could earn, but already holds an hour or
+/** Ads exist here and this player could earn, but already holds 30 minutes or
  *  more: the button is hidden and a short note says why. */
 export function adCapReached(): boolean {
   if (!adsSupported() || canShowAdButton()) return false;

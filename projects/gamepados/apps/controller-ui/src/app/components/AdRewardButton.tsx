@@ -4,7 +4,7 @@
 // signed-in plan panel. Renders nothing in builds without ads, for Lifetime,
 // and until the plan is known — see canShowAdButton in store/rewardedAd.ts.
 // Under it: what the player has saved, or the result of the last ad. Hidden,
-// with a one-line note instead, once an hour or more is held (2026-09-30).
+// with a one-line note instead, once 30 minutes or more are held (an hour until 2026-10-30).
 
 import React, { useEffect, useSyncExternalStore } from "react";
 import { PlayCircle, Loader2 } from "lucide-react";
@@ -50,7 +50,7 @@ export function AdRewardButton({ onCredited, onSignIn }: { onCredited?: () => vo
   }
 
   if (!canShowAdButton()) {
-    // Over the cap (an hour) held: no button, but say why -- and keep
+    // Over the cap (30 minutes) held: no button, but say why -- and keep
     // the "+30 minutes added" that pushed them over visible for its moment.
     if (!adCapReached()) return null;
     const done = ad.phase === "done" ? ad.message : "";

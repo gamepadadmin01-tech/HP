@@ -12,7 +12,7 @@ import java.util.TimeZone
  *   * Every install gets a ONE-TIME 30 minutes (WELCOME_MS), granted once by [ensureWelcome] and
  *     remembered by [welcomeGranted] — existing installs get it once on the update too.
  *   * bankMs holds that grant plus time earned from rewarded ads: it stacks and never expires.
- *   * Ads are offered only while less than AD_CAP_MS (1 hour) is left ([canEarnAd]); one ad
+ *   * Ads are offered only while less than AD_CAP_MS (30 minutes) is left ([canEarnAd]); one ad
  *     still adds the full 30 minutes.
  *  It lives on this phone only and is never moved into an account: phone-side time can be faked. */
 internal class GuestQuota(
@@ -27,7 +27,7 @@ internal class GuestQuota(
         /** Daily free time. 0 since 2026-09-30: all play time comes from the bank. */
         const val LIMIT_MS = 0L
         const val WELCOME_MS = 30 * 60 * 1000L
-        const val AD_CAP_MS = 60 * 60 * 1000L
+        const val AD_CAP_MS = 30 * 60 * 1000L
         const val AD_REWARD_MS = 30 * 60 * 1000L
         private const val MINUTE = 60 * 1000L
         private const val HOUR = 60 * MINUTE

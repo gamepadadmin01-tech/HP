@@ -41,7 +41,7 @@ export const DEFAULT_CONFIG: AppConfig = {
   guest: {
     welcomeSeconds: 30 * MIN,
     adRewardSeconds: 30 * MIN,
-    adCapSeconds: 60 * MIN,
+    adCapSeconds: 30 * MIN,
     freeTime: {
       enabled: false, seconds: 30 * MIN, belowSeconds: 30 * MIN, perDay: 6,
       title: "Sign in to get unlimited time",
@@ -169,7 +169,7 @@ export function minutesShort(seconds: number): string {
   return r ? `${h} h ${r} min` : `${h} hr`;
 }
 
-/** The current guest numbers as words: { reward: "30 minutes", cap: "1 hour", welcome: "30 minutes" }. */
+/** The current guest numbers as words: { reward: "30 minutes", cap: "30 minutes", welcome: "30 minutes" }. */
 export function ruleWords() {
   const g = config.guest;
   return {
