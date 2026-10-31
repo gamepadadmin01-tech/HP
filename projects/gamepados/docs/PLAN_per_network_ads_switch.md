@@ -2,6 +2,8 @@
 
 Written 2026-10-31 for another AI to implement. The owner (Akhil) wants to control the two ad networks separately from the admin portal's **App control** page.
 
+> **Status: IMPLEMENTED 2026-10-31** (website repo, backend `appcontrol.js`, `billing/plans.js`, `admin.html`). Option A was used for accounts. Per-network player messages were left out: both networks share the one "ads down" message.
+
 ## Read first: house rules (they override your defaults)
 
 - Work **directly in the real folders** with absolute paths. No worktree, no scratch copy.
