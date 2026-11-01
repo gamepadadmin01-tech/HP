@@ -57,8 +57,10 @@ import org.json.JSONObject
 // uptodown (UnityRewarded, from 2026-10-30). With Unity a signed-in player's finished ad is reported
 // with a one-time `claim` id and the page asks the server to credit it (/api/ads/unity/claim).
 //
-// Results reach JS as window.onRewardedAdResult(json), json = { status, message?, guest?, claim? } where
-// status is "rewarded" | "closed" (dismissed before the reward) | "failed" | "consent".
+// Results reach JS as window.onRewardedAdResult(json), json = { status, network, message?, guest?, claim?,
+// kind?, code? } where status is "rewarded" | "closed" (dismissed before the reward) | "failed" | "consent".
+// A "failed" carries kind ("nofill" | "error" | "network" | "other", see AdFailure) and the ad network's
+// own error name: the page tells the server, which gives 20 free minutes when the network was at fault.
 open class AdsBridge(activity: MainActivity) : UpdaterBridgeBase(activity) {
 
     private var ad: RewardedAd? = null
@@ -119,13 +121,13 @@ open class AdsBridge(activity: MainActivity) : UpdaterBridgeBase(activity) {
      *  player is banked on the phone, exactly like with AdMob. */
     private fun showUnity(userId: String) {
         unity.start(personalisedAds()) { startProblem ->
-            if (startProblem != null) { report("failed", startProblem); return@start }
+            if (startProblem != null) { reportProblem(startProblem); return@start }
             unity.loadThen { loadProblem ->
-                if (loadProblem != null) { report("failed", loadProblem); return@loadThen }
+                if (loadProblem != null) { reportProblem(loadProblem); return@loadThen }
                 val signedIn = userId.isNotBlank()
                 unity.show { watched, problem ->
                     when {
-                        problem != null -> report("failed", problem)
+                        problem != null -> reportProblem(problem)
                         !watched -> report("closed", null, guest = !signedIn)
                         signedIn -> report("rewarded", null, claim = java.util.UUID.randomUUID().toString())
                         else -> { activity.creditGuestAdReward(); report("rewarded", null, guest = true) }
@@ -198,7 +200,9 @@ open class AdsBridge(activity: MainActivity) : UpdaterBridgeBase(activity) {
                     ad = null
                     if (waitingUser != null) {
                         waitingUser = null
-                        report("failed", "No ad is available right now. Try again in a minute.")
+                        val name = AdFailure.admobName(error.code)
+                        reportProblem(AdProblem("No ad is available right now. Try again in a minute. (Error $name)",
+                            AdFailure.admobLoad(error.code), name))
                     }
                 }
             })
@@ -222,7 +226,8 @@ open class AdsBridge(activity: MainActivity) : UpdaterBridgeBase(activity) {
                 report(if (earned) "rewarded" else "closed", null, guest = !signedIn)
             }
             override fun onAdFailedToShowFullScreenContent(error: AdError) {
-                report("failed", "The ad could not play. Try again in a minute.")
+                reportProblem(AdProblem("The ad could not play. Try again in a minute. (Error ${error.code})",
+                    AdFailure.ERROR, "SHOW_${error.code}"))
             }
         }
         rewarded.show(activity) { _ ->
@@ -291,10 +296,18 @@ open class AdsBridge(activity: MainActivity) : UpdaterBridgeBase(activity) {
             JSONObject.quote(json.toString()) + ")")
     }
 
-    private fun report(status: String, message: String?, guest: Boolean = false, claim: String? = null) {
-        val json = JSONObject().put("status", status).put("guest", guest)
+    /** A failed step, with who is to blame (AdFailure): the page reports it to the server, which may
+     *  give the player 20 free minutes when the ad network was at fault. */
+    private fun reportProblem(p: AdProblem) = report("failed", p.text, kind = p.kind, code = p.code)
+
+    private fun report(status: String, message: String?, guest: Boolean = false, claim: String? = null,
+                       kind: String? = null, code: String? = null) {
+        // "network" says which ad network this build plays, so the page can count every tap per network.
+        val json = JSONObject().put("status", status).put("guest", guest).put("network", BuildConfig.AD_NETWORK)
         if (message != null) json.put("message", message)
         if (claim != null) json.put("claim", claim)
+        if (kind != null) json.put("kind", kind)
+        if (code != null) json.put("code", code)
         activity.evalJs("window.onRewardedAdResult && window.onRewardedAdResult(" +
             JSONObject.quote(json.toString()) + ")")
     }

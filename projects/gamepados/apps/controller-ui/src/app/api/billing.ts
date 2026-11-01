@@ -214,6 +214,20 @@ export function claimUnityAd(token: string, nonce: string) {
   );
 }
 
+/** What happened when the player tapped "Watch an ad". When the ad network had no ad (or failed on its
+ *  own side) the server answers `compensated` with the free seconds: a signed-in player's are already
+ *  banked (send the token); a guest's are added on the phone by the caller. */
+export type AdOutcomeResult = "rewarded" | "closed" | "nofill" | "error" | "network" | "other";
+export function reportAdOutcome(
+  body: { installId: string; network: string; result: AdOutcomeResult; code?: string; channel?: string; versionCode?: number },
+  token?: string,
+) {
+  return request<{ success: true; compensated: boolean; seconds?: number; reason?: string }>(
+    "/api/ads/outcome",
+    { body, token },
+  );
+}
+
 // ─── Razorpay (direct build only) ─────────────────────────────────────────────
 
 export type RazorpayOrder = {

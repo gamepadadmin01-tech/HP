@@ -20,10 +20,11 @@
 
 import { getSession } from "./account";
 import { getBillingState, refresh as refreshBilling } from "./billing";
-import { claimUnityAd } from "../api/billing";
+import { claimUnityAd, reportAdOutcome, type AdOutcomeResult } from "../api/billing";
 import { guestTrial } from "./guestTrial";
-import { adsSupported, showRewardedAd } from "../platform/native";
-import { getAppConfig, ruleWords } from "./appConfig";
+import { adsSupported, getAppInfo, nativeCreditGuestFreeTime, showRewardedAd } from "../platform/native";
+import { getAppConfig, minutesText, ruleWords } from "./appConfig";
+import { getInstallId } from "../feedback";
 
 export type AdPhase = "idle" | "loading" | "crediting" | "done" | "error";
 export type AdState = { phase: AdPhase; message: string };
@@ -119,9 +120,55 @@ export function watchAd(): boolean {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-type NativeResult = { status: "rewarded" | "closed" | "failed" | "consent"; message?: string; guest?: boolean; claim?: string };
+/** kind (on "failed"): who is to blame. "nofill" = the ad network had no ad, "error" = it failed on its
+ *  own side (both earn the player free time, see below); "network" = the player's own connection;
+ *  "other" = anything else (nothing is given). network = which ad network this build plays. */
+type NativeResult = {
+  status: "rewarded" | "closed" | "failed" | "consent"; message?: string; guest?: boolean; claim?: string;
+  kind?: "nofill" | "error" | "network" | "other"; code?: string; network?: string;
+};
+
+/** Tell the server what happened to this tap -- it counts them (the portal's "How ads are doing")
+ *  and decides whether a failure earns free time. Resolves null if it could not be reached. */
+async function reportOutcome(r: NativeResult, result: AdOutcomeResult) {
+  if (r.network !== "admob" && r.network !== "unity") return null;     // an app too old to say
+  const info = getAppInfo();
+  try {
+    return await reportAdOutcome({
+      installId: getInstallId(), network: r.network, result, code: r.code,
+      channel: info.channel || "direct", versionCode: info.build || 0,
+    }, getSession()?.token);
+  } catch {
+    return null;
+  }
+}
+
+/** The ad network could not supply an ad: ask the server for the "sorry" time (20 minutes, 3 a day)
+ *  and add it. A guest's minutes are added on the phone (like "Get free time"); a signed-in player's
+ *  were banked by the server, so we only re-read the bank. Returns "" when the player got the time,
+ *  a sentence to show when the daily limit stopped it, null when nothing could be given. */
+async function compensate(r: NativeResult, result: "nofill" | "error"): Promise<string | null> {
+  const signedIn = !!getSession();
+  const out = await reportOutcome(r, result);
+  if (out && !out.compensated && out.reason === "limit") {
+    return "No ad is available right now, and today's free time is already used. Try again a bit later.";
+  }
+  if (!out || !out.compensated || !out.seconds) return null;
+  if (signedIn) {
+    await refreshBilling().catch(() => { /* refresh fails soft */ });
+  } else {
+    const c = nativeCreditGuestFreeTime(out.seconds, getAppConfig().guest.adCapSeconds);
+    if (!c?.credited) return null;
+    guestTrial();                                  // re-read the phone's clock: the bank just grew
+  }
+  settle("done", `We couldn't get an ad for you just now, so here are ${minutesText(out.seconds)} of free time.`);
+  credited.forEach((fn) => fn());
+  return "";
+}
 
 async function handle(r: NativeResult) {
+  if (r.status === "rewarded") void reportOutcome(r, "rewarded");
+  else if (r.status === "closed") void reportOutcome(r, "closed");
   if (r.status === "rewarded") {
     if (r.guest || !getSession()) {
       guestTrial();                      // re-read the phone's clock: the bank just grew
@@ -165,7 +212,18 @@ async function handle(r: NativeResult) {
     return;
   }
   if (r.status === "closed") { settle("error", `Watch the ad to the end to get the ${ruleWords().reward}.`); return; }
-  settle("error", r.message || "No ad is available right now. Try again in a minute.");
+  const sorry = r.message || "No ad is available right now. Try again in a minute.";
+  if (r.status === "failed" && r.kind) {
+    if (r.kind === "nofill" || r.kind === "error") {
+      set({ phase: "crediting", message: "No ad for you right now. Adding free time…" });
+      const done = await compensate(r, r.kind);
+      if (done === "") return;                    // the free time was added and announced
+      if (done) { settle("error", done); return; }
+    } else {
+      void reportOutcome(r, r.kind);
+    }
+  }
+  settle("error", sorry);
 }
 
 /** Time added another way (the guest "Get free time" button): shown like an ad's result and

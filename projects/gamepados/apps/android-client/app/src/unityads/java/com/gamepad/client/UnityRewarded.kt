@@ -11,7 +11,8 @@ import com.unity3d.ads.metadata.MetaData
 // Unity rewarded ads — the direct (website) and uptodown builds (build.gradle.kts, 2026-10-30).
 // The playstore build has an inert class of the same name in src/nounity/java and stays on AdMob.
 //
-// Three steps, each calling back on the main thread with null (fine) or a sentence for the player:
+// Three steps, each calling back on the main thread with null (fine) or an AdProblem (the sentence
+// for the player, who is to blame, and Unity's error name -- see AdFailure):
 //   start()    starts the SDK once, with the game id from BuildConfig
 //   loadThen() makes sure one ad is ready
 //   show()     plays it; the answer says whether the player watched it to the end
@@ -24,11 +25,11 @@ class UnityRewarded(private val activity: Activity) {
     private var ready = false
     private var loaded = false
     private var loading = false
-    private val startWaiting = mutableListOf<(String?) -> Unit>()
-    private val loadWaiting = mutableListOf<(String?) -> Unit>()
+    private val startWaiting = mutableListOf<(AdProblem?) -> Unit>()
+    private val loadWaiting = mutableListOf<(AdProblem?) -> Unit>()
 
     /** [personalised] false in the EEA/UK-style regions where consent is required: no tracking. */
-    fun start(personalised: Boolean, done: (String?) -> Unit) {
+    fun start(personalised: Boolean, done: (AdProblem?) -> Unit) {
         if (ready) { done(null); return }
         startWaiting += done
         if (initializing) return
@@ -42,13 +43,14 @@ class UnityRewarded(private val activity: Activity) {
                 }
                 override fun onInitializationFailed(error: UnityAds.UnityAdsInitializationError?, message: String?) = main {
                     initializing = false
-                    flush(startWaiting, "Couldn't start the ad service. Check your internet, or turn off " +
-                        "Private DNS, VPN or ad blockers, then try again. (Error ${error?.name ?: "unknown"})")
+                    flush(startWaiting, AdProblem("Couldn't start the ad service. Check your internet, or turn off " +
+                        "Private DNS, VPN or ad blockers, then try again. (Error ${error?.name ?: "unknown"})",
+                        AdFailure.NETWORK, error?.name ?: "UNKNOWN"))
                 }
             })
     }
 
-    fun loadThen(done: (String?) -> Unit) {
+    fun loadThen(done: (AdProblem?) -> Unit) {
         if (loaded) { done(null); return }
         loadWaiting += done
         if (loading) return
@@ -60,18 +62,20 @@ class UnityRewarded(private val activity: Activity) {
             }
             override fun onUnityAdsFailedToLoad(placementId: String?, error: UnityAds.UnityAdsLoadError?, message: String?) = main {
                 loading = false; loaded = false
-                flush(loadWaiting, "No ad is available right now. Try again in a minute. (Error ${error?.name ?: "unknown"})")
+                flush(loadWaiting, AdProblem("No ad is available right now. Try again in a minute. (Error ${error?.name ?: "unknown"})",
+                    AdFailure.unityLoad(error?.name), error?.name ?: "UNKNOWN"))
             }
         })
     }
 
     /** [done] gets (true, null) when the player watched to the end, (false, null) when they skipped
-     *  or closed it, and (false, sentence) when it could not play. */
-    fun show(done: (Boolean, String?) -> Unit) {
+     *  or closed it, and (false, problem) when it could not play. */
+    fun show(done: (Boolean, AdProblem?) -> Unit) {
         loaded = false
         UnityAds.show(activity, BuildConfig.UNITY_REWARDED_PLACEMENT, UnityAdsShowOptions(), object : IUnityAdsShowListener {
             override fun onUnityAdsShowFailure(placementId: String?, error: UnityAds.UnityAdsShowError?, message: String?) = main {
-                done(false, "The ad could not play. Try again in a minute. (Error ${error?.name ?: "unknown"})")
+                done(false, AdProblem("The ad could not play. Try again in a minute. (Error ${error?.name ?: "unknown"})",
+                    AdFailure.unityShow(error?.name), error?.name ?: "UNKNOWN"))
             }
             override fun onUnityAdsShowStart(placementId: String?) {}
             override fun onUnityAdsShowClick(placementId: String?) {}
@@ -81,7 +85,7 @@ class UnityRewarded(private val activity: Activity) {
         })
     }
 
-    private fun flush(waiting: MutableList<(String?) -> Unit>, problem: String?) {
+    private fun flush(waiting: MutableList<(AdProblem?) -> Unit>, problem: AdProblem?) {
         val copy = waiting.toList()
         waiting.clear()
         copy.forEach { it(problem) }
