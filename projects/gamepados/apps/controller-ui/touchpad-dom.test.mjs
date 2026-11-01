@@ -17,7 +17,7 @@ function App() {
   const ref = React.useRef(null);
   return (
     <svg ref={ref} id="s" viewBox="0 0 1280 570" width="1280" height="570" style={{ background: "#111", display: "block" }}>
-      <Touchpad id="tp1" x={640} y={285} w={400} h={240} svgRef={ref}
+      <Touchpad id="tp1" x={640} y={285} w={400} h={240} svgRef={ref} round={q.get("round") === "1"} label={q.get("label") || undefined}
         feel={q.get("feel") || undefined} release={q.get("release") || undefined} sens={q.get("sens") ? +q.get("sens") : undefined}
         onStick={(id, x, y) => log.push([x, y])} onPress={() => log.push("press")}
         onRelease={() => log.push("release")} onEdge={() => log.push("edge")} />
@@ -54,12 +54,19 @@ const state = (page) => page.evaluate(() => {
   const act = svg.querySelector("g[style*='transition: opacity']");
   const groups = [...svg.querySelectorAll("g")];
   const active = groups.find((g) => g.style.opacity !== "" && g.style.pointerEvents === "none" && g.querySelector("circle[r='58']"));
-  const hint = svg.querySelector('[data-tp="hint"]');
+  const grid = svg.querySelector('[data-tp="grid"]');
+  const text = [...svg.querySelectorAll("text")].map((t) => t.textContent).join("|");
+  const surface = [...svg.querySelectorAll("rect,ellipse")].find((e) => e.getAttribute("fill") === "transparent");
+  const sb = surface ? surface.getBoundingClientRect() : null;
   const dot = svg.querySelector("circle[r='58']")?.parentElement?.parentElement;
   const last = window.__log.filter(Array.isArray).slice(-1)[0] || null;
   return {
     activeOpacity: active ? active.style.opacity : null,
-    hintOpacity: hint ? hint.style.opacity : null,
+    gridOpacity: grid ? grid.style.opacity : null,
+    text,
+    hasJoystickDrawing: !!svg.querySelector(".gp-tp-breath, .gp-tp-nl, .gp-tp-nr, .gp-tp-nu, .gp-tp-nd"),
+    surfaceTag: surface ? surface.tagName : null,
+    surfaceBox: sb ? { l: sb.left, t: sb.top, w: sb.width, h: sb.height } : null,
     dotTransform: dot ? dot.style.transform : null,
     patternShift: svg.querySelector("pattern")?.getAttribute("patternTransform") || null,
     last, count: window.__log.filter(Array.isArray).length, events: window.__log.filter((x) => typeof x === "string"),
@@ -76,7 +83,9 @@ try {
     const p = await fresh();
     const s = await state(p);
     assert.equal(s.activeOpacity, "0", "idle: the live layer is hidden");
-    assert.notEqual(s.hintOpacity, "0", "idle: the hint is visible");
+    assert.equal(s.gridOpacity, "0", "idle: the dot grid is hidden, the surface is clean");
+    assert.equal(s.hasJoystickDrawing, false, "idle: no joystick drawing (ring or arrows) on the pad");
+    assert.equal(s.text, "", "idle: no words on the pad unless the player typed a name");
     await p.close();
   }
 
@@ -88,7 +97,7 @@ try {
     assert.ok(s.last && s.last[0] > 30, `fast swipe right pushes the stick right (got ${s.last && s.last[0]})`);
     assert.ok(Math.abs(s.last[1]) < 6, "a straight swipe has no sideways push");
     assert.equal(s.activeOpacity, "1", "touching shows the live layer");
-    assert.equal(s.hintOpacity, "0", "touching hides the hint");
+    assert.equal(s.gridOpacity, "1", "touching fades the dot grid in");
     assert.ok(/translate\(/.test(s.dotTransform) && !/translate\(640px, 285px\)/.test(s.dotTransform), "the finger dot follows the finger");
     assert.ok(s.patternShift && /translate\(/.test(s.patternShift), "the dot grid slides under the finger");
     assert.ok(s.events.includes("press"), "the press haptic fired once on landing");
@@ -103,7 +112,47 @@ try {
     await sleep(350);
     s = await state(p);
     assert.equal(s.activeOpacity, "0", "everything fades out after the lift");
-    assert.notEqual(s.hintOpacity, "0", "the hint comes back");
+    assert.equal(s.gridOpacity, "0", "the grid fades out again after the lift");
+    await p.close();
+  }
+
+  // ── a name the player typed is shown, quietly
+  {
+    const p = await fresh("label=CAMERA");
+    const s = await state(p);
+    assert.equal(s.text, "CAMERA", "a typed name is shown");
+    await p.close();
+  }
+
+  // ── a circle pad: round outline, and touches in the corners of its box do nothing
+  {
+    const p = await fresh("round=1");
+    const s0 = await state(p);
+    assert.equal(s0.surfaceTag, "ellipse", "the touch surface is an ellipse");
+    assert.equal(s0.hasJoystickDrawing, false);
+    // the top-left corner of the pad's box is outside the circle
+    await swipe(p, 452, 177, 22, 0, 12);
+    let s = await state(p);
+    assert.equal(s.count, 0, "touching the corner of a circle pad pushes nothing");
+    await p.mouse.up();
+    await sleep(60);
+    // the middle works like any pad
+    await swipe(p, 560, 285, 22, 0, 12);
+    s = await state(p);
+    assert.ok(s.last && s.last[0] > 30, `a swipe inside the circle pushes the stick (got ${s.last && s.last[0]})`);
+    await p.mouse.up();
+    await p.close();
+  }
+
+  // ── a rectangle pad takes touches in its corners
+  {
+    const p = await fresh();
+    const s0 = await state(p);
+    assert.equal(s0.surfaceTag, "rect", "the default touch surface is a rectangle");
+    await swipe(p, 452, 177, 22, 0, 12);
+    const s = await state(p);
+    assert.ok(s.last && s.last[0] > 30, "a swipe in the corner of a rectangle pad works");
+    await p.mouse.up();
     await p.close();
   }
 

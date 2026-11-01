@@ -18,6 +18,17 @@ import kotlin.math.min
 class TouchpadMath(feel: String? = null, release: String? = null, sens: Double? = null) {
 
     companion object {
+        /** Is (px, py) on a pad centred at (cx, cy) with size w x h? The rectangle, or the ellipse inside
+         *  it when [round] (a circle when w == h). Mirrors padContains in touchpad.ts. */
+        fun contains(round: Boolean, cx: Float, cy: Float, w: Float, h: Float, px: Float, py: Float): Boolean {
+            val dx = px - cx
+            val dy = py - cy
+            if (!round) return abs(dx) <= w / 2 && abs(dy) <= h / 2
+            val a = w / 2
+            val b = h / 2
+            return a > 0f && b > 0f && (dx * dx) / (a * a) + (dy * dy) / (b * b) <= 1f
+        }
+
         const val STICK_R = 60.0
         const val DEFAULT_SENS = 1.0
         const val SENS_MIN = 0.3

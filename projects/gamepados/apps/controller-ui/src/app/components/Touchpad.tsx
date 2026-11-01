@@ -9,8 +9,9 @@
 //
 // What the player sees (all of it driven by the same two numbers, finger position and how hard
 // the stick is being pushed):
-//   • idle        a slow breathing ring and four nudging chevrons say "slide here", plus the label
-//   • touch       a ripple spreads from the finger, the hint fades, a glowing dot follows the finger
+//   • idle        a clean dark glass surface, like a laptop trackpad. Nothing is drawn on it (only a
+//                 name the player typed). Rectangle or circle, chosen in the layout editor
+//   • touch       a ripple spreads from the finger, a faint dot grid fades in, a glowing dot follows the finger
 //   • sliding     the dot grid slides under the finger like a real trackpad surface; the edge glows
 //                 with how hard the stick is pushed; speed feel leaves a comet and a short trail,
 //                 distance feel draws a tension line back to where the finger first landed
@@ -33,37 +34,29 @@ const reducedMotion = (): boolean => {
   catch { return false; }
 };
 
-// One <style> per widget is fine (a pad has a handful at most) and keeps the file self-contained.
-const CSS = `
-@keyframes gpTpBreath { 0%,100% { opacity: .10; transform: scale(.90); } 50% { opacity: .30; transform: scale(1.08); } }
-@keyframes gpTpNudgeL { 0%,100% { transform: translateX(0); } 50% { transform: translateX(-4px); } }
-@keyframes gpTpNudgeR { 0%,100% { transform: translateX(0); } 50% { transform: translateX(4px); } }
-@keyframes gpTpNudgeU { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
-@keyframes gpTpNudgeD { 0%,100% { transform: translateY(0); } 50% { transform: translateY(4px); } }
-.gp-tp-breath { transform-box: fill-box; transform-origin: center; animation: gpTpBreath 3.2s ease-in-out infinite; }
-.gp-tp-nl { animation: gpTpNudgeL 3.2s ease-in-out infinite; }
-.gp-tp-nr { animation: gpTpNudgeR 3.2s ease-in-out infinite; }
-.gp-tp-nu { animation: gpTpNudgeU 3.2s ease-in-out infinite; }
-.gp-tp-nd { animation: gpTpNudgeD 3.2s ease-in-out infinite; }
-@media (prefers-reduced-motion: reduce) { .gp-tp-breath, .gp-tp-nl, .gp-tp-nr, .gp-tp-nu, .gp-tp-nd { animation: none; } }
-`;
-
 // ── The static look. Used by the live widget below AND by the layout editor's preview, so the
 //    two can never drift apart.
-export function TouchpadArt({ id, x, y, w, h, label, patternRef }: {
-  id: string; x: number; y: number; w: number; h: number; label?: string;
+/** A rounded rectangle, or an ellipse (a circle when w == h), drawn from its CENTRE. One place for the
+ *  outline so the silhouette, glass, rim, glow, clip and touch surface can never disagree. */
+type ShpProps = { round?: boolean; x: number; y: number; w: number; h: number; rx?: number }
+  & Omit<React.SVGProps<SVGElement>, "x" | "y" | "ref">;
+const Shp = React.forwardRef<SVGElement, ShpProps>(({ round, x, y, w, h, rx = 0, ...p }, ref) => round
+  ? <ellipse ref={ref as React.Ref<SVGEllipseElement>} cx={x} cy={y} rx={w / 2} ry={h / 2} {...(p as React.SVGProps<SVGEllipseElement>)} />
+  : <rect ref={ref as React.Ref<SVGRectElement>} x={x - w / 2} y={y - h / 2} width={w} height={h} rx={rx} {...(p as React.SVGProps<SVGRectElement>)} />);
+
+export function TouchpadArt({ id, x, y, w, h, label, round, patternRef }: {
+  id: string; x: number; y: number; w: number; h: number; label?: string; round?: boolean;
   patternRef?: React.Ref<SVGPatternElement>;
 }) {
   const k = safeId(id);
   const rx = Math.min(w, h) * 0.14;
   const left = x - w / 2, top = y - h / 2;
-  const fs = Math.max(14, Math.min(w, h) * 0.075);
+  const fs = Math.max(13, Math.min(w, h) * 0.06);
   return (
     <g style={{ pointerEvents: "none" }}>
-      <style>{CSS}</style>
       <PadGlassDefs />
       <defs>
-        <clipPath id={`tpc-${k}`}><rect x={left} y={top} width={w} height={h} rx={rx} /></clipPath>
+        <clipPath id={`tpc-${k}`}><Shp round={round} x={x} y={y} w={w} h={h} rx={rx} /></clipPath>
         <pattern ref={patternRef} id={`tpg-${k}`} patternUnits="userSpaceOnUse" width={GRID} height={GRID}>
           <circle cx={GRID / 2} cy={GRID / 2} r={1.7} fill="rgba(255,255,255,0.20)" />
         </pattern>
@@ -73,43 +66,25 @@ export function TouchpadArt({ id, x, y, w, h, label, patternRef }: {
         </radialGradient>
       </defs>
       {/* black silhouette: hides the gyro bar that sits behind the canvas (same as every widget) */}
-      <rect x={left} y={top} width={w} height={h} rx={rx} fill="#000" />
+      <Shp round={round} x={x} y={y} w={w} h={h} rx={rx} fill="#000" />
       {/* contact shadow */}
       <ellipse cx={x} cy={y + h * 0.46} rx={w * 0.46} ry={h * 0.12} fill="url(#padUnder)" />
       {/* glass body */}
-      <rect x={left} y={top} width={w} height={h} rx={rx} fill={RED_NORM}
-        stroke="rgba(255,255,255,0.07)" strokeWidth={1.5} />
+      <Shp round={round} x={x} y={y} w={w} h={h} rx={rx} fill={RED_NORM} stroke="rgba(255,255,255,0.07)" strokeWidth={1.5} />
       <g clipPath={`url(#tpc-${k})`}>
-        <rect x={left} y={top} width={w} height={h} fill={`url(#tpg-${k})`} />
+        {/* the dot grid is only there while a finger is down (it slides under the finger) */}
+        <g data-tp="grid" style={{ opacity: 0, transition: "opacity 0.25s ease-out" }}>
+          <rect x={left} y={top} width={w} height={h} fill={`url(#tpg-${k})`} />
+        </g>
         <rect x={left} y={top} width={w} height={h} fill={`url(#tpv-${k})`} />
-        <rect x={left} y={top} width={w} height={h * 0.46} fill="url(#padSpec)" opacity={0.5} />
+        <rect x={left} y={top} width={w} height={h * 0.46} fill="url(#padSpec)" opacity={0.4} />
       </g>
-      <rect x={left} y={top} width={w} height={h} rx={rx} fill="none" stroke="url(#padRim)" strokeWidth={1.5} opacity={0.55} />
-      {/* idle hint: breathing ring, four nudging chevrons, the label */}
-      <g data-tp="hint" style={{ transition: "opacity 0.25s ease-out" }}>
-        <circle className="gp-tp-breath" cx={x} cy={y - fs * 0.5} r={Math.min(w, h) * 0.17}
-          fill="none" stroke={accent(0.9)} strokeWidth={2.5} />
-        <circle cx={x} cy={y - fs * 0.5} r={Math.min(w, h) * 0.035} fill={accent(0.8)} />
-        {([
-          ["gp-tp-nl", -1, 0], ["gp-tp-nr", 1, 0], ["gp-tp-nu", 0, -1], ["gp-tp-nd", 0, 1],
-        ] as [string, number, number][]).map(([cls, dx, dy]) => {
-          const d = Math.min(w, h) * 0.30;
-          const rot = dx === -1 ? 90 : dx === 1 ? -90 : dy === -1 ? 180 : 0;
-          return (
-            <g key={cls} className={cls}>
-              <path d="M -9 -5 L 0 5 L 9 -5" fill="none" stroke="rgba(255,255,255,0.42)" strokeWidth={3}
-                strokeLinecap="round" strokeLinejoin="round"
-                transform={`translate(${x + dx * d} ${y - fs * 0.5 + dy * d}) rotate(${rot})`} />
-            </g>
-          );
-        })}
-        <text x={x} y={y + Math.min(w, h) * 0.27} textAnchor="middle" fontSize={fs} fontWeight={800}
-          letterSpacing={fs * 0.18} fill="rgba(255,255,255,0.62)"
-          style={{ fontFamily: "'Inter',sans-serif", userSelect: "none" }}>{(label || "TOUCHPAD").toUpperCase()}</text>
-        <text x={x} y={y + Math.min(w, h) * 0.27 + fs * 1.25} textAnchor="middle" fontSize={fs * 0.62} fontWeight={700}
-          letterSpacing={fs * 0.22} fill="rgba(255,255,255,0.32)"
-          style={{ fontFamily: "'Inter',sans-serif", userSelect: "none" }}>RIGHT STICK</text>
-      </g>
+      <Shp round={round} x={x} y={y} w={w} h={h} rx={rx} fill="none" stroke="url(#padRim)" strokeWidth={1.5} opacity={0.55} />
+      {/* No joystick drawing and no default text: a clean surface. Only a name the player typed shows. */}
+      {label ? (
+        <text x={x} y={top + h - fs * 1.1} textAnchor="middle" fontSize={fs} fontWeight={700} letterSpacing={fs * 0.16}
+          fill="rgba(255,255,255,0.30)" style={{ fontFamily: "'Inter',sans-serif", userSelect: "none" }}>{label.toUpperCase()}</text>
+      ) : null}
     </g>
   );
 }
@@ -118,6 +93,7 @@ type Props = {
   id: string;
   x: number; y: number; w: number; h: number;      // centre and size, design units
   label?: string;
+  round?: boolean;                                  // a circle / ellipse instead of a rounded rectangle
   feel?: unknown; release?: unknown; sens?: unknown;
   svgRef: React.RefObject<SVGSVGElement | null>;
   /** What this pad is pushing on the right stick right now (page-side touch only). */
@@ -127,7 +103,7 @@ type Props = {
   onEdge?: () => void;        // stick reached its stop: one tick
 };
 
-function TouchpadBase({ id, x, y, w, h, label, feel, release, sens, svgRef, onStick, onPress, onRelease, onEdge }: Props) {
+function TouchpadBase({ id, x, y, w, h, label, round, feel, release, sens, svgRef, onStick, onPress, onRelease, onEdge }: Props) {
   const k = safeId(id);
   const rx = Math.min(w, h) * 0.14;
   const left = x - w / 2, top = y - h / 2;
@@ -138,12 +114,12 @@ function TouchpadBase({ id, x, y, w, h, label, feel, release, sens, svgRef, onSt
   const patternRef = useRef<SVGPatternElement>(null);
   const rootRef = useRef<SVGGElement>(null);
   const activeRef = useRef<SVGGElement>(null);
-  const hintRef = useRef<SVGGElement | null>(null);
+  const gridRef = useRef<SVGGElement | null>(null);
   const dotRef = useRef<SVGGElement>(null);
   const haloRef = useRef<SVGGElement>(null);
   const coreRef = useRef<SVGGElement>(null);
-  const edgeRef = useRef<SVGRectElement>(null);
-  const rimRef = useRef<SVGRectElement>(null);
+  const edgeRef = useRef<SVGElement>(null);
+  const rimRef = useRef<SVGElement>(null);
   const tensionRef = useRef<SVGLineElement>(null);
   const originRef = useRef<SVGCircleElement>(null);
   const cometRef = useRef<SVGLineElement>(null);
@@ -163,14 +139,14 @@ function TouchpadBase({ id, x, y, w, h, label, feel, release, sens, svgRef, onSt
     const a = anim.current;
     const act = activeRef.current;
     if (!act) return;
-    if (!hintRef.current) hintRef.current = rootRef.current?.querySelector('[data-tp="hint"]') as SVGGElement | null;
-    const hint = hintRef.current;
+    if (!gridRef.current) gridRef.current = rootRef.current?.querySelector('[data-tp="grid"]') as SVGGElement | null;
+    const grid = gridRef.current;
 
     if (!f) {
       if (!a.on) return;
       a.on = false; a.full = false; a.trail = [];
       act.style.opacity = "0";
-      if (hint) hint.style.opacity = "1";
+      if (grid) grid.style.opacity = "0";
       if (coreRef.current) coreRef.current.style.transform = "scale(0.55)";
       if (rimRef.current) rimRef.current.style.stroke = "rgba(255,255,255,0.07)";
       return;
@@ -180,7 +156,7 @@ function TouchpadBase({ id, x, y, w, h, label, feel, release, sens, svgRef, onSt
     if (!a.on) {
       a.on = true; a.ox = f.fx; a.oy = f.fy; a.trail = [];
       act.style.opacity = "1";
-      if (hint) hint.style.opacity = "0";
+      if (grid) grid.style.opacity = "1";
       if (coreRef.current) coreRef.current.style.transform = "scale(1)";
       const rp = rippleRef.current;
       if (rp && !reduce.current && rp.animate) {
@@ -296,7 +272,7 @@ function TouchpadBase({ id, x, y, w, h, label, feel, release, sens, svgRef, onSt
 
   return (
     <g ref={rootRef}>
-      <TouchpadArt id={id} x={x} y={y} w={w} h={h} label={label} patternRef={patternRef} />
+      <TouchpadArt id={id} x={x} y={y} w={w} h={h} label={label} round={round} patternRef={patternRef} />
 
       {/* live layers: invisible until a finger arrives */}
       <g ref={activeRef} style={{ opacity: 0, transition: "opacity 0.25s ease-out", pointerEvents: "none" }}>
@@ -328,15 +304,15 @@ function TouchpadBase({ id, x, y, w, h, label, feel, release, sens, svgRef, onSt
             </g>
           </g>
         </g>
-        <rect ref={edgeRef} x={left + 2} y={top + 2} width={w - 4} height={h - 4} rx={rx} fill="none"
+        <Shp round={round} ref={edgeRef} x={x} y={y} w={w - 4} h={h - 4} rx={Math.max(0, rx - 2)} fill="none"
           stroke={accent(1)} strokeWidth={7} opacity={0.12} />
       </g>
-      <rect ref={rimRef} x={left} y={top} width={w} height={h} rx={rx} fill="none"
+      <Shp round={round} ref={rimRef} x={x} y={y} w={w} h={h} rx={rx} fill="none"
         stroke="rgba(255,255,255,0.07)" strokeWidth={2.5}
         style={{ pointerEvents: "none", transition: "stroke 0.16s ease-out" }} />
 
       {/* the touch surface */}
-      <rect x={left} y={top} width={w} height={h} rx={rx} fill="transparent"
+      <Shp round={round} x={x} y={y} w={w} h={h} rx={rx} fill="transparent"
         style={{ touchAction: "none", cursor: "pointer" }}
         onPointerDown={(e) => {
           if (pid.current !== null) return;                 // one finger owns the pad
@@ -386,5 +362,5 @@ function TouchpadBase({ id, x, y, w, h, label, feel, release, sens, svgRef, onSt
 
 export const Touchpad = React.memo(TouchpadBase, (p, n) =>
   p.id === n.id && p.x === n.x && p.y === n.y && p.w === n.w && p.h === n.h && p.label === n.label &&
-  p.feel === n.feel && p.release === n.release && p.sens === n.sens && p.svgRef === n.svgRef
+  p.round === n.round && p.feel === n.feel && p.release === n.release && p.sens === n.sens && p.svgRef === n.svgRef
 );

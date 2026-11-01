@@ -62,6 +62,8 @@ export type CustomBtnDef = {
   tpFeel?: "speed" | "distance";
   tpRelease?: "instant" | "glide";
   tpSens?: number;
+  /** The pad's outline: a rounded rectangle (default) or a circle / ellipse. */
+  tpShape?: "rect" | "circle";
   normColor: string;
   heldColor: string;
   groupId?: string;

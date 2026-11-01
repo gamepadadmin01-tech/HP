@@ -8,7 +8,7 @@ import React, { useEffect, useRef } from "react";
 import { motion } from "framer-motion";
 import { CustomBtnDef } from "../types";
 import {
-  TouchpadState, cleanTouchpadOptions, touchpadSize, STICK_R,
+  TouchpadState, cleanTouchpadOptions, touchpadSize, isRoundPad, STICK_R,
   TP_DEFAULT_FEEL, TP_DEFAULT_RELEASE, TP_DEFAULT_SENS, TP_SENS_MIN, TP_SENS_MAX,
 } from "../touchpad";
 
@@ -80,7 +80,7 @@ function TryIt({ b }: { b: CustomBtnDef }) {
   return (
     <div className="flex gap-3 items-center">
       <div ref={padRef}
-        className="relative flex-1 h-24 rounded-2xl border border-white/10 bg-white/5 overflow-hidden touch-none select-none"
+        className={`relative ${isRoundPad(b) ? "w-24 h-24 shrink-0 rounded-full" : "flex-1 h-24 rounded-2xl"} border border-white/10 bg-white/5 overflow-hidden touch-none select-none`}
         onPointerDown={(e) => {
           if (pid.current !== null) return;
           pid.current = e.pointerId; try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
@@ -123,6 +123,7 @@ export function TouchpadSettings({ b, update, slider }: {
 }) {
   const o = cleanTouchpadOptions({ feel: b.tpFeel, release: b.tpRelease, sens: b.tpSens });
   const { w, h } = touchpadSize(b);
+  const round = isRoundPad(b);
   const isDefault = o.feel === TP_DEFAULT_FEEL && o.release === TP_DEFAULT_RELEASE && o.sens === TP_DEFAULT_SENS;
   const sensPct = Math.round(o.sens * 100);
 
@@ -167,16 +168,35 @@ export function TouchpadSettings({ b, update, slider }: {
         <span className="text-[10px] text-zinc-500 leading-snug">Lower for slow, precise aim. Higher for quick turns. Recommended: 1.00×.</span>
       </div>
 
+      <div className="flex flex-col gap-1.5">
+        <span className={LABEL}>Shape</span>
+        <Segmented group="shape" value={round ? "circle" : "rect"}
+          onChange={(v) => update(v === "circle" ? { tpShape: "circle", w: Math.round(Math.min(w, h)), h: Math.round(Math.min(w, h)) } : { tpShape: "rect" })}
+          options={[{ id: "rect", label: "Rectangle" }, { id: "circle", label: "Circle" }]} />
+        <span className="text-[10px] text-zinc-500 leading-snug">
+          {round ? "A round pad. Only the circle takes touches." : "A flat pad like a laptop trackpad. You can make it wide or tall."}
+        </span>
+      </div>
+
       <div className="flex flex-col gap-2">
         <span className={LABEL}>Size</span>
-        <div className="flex flex-col gap-1">
-          <span className="text-[10px] text-zinc-500">Width</span>
-          {slider(Math.round(w), 160, 760, (v) => update({ w: v, h }))}
-        </div>
-        <div className="flex flex-col gap-1">
-          <span className="text-[10px] text-zinc-500">Height</span>
-          {slider(Math.round(h), 100, 520, (v) => update({ h: v, w }))}
-        </div>
+        {round ? (
+          <div className="flex flex-col gap-1">
+            <span className="text-[10px] text-zinc-500">Diameter</span>
+            {slider(Math.round(Math.min(w, h)), 140, 520, (v) => update({ w: v, h: v }))}
+          </div>
+        ) : (
+          <>
+            <div className="flex flex-col gap-1">
+              <span className="text-[10px] text-zinc-500">Width</span>
+              {slider(Math.round(w), 160, 760, (v) => update({ w: v, h }))}
+            </div>
+            <div className="flex flex-col gap-1">
+              <span className="text-[10px] text-zinc-500">Height</span>
+              {slider(Math.round(h), 100, 520, (v) => update({ h: v, w }))}
+            </div>
+          </>
+        )}
       </div>
 
       {!isDefault && (

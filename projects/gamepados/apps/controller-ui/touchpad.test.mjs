@@ -1,7 +1,7 @@
 // Run: node touchpad.test.mjs   (Node 24 runs the .ts file directly)
 // The same cases live in android-client/.../TouchpadMathTest.kt — keep them in step.
 import assert from "node:assert/strict";
-import { TouchpadState, cleanTouchpadOptions, STICK_R } from "./src/app/touchpad.ts";
+import { TouchpadState, cleanTouchpadOptions, STICK_R, isRoundPad, padContains } from "./src/app/touchpad.ts";
 
 const near = (a, b, tol, msg) => assert.ok(Math.abs(a - b) <= tol, `${msg}: ${a} is not within ${tol} of ${b}`);
 const mag = (p) => Math.hypot(p.x, p.y);
@@ -118,5 +118,19 @@ assert.equal(cleanTouchpadOptions({ feel: "distance", release: "glide" }).feel, 
   p.move(345, 300, 116);
   near(p.x, STICK_R * 0.5, 1e-6, "and measures from its own first touch");
 }
+
+// Shape: a pad is a rectangle unless it says "circle"; a circle takes touches only inside its ellipse.
+assert.equal(isRoundPad({}), false);
+assert.equal(isRoundPad({ tpShape: "rect" }), false);
+assert.equal(isRoundPad({ tpShape: "circle" }), true);
+assert.equal(isRoundPad({ tpShape: "oval" }), false, "anything unknown is a rectangle");
+assert.equal(padContains(false, 100, 100, 200, 100, 195, 145), true, "rectangle: the corner is on the pad");
+assert.equal(padContains(false, 100, 100, 200, 100, 201, 100), false, "rectangle: just outside the edge");
+assert.equal(padContains(true, 100, 100, 200, 200, 100, 100), true, "circle: the middle");
+assert.equal(padContains(true, 100, 100, 200, 200, 195, 100), true, "circle: near the edge");
+assert.equal(padContains(true, 100, 100, 200, 200, 190, 190), false, "circle: the corner of its box is off the pad");
+assert.equal(padContains(true, 100, 100, 200, 100, 199, 100), true, "ellipse: the long side");
+assert.equal(padContains(true, 100, 100, 200, 100, 100, 160), false, "ellipse: beyond the short side");
+assert.equal(padContains(true, 100, 100, 0, 100, 100, 100), false, "a zero-width circle takes nothing");
 
 console.log("touchpad.test.mjs — all assertions passed");

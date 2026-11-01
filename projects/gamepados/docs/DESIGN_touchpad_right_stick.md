@@ -8,6 +8,8 @@ Customer request (support portal, 2026-10-30): "a touchpad, similar to a laptop 
 
 Recommended defaults for a new touchpad: **speed + instant, sensitivity 1**.
 
+4. **A clean surface, in two shapes** (owner, 2026-11-02, after the first look on a phone): the pad has NO joystick drawing and no default words, like the PS4 touchpad. It can be a **rectangle or a circle** (a Shape choice in the editor; a circle takes touches only inside the circle). While a finger is down it shows a glow under the finger, a ripple and a faint sliding dot grid. The shape is stored as `tpShape` ("rect" | "circle"), exported to the phone engine as `round`, and mirrored by `padContains` (touchpad.ts) and `TouchpadMath.contains`.
+
 ## Behaviour (the rules live in code: `controller-ui/src/app/touchpad.ts`, mirrored by `android-client/.../TouchpadMath.kt`)
 
 - A touchpad is a rectangle. A finger on it pushes the **right stick** (design units, full = 60).

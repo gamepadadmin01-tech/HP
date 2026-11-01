@@ -73,6 +73,7 @@ class NativeInputEngine(private val activity: MainActivity) {
         val std: Boolean,                    // trig: vis belongs to the standard held set
         val mode: Char,                      // mode selector: 'L' / 'R'
         val hap: String,                     // press-haptic tier ("" = off)
+        val round: Boolean = false,          // touchpad only: a circle / ellipse instead of a rectangle
         val padMath: TouchpadMath? = null    // touchpad only: the movement rules + this pad's live state
     ) {
         var padFull = false                  // touchpad only: stick is at its stop (one edge tick per arrival)
@@ -253,6 +254,7 @@ class NativeInputEngine(private val activity: MainActivity) {
                 std = w.optBoolean("std", false),
                 mode = (w.optString("mode", "L").firstOrNull() ?: 'L'),
                 hap = w.optString("hap", ""),
+                round = kind == K_PAD && w.optBoolean("round", false),
                 padMath = if (kind == K_PAD) TouchpadMath(
                     w.optString("feel", ""), w.optString("release", ""), w.optDouble("sens", 1.0)) else null
             ))
@@ -458,7 +460,8 @@ class NativeInputEngine(private val activity: MainActivity) {
             val inside = when (w.kind) {
                 K_BTN -> if (w.rect) (px >= w.x - w.w / 2 && px <= w.x + w.w / 2 && py >= w.y - w.h / 2 && py <= w.y + w.h / 2)
                          else hypot((px - w.x).toDouble(), (py - w.y).toDouble()) <= w.r
-                K_TRIG, K_PAD -> (px >= w.x - w.w / 2 && px <= w.x + w.w / 2 && py >= w.y - w.h / 2 && py <= w.y + w.h / 2)
+                K_TRIG -> (px >= w.x - w.w / 2 && px <= w.x + w.w / 2 && py >= w.y - w.h / 2 && py <= w.y + w.h / 2)
+                K_PAD -> TouchpadMath.contains(w.round, w.x, w.y, w.w, w.h, px, py)   // rectangle or circle
                 else -> hypot((px - w.x).toDouble(), (py - w.y).toDouble()) <= w.r   // dpad/stick/mode = circle
             }
             if (inside) return w

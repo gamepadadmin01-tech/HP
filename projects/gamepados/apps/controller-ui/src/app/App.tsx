@@ -430,7 +430,7 @@ function useStick(maxR: number, svgRef: React.RefObject<SVGSVGElement | null>, o
 
 import { Btn, Dpad, RightStick, TriggerPill, RED_NORM, RED_HELD, ACCENT_RGB, buttonText } from "./components/Widgets";
 import { Touchpad } from "./components/Touchpad";
-import { touchpadSize, cleanTouchpadOptions } from "./touchpad";
+import { touchpadSize, cleanTouchpadOptions, isRoundPad } from "./touchpad";
 import { applyNativePadVisuals } from "./touchpadVisual";
 
 // ─── Gyro indicator material ─────────────────────────────────────────────────
@@ -553,7 +553,7 @@ function buildNativeGeometry(pad: CustomPad): any[] {
       // runs the same maths; the three settings travel with the geometry so the two cannot drift.
       const { w, h } = touchpadSize(btn);
       const o = cleanTouchpadOptions({ feel: btn.tpFeel, release: btn.tpRelease, sens: btn.tpSens });
-      widgets.push({ k: "pad", x: btn.x, y: btn.y, w, h, vis: btn.uid, feel: o.feel, release: o.release, sens: o.sens, hap });
+      widgets.push({ k: "pad", x: btn.x, y: btn.y, w, h, round: isRoundPad(btn), vis: btn.uid, feel: o.feel, release: o.release, sens: o.sens, hap });
     } else if (btn.type === "stickmode") {
       widgets.push({ k: "mode", x: btn.x, y: btn.y, r: btn.r, mode: btn.label === "R-Mod" ? "R" : "L", hap });
     } else if (btn.type === "trigger") {
@@ -2024,6 +2024,7 @@ function ControllerScreen({ onBack, isActive: screenActive, activeMapping, custo
                     id={btn.uid}
                     x={btn.x} y={btn.y} w={tpW} h={tpH}
                     label={btn.label === "Touchpad" ? undefined : btn.label}
+                    round={isRoundPad(btn)}
                     feel={btn.tpFeel} release={btn.tpRelease} sens={btn.tpSens}
                     svgRef={svgRef}
                     onStick={onPadStick}

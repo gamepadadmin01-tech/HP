@@ -7,7 +7,7 @@ import { CustomPad, CustomBtnDef, WidgetType } from "../types";
 import { RED_NORM, ACCENT_RGB, buttonText } from "./Widgets";
 import { TouchpadArt } from "./Touchpad";
 import { TouchpadSettings } from "./TouchpadSettings";
-import { touchpadSize } from "../touchpad";
+import { touchpadSize, isRoundPad } from "../touchpad";
 import { SPRING, SPRING_SNAP, FADE, EXIT, cardIn, backdropIn } from "../motion";
 
 // ── Custom pointer-driven slider ──────────────────────────────────────────────
@@ -232,7 +232,7 @@ const WidgetPreview = React.memo(function WidgetPreview({ b }: { b: CustomBtnDef
   if (b.type === "touchpad") {
     // The same art the live pad uses (idle state), so the editor shows exactly what players get.
     const { w, h } = touchpadSize(b);
-    return <TouchpadArt id={b.uid} x={x} y={y} w={w} h={h} label={b.label === "Touchpad" ? undefined : b.label} />;
+    return <TouchpadArt id={b.uid} x={x} y={y} w={w} h={h} label={b.label === "Touchpad" ? undefined : b.label} round={isRoundPad(b)} />;
   }
 
   if (b.type === "trigger") {

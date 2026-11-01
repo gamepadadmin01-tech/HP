@@ -43,6 +43,20 @@ export function touchpadSize(b: { r: number; w?: number; h?: number }): { w: num
   return { w: b.w ?? b.r * 3.6, h: b.h ?? b.r * 2.2 };
 }
 
+/** Is this pad a circle (an ellipse inside its w x h box; a true circle when w == h)? */
+export function isRoundPad(b: { tpShape?: unknown }): boolean {
+  return b.tpShape === "circle";
+}
+
+/** Is the point (px, py) on a pad centred at (cx, cy)? The rectangle, or the ellipse inside it when
+ *  round. Mirrored by TouchpadMath.contains in the Android engine: change both together. */
+export function padContains(round: boolean, cx: number, cy: number, w: number, h: number, px: number, py: number): boolean {
+  const dx = px - cx, dy = py - cy;
+  if (!round) return Math.abs(dx) <= w / 2 && Math.abs(dy) <= h / 2;
+  const a = w / 2, b = h / 2;
+  return a > 0 && b > 0 && (dx * dx) / (a * a) + (dy * dy) / (b * b) <= 1;
+}
+
 /** Clamp whatever a saved pad says into the range the pad understands. */
 export function cleanTouchpadOptions(o: { feel?: unknown; release?: unknown; sens?: unknown }) {
   const feel: TouchpadFeel = o.feel === "distance" ? "distance" : "speed";

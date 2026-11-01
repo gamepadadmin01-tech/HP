@@ -101,4 +101,18 @@ class TouchpadMathTest {
         p.move(345.0, 300.0, 116)
         near(p.x, R * 0.5, 1e-6, "measures from its own first touch")
     }
+
+    // Shape: mirrors padContains in touchpad.ts (same cases).
+    @Test fun rectangleTakesItsCorners() {
+        assertTrue(TouchpadMath.contains(false, 100f, 100f, 200f, 100f, 195f, 145f))
+        assertFalse(TouchpadMath.contains(false, 100f, 100f, 200f, 100f, 201f, 100f))
+    }
+    @Test fun circleTakesOnlyItsInside() {
+        assertTrue(TouchpadMath.contains(true, 100f, 100f, 200f, 200f, 100f, 100f))
+        assertTrue(TouchpadMath.contains(true, 100f, 100f, 200f, 200f, 195f, 100f))
+        assertFalse(TouchpadMath.contains(true, 100f, 100f, 200f, 200f, 190f, 190f))   // corner of its box
+        assertTrue(TouchpadMath.contains(true, 100f, 100f, 200f, 100f, 199f, 100f))    // ellipse, long side
+        assertFalse(TouchpadMath.contains(true, 100f, 100f, 200f, 100f, 100f, 160f))   // beyond the short side
+        assertFalse(TouchpadMath.contains(true, 100f, 100f, 0f, 100f, 100f, 100f))     // zero width
+    }
 }
