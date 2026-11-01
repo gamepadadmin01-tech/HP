@@ -17,6 +17,7 @@
 // generous, never unlimited.
 
 import { API_ORIGIN } from "../api/account";
+import { getInstallId } from "../feedback";
 import { adNetwork, getAppInfo, nativeSetGuestRules } from "../platform/native";
 
 export type FreeTimeConfig = {
@@ -133,7 +134,9 @@ export async function refreshAppConfig(): Promise<void> {
     const info = getAppInfo();
     const net = adNetwork();   // which ad network this build plays, so the server picks the right switch
     const q = `?channel=${encodeURIComponent(info.channel || "direct")}&versionCode=${encodeURIComponent(String(info.build || 0))}`
-      + (net ? `&network=${encodeURIComponent(net)}` : "");
+      + (net ? `&network=${encodeURIComponent(net)}` : "")
+      // The app's random install id, so the portal can count active players (stored scrambled, once a day).
+      + `&installId=${encodeURIComponent(getInstallId())}`;
     const res = await fetch(`${API_ORIGIN}/api/app-config${q}`, { cache: "no-store", signal: ctrl?.signal });
     if (!res.ok) return;                                   // keep what we had
     const json = await res.json();
