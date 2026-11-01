@@ -7,58 +7,6 @@ import { motion, AnimatePresence } from "framer-motion";
 import { X, QrCode } from "lucide-react";
 import { useShellAppearance } from "./CalmShell";
 
-export const DIALOG_DUR  = 260;
-
-export function useAnimatedDialog(open: boolean) {
-  const [mounted, setMounted]   = useState(open);
-  const [visible, setVisible]   = useState(open);
-
-  useEffect(() => {
-    if (open) {
-      setMounted(true);
-      const raf = requestAnimationFrame(() => requestAnimationFrame(() => setVisible(true)));
-      return () => cancelAnimationFrame(raf);
-    } else {
-      setVisible(false);
-      const t = setTimeout(() => setMounted(false), DIALOG_DUR + 40);
-      return () => clearTimeout(t);
-    }
-  }, [open]);
-
-  return { mounted, visible };
-}
-
-
-export function DialogShell({ open, onClickOutside, children, zIndex = 30 }: {
-  open: boolean; onClickOutside: () => void; children: React.ReactNode; zIndex?: number;
-}) {
-  const { mounted, visible } = useAnimatedDialog(open);
-  if (!mounted) return null;
-  return (
-    <div
-      className="absolute inset-0 flex items-center justify-center px-4"
-      style={{
-        zIndex,
-        background: "rgba(0,0,0,0.78)",
-        backdropFilter: "blur(6px)",
-        opacity: visible ? 1 : 0,
-        transition: `opacity ${DIALOG_DUR}ms ease`,
-      }}
-      onClick={(e) => { if (e.target === e.currentTarget) onClickOutside(); }}>
-      <div
-        style={{
-          transform: visible ? "translate3d(0,0,0) scale(1)" : "translate3d(0,24px,0) scale(0.94)",
-          transition: `transform ${DIALOG_DUR}ms cubic-bezier(0.34,1.56,0.64,1)`,
-          width: "100%", maxWidth: "24rem",
-          willChange: "transform",
-          backfaceVisibility: "hidden",
-        }}>
-        {children}
-      </div>
-    </div>
-  );
-}
-
 // The playtime credit / lockout dialogs that used to live here were REMOVED.
 //
 // They were a leftover of an ad-supported design that was never adopted: a

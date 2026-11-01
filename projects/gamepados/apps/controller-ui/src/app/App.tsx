@@ -47,7 +47,7 @@ import {
 import type { WiredPref } from "./store/prefs";
 import { TabAccount, AppSupport } from "./components/TabAccount";
 import { getSession, onSessionChange, revalidate } from "./store/account";
-import { SPRING, SPRING_SNAP, FADE, STEP, cardIn, backdropIn } from "./motion";
+import { SPRING, SPRING_SNAP, FADE, STEP, EXIT, cardIn, backdropIn, sheetIn, toastIn } from "./motion";
 
 const GAMEPAD_PRESETS: GamepadPreset[] = [
   // color drives THREE things on the Home card: the selected ring, the status
@@ -2441,12 +2441,10 @@ function PresetEditor({ preset, currentMapping, currentPos, onSave, onSaveLayout
   }
 
   return (
-    <motion.div 
-      initial={{ opacity: 0, scale: 0.96 }}
-      animate={{ opacity: 1, scale: 1 }}
-      exit={{ opacity: 0, scale: 0.96 }}
-      transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-      className="fixed inset-0 z-50 overflow-hidden bg-black/70 backdrop-blur-sm touch-none select-none">
+    <motion.div
+      {...cardIn}
+      transition={SPRING}
+      className="fixed inset-0 z-50 overflow-hidden bg-black/80 touch-none select-none">
       
         {isPortrait ? (
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#070910] z-50 px-8 text-center">
@@ -2950,9 +2948,10 @@ function TabHome({ realTelemetry, onLaunch, onConnect, onLaunchEditor, selectedP
           here — a fixed element under this CSS-transformed tab container would
           anchor to the transform and let the dashboard bleed through. */}
 
-      {shareState && (
-        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/60 backdrop-blur-sm px-6" onClick={() => setShareState(null)}>
-          <div ref={shareRef} role="dialog" aria-modal="true" aria-label="Share controller layout" className="calm-surface border border-white/10 rounded-3xl p-6 w-full max-w-[320px] shadow-2xl" onClick={e => e.stopPropagation()}>
+      <AnimatePresence>
+      {shareState && (
+        <motion.div key="share" {...backdropIn} transition={FADE} className="fixed inset-0 z-[120] flex items-center justify-center bg-black/70 px-6" onClick={() => setShareState(null)}>
+          <motion.div ref={shareRef} {...cardIn} transition={SPRING} role="dialog" aria-modal="true" aria-label="Share controller layout" className="calm-surface border border-white/10 rounded-3xl p-6 w-full max-w-[320px] shadow-2xl" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="calm-ink font-bold text-base truncate pr-2">Share "{shareState.padName}"</h3>
               <button onClick={() => setShareState(null)} className="w-8 h-8 rounded-full bg-white/5 calm-muted flex items-center justify-center active:scale-90 flex-shrink-0">
@@ -2971,12 +2970,14 @@ function TabHome({ realTelemetry, onLaunch, onConnect, onLaunchEditor, selectedP
                   className="w-full py-2.5 rounded-xl bg-white/5 border border-white/10 calm-ink text-xs font-bold active:scale-95 transition-all">Copy code</button>
               </>
             )}
-          </div>
-        </div>
+          </motion.div>
+        </motion.div>
       )}
+      </AnimatePresence>
 
+      <AnimatePresence>
       {editingPreset && (
-        <PresetEditor
+        <PresetEditor key="preset"
           preset={editingPreset}
           currentMapping={editingPreset.mapping}
           currentPos={posOverrides[editingPreset.id] ?? {}}
@@ -2984,7 +2985,8 @@ function TabHome({ realTelemetry, onLaunch, onConnect, onLaunchEditor, selectedP
           onSaveLayout={pos => onSavePosOverride(editingPreset.id, pos)}
           onReset={() => { onResetPreset(editingPreset.id); onResetPosOverride(editingPreset.id); setEditingPreset(null); }}
           onClose={() => setEditingPreset(null)} />
-      )}
+      )}
+      </AnimatePresence>
 
     </div>
   );
@@ -3070,19 +3072,20 @@ function FeedbackCard() {
       </div>
 
       {/* Slide-up feedback tray (bottom sheet) */}
-      <div
+      <AnimatePresence>
+      {open && (
+      <motion.div
+        key="feedback-sheet"
+        {...backdropIn} transition={FADE}
         onClick={closeTray}
-        aria-hidden={!open}
         style={{
           position: "fixed", inset: 0, zIndex: 200,
           background: "rgba(0,0,0,0.6)",
-          opacity: open ? 1 : 0,
-          pointerEvents: open ? "auto" : "none",
-          transition: "opacity 0.22s ease",
-          display: open ? "flex" : "none", alignItems: "flex-end", justifyContent: "center",
+          display: "flex", alignItems: "flex-end", justifyContent: "center",
         }}
       >
-        <div
+        <motion.div
+          {...sheetIn} transition={SPRING}
           onClick={(e) => e.stopPropagation()}
           ref={feedbackRef} role="dialog" aria-modal="true" aria-label="Send feedback"
           style={{
@@ -3091,8 +3094,6 @@ function FeedbackCard() {
             borderTop: "1px solid rgba(255,255,255,0.1)",
             borderRadius: "20px 20px 0 0",
             padding: "12px 16px calc(20px + env(safe-area-inset-bottom, 0px))",
-            transform: open ? "translateY(0)" : "translateY(100%)",
-            transition: "transform 0.28s cubic-bezier(0.32,0.72,0,1)",
             maxHeight: "88vh", overflowY: "auto",
           }}
         >
@@ -3133,8 +3134,10 @@ function FeedbackCard() {
               </button>
             </div>
           )}
-        </div>
-      </div>
+        </motion.div>
+      </motion.div>
+      )}
+      </AnimatePresence>
     </>
   );
 }
@@ -4358,13 +4361,13 @@ export default function App() {
       <AnimatePresence>
         {usbToast && (
           <motion.div
-            initial={{ opacity: 0, y: -12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }}
-            transition={SPRING}
+            {...toastIn}
+            transition={SPRING_SNAP}
             className="absolute z-[60] left-1/2 -translate-x-1/2 flex items-center gap-2 px-4 py-2 rounded-full"
             style={{
               top: "calc(env(safe-area-inset-top, 12px) + 10px)",
               background: "rgba(251,191,36,0.15)", border: "1px solid rgba(251,191,36,0.4)",
-              backdropFilter: "blur(8px)", fontFamily: "'Inter',sans-serif",
+              fontFamily: "'Inter',sans-serif",
             }}>
             <span className="text-amber-400 text-sm leading-none">⟠</span>
             <span className="text-[11px] font-bold text-amber-200">USB detected</span>
@@ -4376,17 +4379,15 @@ export default function App() {
       <AnimatePresence>
         {isCurtainDown && (
           <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.2, ease: "easeInOut" }}
+            {...backdropIn}
+            transition={FADE}
             className="absolute inset-0 z-50 flex items-center justify-center"
             style={{ background: "#070910" }}
           >
             <motion.div
-              initial={{ scale: 0.7, opacity: 0 }}
+              initial={{ scale: 0.88, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
-              transition={{ type: "spring", damping: 14, stiffness: 240 }}
+              transition={SPRING}
               className="flex flex-col items-center gap-3"
             >
               <div className="relative flex items-center justify-center">

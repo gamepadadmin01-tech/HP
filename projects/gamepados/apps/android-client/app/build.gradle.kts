@@ -265,8 +265,12 @@ android {
         //      Google" through the phone's browser and the gamepados://auth link. The Google button
         //      stays hidden until the server reports it switched on, so this build is safe against
         //      a server that has no Google routes yet.
-        versionCode = 66
-        versionName = "1.4.12"
+        // 67 = 1.4.13 (2026-11-01): the Touchpad widget (slide a finger to push the right stick, with
+        //      the Touchpad Camera sample pad), Unity rewarded ads in the direct and uptodown builds
+        //      (Play stays on AdMob), ads offered only under 30 minutes, and every pop-up and sheet
+        //      now opens and closes smoothly with one shared set of motion rules.
+        versionCode = 67
+        versionName = "1.4.13"
 
         // AdMob test IDs by default; the release build type swaps in the live ones (see top of file).
         buildConfigField("String", "ADMOB_REWARDED_ID", "\"$admobTestRewardedId\"")

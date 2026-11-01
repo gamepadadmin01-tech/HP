@@ -10,6 +10,8 @@
 
 import React, { useEffect, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
+import { motion, AnimatePresence } from "framer-motion";
+import { SPRING, FADE, cardIn, backdropIn } from "../motion";
 import { AlertTriangle, Bell, ChevronRight, Gift, Loader2, RefreshCw, X } from "lucide-react";
 import { API_ORIGIN } from "../api/account";
 import { getAppConfig, minutesShort, minutesText, onAppConfigChange, refreshAppConfig } from "../store/appConfig";
@@ -49,27 +51,32 @@ function Sheet({ open, onClose, children, label, z = 2000 }: {
   }, [open, onClose]);
   // The app's own light/dark setting, so a sheet in <body> matches the page under it.
   const { appearance: theme } = useShellAppearance();
-  if (!open || typeof document === "undefined") return null;
+  if (typeof document === "undefined") return null;
+  // AnimatePresence stays mounted so the sheet can animate OUT as well as in (it used to vanish the
+  // instant `open` went false). Same fade + card motion as every other pop-up (../motion), and a
+  // plain darker scrim instead of a 14px backdrop blur, which repaints every frame it animates.
   return createPortal(
     <div className="gp-shell" data-calm-theme={theme} style={{ background: "transparent" }}>
-      <div role="dialog" aria-modal="true" aria-label={label}
-        onClick={onClose ? (e) => { if (e.target === e.currentTarget) onClose(); } : undefined}
-        style={{
-          position: "fixed", inset: 0, zIndex: z, display: "flex", alignItems: "center", justifyContent: "center",
-          padding: "max(20px, env(safe-area-inset-top)) 20px max(20px, env(safe-area-inset-bottom))",
-          background: theme === "light" ? "rgba(24,24,26,0.32)" : "rgba(0,0,0,0.55)",
-          backdropFilter: "blur(14px) saturate(1.1)", WebkitBackdropFilter: "blur(14px) saturate(1.1)",
-          animation: "gpSheetIn 0.2s ease-out",
-        }}>
-        <style>{`@keyframes gpSheetIn{from{opacity:0}to{opacity:1}}@keyframes gpCardIn{from{opacity:0;transform:translateY(10px) scale(0.98)}to{opacity:1;transform:none}}`}</style>
-        <div style={{
-          width: "100%", maxWidth: 380, maxHeight: "100%", overflowY: "auto", borderRadius: 16, padding: "22px 20px 18px",
-          background: CARD_BG, border: `1px solid ${CARD_LINE}`, boxShadow: "0 24px 60px rgba(0,0,0,0.35)", color: INK,
-          fontFamily: "var(--calm-body)", animation: "gpCardIn 0.24s cubic-bezier(0.2,0.8,0.2,1)",
-        }}>
-          {children}
-        </div>
-      </div>
+      <AnimatePresence>
+        {open && (
+          <motion.div key="sheet" role="dialog" aria-modal="true" aria-label={label}
+            {...backdropIn} transition={FADE}
+            onClick={onClose ? (e) => { if (e.target === e.currentTarget) onClose(); } : undefined}
+            style={{
+              position: "fixed", inset: 0, zIndex: z, display: "flex", alignItems: "center", justifyContent: "center",
+              padding: "max(20px, env(safe-area-inset-top)) 20px max(20px, env(safe-area-inset-bottom))",
+              background: theme === "light" ? "rgba(24,24,26,0.5)" : "rgba(0,0,0,0.68)",
+            }}>
+            <motion.div {...cardIn} transition={SPRING} style={{
+              width: "100%", maxWidth: 380, maxHeight: "100%", overflowY: "auto", borderRadius: 16, padding: "22px 20px 18px",
+              background: CARD_BG, border: `1px solid ${CARD_LINE}`, boxShadow: "0 24px 60px rgba(0,0,0,0.35)", color: INK,
+              fontFamily: "var(--calm-body)",
+            }}>
+              {children}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>,
     document.body,
   );

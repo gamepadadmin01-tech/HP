@@ -8,6 +8,7 @@ import { RED_NORM, ACCENT_RGB, buttonText } from "./Widgets";
 import { TouchpadArt } from "./Touchpad";
 import { TouchpadSettings } from "./TouchpadSettings";
 import { touchpadSize } from "../touchpad";
+import { SPRING, SPRING_SNAP, FADE, EXIT, cardIn, backdropIn } from "../motion";
 
 // ── Custom pointer-driven slider ──────────────────────────────────────────────
 // Native <input type="range"> does NOT drag reliably inside this editor: the
@@ -545,7 +546,7 @@ export function CustomPadEditor({
     <motion.div
       initial={{ opacity: 0, scale: 0.98 }}
       animate={{ opacity: 1, scale: 1 }}
-      exit={{ opacity: 0, scale: 0.98 }}
+      exit={{ opacity: 0, scale: 0.98, transition: EXIT }}
       transition={{ duration: 0.34, ease: [0.16, 1, 0.3, 1] }}
       style={{ willChange: "transform, opacity", backfaceVisibility: "hidden" }}
       data-testid="layout-editor-screen" className="fixed inset-0 z-50 bg-[#070910] overflow-hidden touch-none select-none"
@@ -616,7 +617,7 @@ export function CustomPadEditor({
           <button
             data-testid="rename-layout-button"
             onClick={() => setRenaming(true)}
-            className="bg-zinc-900/90 backdrop-blur-md border border-white/10 rounded-full px-3 py-1.5 flex items-center gap-1.5 text-xs font-semibold text-white/90 hover:text-white active:scale-95 transition-all shadow-lg max-w-[11rem]"
+            className="bg-zinc-900/95 border border-white/10 rounded-full px-3 py-1.5 flex items-center gap-1.5 text-xs font-semibold text-white/90 hover:text-white active:scale-95 transition-all shadow-lg max-w-[11rem]"
           >
             <span className="truncate">{padName || "My Custom Pad"}</span>
             <Pencil size={12} className="text-primary flex-shrink-0" />
@@ -630,7 +631,7 @@ export function CustomPadEditor({
           layout
           data-calm-theme={appearance} className="gp-shell console-editor-toolbar border flex items-center p-1.5 pointer-events-auto overflow-hidden"
           style={{ width: selectedId ? "280px" : "120px" }}
-          transition={{ type: "spring", damping: 25, stiffness: 300 }}
+          transition={SPRING}
         >
           <div className="w-full flex justify-between items-center relative">
             <button
@@ -649,10 +650,10 @@ export function CustomPadEditor({
             <AnimatePresence>
               {selectedId && (
                 <motion.div
-                  initial={{ opacity: 0, scale: 0.5 }}
+                  initial={{ opacity: 0, scale: 0.6 }}
                   animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.5 }}
-                  transition={{ type: "spring", damping: 22, stiffness: 380 }}
+                  exit={{ opacity: 0, scale: 0.6, transition: EXIT }}
+                  transition={SPRING_SNAP}
                   className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10"
                 >
                   {/* Gear TOGGLES the settings panel — selection alone never
@@ -684,10 +685,10 @@ export function CustomPadEditor({
       <AnimatePresence>
         {selectedBtn && showSettings && (
           <motion.div
-            initial={{ opacity: 0, y: -20 }}
+            initial={{ opacity: 0, y: -16 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            transition={{ type: "spring", damping: 25, stiffness: 350 }}
+            exit={{ opacity: 0, y: -8, transition: EXIT }}
+            transition={SPRING}
             className="absolute top-16 left-0 right-0 bottom-4 flex justify-center pointer-events-none"
           >
           <div data-calm-theme={appearance} className="gp-shell console-editor-panel w-[300px] max-h-full self-start border p-5 pointer-events-auto overflow-y-auto overscroll-contain touch-pan-y">
@@ -808,10 +809,10 @@ export function CustomPadEditor({
       <AnimatePresence>
         {showAddMenu && (
           <motion.div
-            initial={{ opacity: 0, scale: 0.95, y: -10 }}
+            initial={{ opacity: 0, scale: 0.96, y: -10 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95, y: -10 }}
-            transition={{ type: "spring", damping: 26, stiffness: 340 }}
+            exit={{ opacity: 0, scale: 0.97, y: -6, transition: EXIT }}
+            transition={SPRING}
             className="absolute top-16 left-0 right-0 bottom-4 flex justify-center pointer-events-none"
           >
             <div data-calm-theme={appearance} className="gp-shell console-editor-panel w-[360px] max-h-full self-start border p-5 pointer-events-auto flex flex-col">
@@ -852,15 +853,13 @@ export function CustomPadEditor({
       <AnimatePresence>
         {showExitConfirm && (
           <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="absolute inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm px-4"
+            {...backdropIn}
+            transition={FADE}
+            className="absolute inset-0 z-[100] flex items-center justify-center bg-black/70 px-4"
           >
             <motion.div
-              initial={{ scale: 0.95 }}
-              animate={{ scale: 1 }}
-              exit={{ scale: 0.95 }}
+              {...cardIn}
+              transition={SPRING}
               data-calm-theme={appearance} role="dialog" aria-label="Unsaved changes" className="gp-shell console-editor-panel border p-6 w-full max-w-[320px] pointer-events-auto"
             >
               <h3 className="text-white font-bold text-lg mb-2">Unsaved Changes</h3>

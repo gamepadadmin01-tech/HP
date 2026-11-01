@@ -26,6 +26,7 @@
 import React, { useSyncExternalStore } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Clock } from "lucide-react";
+import { SPRING_SNAP, toastIn } from "../motion";
 import { getPlaytimeAlert, onPlaytimeChange } from "../store/playtime";
 
 const MINUTES: Record<string, number> = {
@@ -51,10 +52,8 @@ export function PlaytimeToast() {
         {minutes !== undefined && (
           <motion.div
             key={alert}
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+            {...toastIn}
+            transition={SPRING_SNAP}
             className="flex items-center gap-2 px-3.5 py-2 rounded-full"
             style={{
               background: "rgba(10,14,24,0.88)",
