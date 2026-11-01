@@ -10,11 +10,11 @@ REM   gradle.bat bundlePlaystoreRelease   (Google Play, .aab)
 REM   gradle.bat assembleAptoideRelease
 REM   gradle.bat assembleUptodownRelease
 REM   gradle.bat assembleAmazonstoreRelease
-set "JAVA_HOME=D:\AKHIL\HP\projects\gamepados\tools\jdk\jdk-17.0.19+10"
+set "JAVA_HOME=D:\AKHIL\HP\projects\gamepados\tools\jdk\jdk-17.0.20.1+1"
 set "ANDROID_HOME=D:\AKHIL\HP\toolchain\android-sdk"
 set "PATH=%JAVA_HOME%\bin;%PATH%"
 echo Starting Gradle build (direct flavor)...
-REM gradle-9.6.1 required since AGP 9.3.1 (build.gradle.kts) needs Gradle 9.5.0+.
+REM gradle-9.8.2: AGP 9.5.0 (build.gradle.kts) needs Gradle 9.5.0+.
 REM gradle-8.14.4 / 8.9 / 8.5 are kept only for reference and CANNOT build this
 REM anymore — AGP 9 rejects any Gradle 8.x.
-D:\AKHIL\HP\projects\gamepados\tools\gradle-9.6.1\bin\gradle.bat clean assembleDirectRelease
+D:\AKHIL\HP\projects\gamepados\tools\gradle-9.8.2\bin\gradle.bat clean assembleDirectRelease

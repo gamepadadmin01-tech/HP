@@ -9,13 +9,14 @@ scripts in this folder on 2026-08-13.
 
 | Tool | Version | Path |
 |---|---|---|
-| JDK | 17.0.19+10 | `D:\AKHIL\HP\projects\gamepados\tools\jdk\jdk-17.0.19+10` |
-| Gradle | **9.6.1** | `D:\AKHIL\HP\projects\gamepados\tools\gradle-9.6.1` |
+| JDK | 17.0.20.1+1 | `D:\AKHIL\HP\projects\gamepados\tools\jdk\jdk-17.0.20.1+1` |
+| Gradle | **9.8.2** | `D:\AKHIL\HP\projects\gamepados\tools\gradle-9.8.2` |
+| Build-tools / NDK / CMake | 37.0.0 / 29.0.14206865 / 4.1.2 | in `D:\AKHIL\HP\toolchain\android-sdk` (installed 2026-11-02) |
 | Android SDK | — | `D:\AKHIL\HP\toolchain\android-sdk` |
 | adb | — | `D:\AKHIL\HP\projects\gamepados\tools\platform-tools` |
 | bundletool | — | `D:\AKHIL\HP\projects\gamepados\tools\bundletool` |
 
-⚠️ **Gradle 9.6.1 is mandatory.** The app is on AGP 9.3.1, which requires Gradle 9.5.0+ and
+⚠️ **Gradle 9.8.2 is mandatory.** The app is on AGP 9.5.0, which requires Gradle 9.5.0+ and
 rejects every 8.x. The `gradle-8.5`, `gradle-8.9` and `gradle-8.14.4` folders are kept for
 reference and **cannot build this app** — do not use them and do not "fix" a build by pointing at
 one.
@@ -68,11 +69,11 @@ That builds the **direct** flavour (the one shipped from the website). Five flav
 `apps\android-client`:
 
 ```bash
-D:\AKHIL\HP\projects\gamepados\tools\gradle-9.6.1\bin\gradle.bat bundlePlaystoreRelease
+D:\AKHIL\HP\projects\gamepados\tools\gradle-9.8.2\bin\gradle.bat bundlePlaystoreRelease
 ```
 
 ```bash
-D:\AKHIL\HP\projects\gamepados\tools\gradle-9.6.1\bin\gradle.bat assembleUptodownRelease assembleAmazonstoreRelease
+D:\AKHIL\HP\projects\gamepados\tools\gradle-9.8.2\bin\gradle.bat assembleUptodownRelease assembleAmazonstoreRelease
 ```
 
 Gradle re-creates `.gradle/` and `build/` on the first run. Expect the first build to be slow —
@@ -162,7 +163,7 @@ none of them.
 2. Install Node LTS, Python 3.12+, and Rust (`rustup`).
 3. Install the Android SDK (Android Studio, or command-line tools), and point
    `apps/android-client/local.properties` at it.
-4. Copy `tools/` across, or re-download JDK 17.0.19+10 and **Gradle 9.6.1** to the same paths.
+4. Copy `tools/` across, or re-download JDK 17.0.20.1+1 and **Gradle 9.8.2** to the same paths.
 5. Restore secrets by hand from the password manager — `.env` files, `release.keystore`,
    `keys/`. **These are never in git.**
 6. Run sections 1, 3 and 5 above.

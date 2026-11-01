@@ -52,7 +52,7 @@ D:\AKHIL\HP\
 │   ├── gamepados/            <- THE PRODUCT (was "hlooo")
 │   │   ├── apps/             <- android-client, controller-ui, pc-server, pc-server-rs, ios-client
 │   │   ├── website/          <- its own repo: gamepadadmin01-tech/gamepad
-│   │   ├── tools/            <- pinned JDK 17 + Gradle 9.6.1 (do not delete)
+│   │   ├── tools/            <- pinned JDK 17 + Gradle 9.8.2 (do not delete)
 │   │   ├── releases/  marketing/  store-assets/  docs/
 │   ├── flexsquares/          <- sell-the-white-space site
 │   ├── daily-news-app/       <- echonews-ai, unrelated
@@ -73,13 +73,13 @@ account system lives in the main tree. Its 3 unpushed commits are preserved as p
 
 ## Build — the parts that bite
 
-- **Gradle 9.6.1 is mandatory.** The app is on AGP 9.3.1, which requires Gradle 9.5.0+ and rejects
+- **Gradle 9.8.2 is mandatory.** The app is on AGP 9.5.0, which requires Gradle 9.5.0+ and rejects
   every 8.x. The dead 8.5 / 8.9 / 8.14.4 copies were retired on 2026-08-13. There is no `gradlew`
   — Gradle is invoked by absolute path.
 - **The build hardcodes absolute paths.** After the 2026-08-13 reorganisation these are:
-  `JAVA_HOME=D:\AKHIL\HP\projects\gamepados\tools\jdk\jdk-17.0.19+10`,
+  `JAVA_HOME=D:\AKHIL\HP\projects\gamepados\tools\jdk\jdk-17.0.20.1+1`,
   `ANDROID_HOME=D:\AKHIL\HP\toolchain\android-sdk`, and gradle at
-  `D:\AKHIL\HP\projects\gamepados\tools\gradle-9.6.1\bin\gradle.bat`. If you ever move a folder,
+  `D:\AKHIL\HP\projects\gamepados\tools\gradle-9.8.2\bin\gradle.bat`. If you ever move a folder,
   the files to fix are `apps/android-client/build_apk.bat` (+ its backup copy),
   `apps/android-client/local.properties` (`sdk.dir`), `build_exact_composite.py`,
   `create_stacked_promo.py`, `tools/regression-check.sh`, and `HP/.claude/launch.json`.

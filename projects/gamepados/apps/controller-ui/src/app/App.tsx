@@ -1019,8 +1019,6 @@ function ControllerScreen({ onBack, isActive: screenActive, activeMapping, custo
   gyroIdleDetect: boolean;   // #2: whether flat-surface idle detection is enabled
   rumbleOn: boolean;
 }) {
-  const [rumble, setRumble] = useState({ left: 0, right: 0, lt: 0, rt: 0 });
-  const rumbleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ── Playtime ──────────────────────────────────────────────────────────────
   // Gated on `isActive`, the same signal the streaming worker uses (see the
@@ -1060,8 +1058,6 @@ function ControllerScreen({ onBack, isActive: screenActive, activeMapping, custo
 
     // The bridge calls this when a rumble packet arrives from PC
     (window as any).onRumblePacket = (leftMotor: number, rightMotor: number, ltHaptic: number, rtHaptic: number) => {
-      setRumble({ left: leftMotor, right: rightMotor, lt: ltHaptic, rt: rtHaptic });
-      
       if (rumbleOn) {
         // Rumble is on or off; the game decides how hard it shakes. There is no
         // user intensity multiplier — a slider that scaled the game's own signal
@@ -1081,11 +1077,6 @@ function ControllerScreen({ onBack, isActive: screenActive, activeMapping, custo
         }
       }
 
-      // Auto-clear rumble display after 150ms of no new packets
-      if (rumbleTimeoutRef.current) clearTimeout(rumbleTimeoutRef.current);
-      rumbleTimeoutRef.current = setTimeout(() => {
-        setRumble({ left: 0, right: 0, lt: 0, rt: 0 });
-      }, 150);
     };
 
     // Wi-Fi rumble pump. Over USB the WebSocket worker calls onRumblePacket
@@ -1112,7 +1103,6 @@ function ControllerScreen({ onBack, isActive: screenActive, activeMapping, custo
 
     return () => {
       delete (window as any).onRumblePacket;
-      if (rumbleTimeoutRef.current) clearTimeout(rumbleTimeoutRef.current);
       if (rumblePoll) clearInterval(rumblePoll);
     };
   }, [isActive, rumbleOn]);

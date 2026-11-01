@@ -43,10 +43,10 @@ android {
     // "Failed to install ... licences have not been accepted". 36.1.0 is newer
     // than AGP's default, which AGP accepts. Install 35.0.0 or re-pin if this
     // machine's SDK changes.
-    buildToolsVersion = "36.1.0"
+    buildToolsVersion = "37.0.0"   // newest stable, installed 2026-11-02
     // Pin to the NDK actually installed (local.properties ndk.dir) — AGP
     // otherwise defaults to a newer NDK and fails the build (CXX1104).
-    ndkVersion = "25.1.8937393"
+    ndkVersion = "29.0.14206865"   // r29, newest stable (was r25): newer compiler, 16 KB page alignment by default
 
     defaultConfig {
         applicationId = "com.gamepad.client"
@@ -465,7 +465,7 @@ android {
     externalNativeBuild {
         cmake {
             path("src/main/cpp/CMakeLists.txt")
-            version = "3.22.1"
+            version = "4.1.2"
         }
     }
     buildFeatures {

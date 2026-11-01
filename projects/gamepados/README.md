@@ -37,7 +37,7 @@ gamepados/
 ├── store-assets/            Per-store upload assets (amazon, indus, uptodown, google-play).
 │                            google-play/ = everything for a Play update: .aab, graphics,
 │                            listing text, App content form answers. Start at its README.txt.
-├── tools/                   Pinned build toolchain: jdk/, gradle-9.6.1/, bundletool/, platform-tools/
+├── tools/                   Pinned build toolchain: jdk/, gradle-9.8.2/, bundletool/, platform-tools/
 │                            + regression-check.sh, wheel-unwrap.test.js, indus-upload.ps1, scripts/.
 │                            The JDK and Gradle paths are hard-coded in the build: do not move.
 ├── secrets/                 Not in git. Never commit or upload.

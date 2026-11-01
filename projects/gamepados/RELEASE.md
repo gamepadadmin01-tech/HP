@@ -113,12 +113,12 @@ robocopy dist ..\android-client\app\src\main\assets\dist /MIR
 
 ```powershell
 # from apps/android-client
-# NOTE: there is no gradlew wrapper — Gradle 9.6.1 is invoked by absolute path.
+# NOTE: there is no gradlew wrapper — Gradle 9.8.2 is invoked by absolute path.
 # One invocation builds every channel (~4 min clean):
-$env:JAVA_HOME    = "D:\AKHIL\HP\projects\gamepados\tools\jdk\jdk-17.0.19+10"
+$env:JAVA_HOME    = "D:\AKHIL\HP\projects\gamepados\tools\jdk\jdk-17.0.20.1+1"
 $env:ANDROID_HOME = "D:\AKHIL\HP\toolchain\android-sdk"
 $env:PATH         = "$env:JAVA_HOME\bin;$env:PATH"
-& "D:\AKHIL\HP\projects\gamepados\tools\gradle-9.6.1\bin\gradle.bat" clean `
+& "D:\AKHIL\HP\projects\gamepados\tools\gradle-9.8.2\bin\gradle.bat" clean `
     assembleDirectRelease `        # -> website (the ONLY self-updating build)
     bundlePlaystoreRelease `       # -> Google Play (AAB)
     assembleAptoideRelease `       # -> Aptoide

@@ -25,14 +25,14 @@ RS="$ROOT/apps/pc-server-rs"
 UI="$ROOT/apps/controller-ui"
 ANDROID="$ROOT/apps/android-client"
 ADB="$ROOT/tools/platform-tools/adb.exe"
-JDK="$ROOT/tools/jdk/jdk-17.0.19+10"
-# Must match what app/build.gradle.kts actually needs. AGP 9.3.1 requires
+JDK="$ROOT/tools/jdk/jdk-17.0.20.1+1"
+# Must match what app/build.gradle.kts actually needs. AGP 9.5.0 requires
 # Gradle >= 9.5, and build.gradle.kts:19 says outright that gradle-8.14.4
 # "CANNOT" build this project and is kept for reference only. This was still
 # pointing at 8.14.4, so every --full run failed at plugin resolution with
 # "Minimum supported Gradle version is 9.5.0" — a toolchain error that reads
 # like a source error.
-GRADLE="$ROOT/tools/gradle-9.6.1/bin/gradle.bat"
+GRADLE="$ROOT/tools/gradle-9.8.2/bin/gradle.bat"
 
 MODE="${1:---fast}"
 FAILED=()

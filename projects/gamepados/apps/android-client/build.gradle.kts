@@ -22,7 +22,9 @@ plugins {
     // native input engine (src/main/cpp/gamepad-engine.cpp, implicit JNI
     // binding). A clean build does NOT prove it: device-test pairing + input
     // before shipping any build made with this.
-    id("com.android.application") version "9.3.1" apply false
+    // 9.3.1 -> 9.5.0 (2026-11-02): the newest stable AGP. Needs Gradle 9.5+ (tools/gradle-9.8.2 now).
+    // The native input engine is rebuilt by this: device-test pairing + input before shipping.
+    id("com.android.application") version "9.5.0" apply false
     // The org.jetbrains.kotlin.android plugin (was 2.4.0) is GONE — AGP 9 ships
     // built-in Kotlin support and hard-fails if KGP is also applied:
     //   "The 'org.jetbrains.kotlin.android' plugin is no longer required for
