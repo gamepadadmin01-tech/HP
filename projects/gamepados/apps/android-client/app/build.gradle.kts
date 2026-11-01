@@ -323,6 +323,10 @@ android {
             dimension = "distribution"
             buildConfigField("Boolean", "SELF_UPDATE_ENABLED", "false")
             buildConfigField("String", "DISTRIBUTION_CHANNEL", "\"playstore\"")
+            // Unity ads on Play too since 2026-11-01 (owner's call, after AdMob limited our ad serving).
+            // Google Play allows any ad network that follows its Ads policy. The AdMob SDK stays in the
+            // build for Google's consent form and a one-line way back: set this to "admob".
+            buildConfigField("String", "AD_NETWORK", "\"unity\"")
         }
         create("aptoide") {
             dimension = "distribution"
@@ -386,14 +390,13 @@ android {
             getByName(flavor).java.srcDir("src/noads/java")
             getByName(flavor).kotlin.srcDir("src/noads/java")
         }
-        // Unity rewarded ads (2026-10-30): the real UnityRewarded in direct and uptodown, an inert stub
-        // in playstore (which stays on AdMob) so AdsBridge compiles the same in all three.
-        listOf("direct", "uptodown").forEach { flavor ->
+        // Unity rewarded ads: the real UnityRewarded in direct and uptodown (2026-10-30) and playstore
+        // (2026-11-01). src/nounity (an inert stub) is no longer used by any flavour; it is kept for the
+        // day a build has to go back to AdMob only.
+        listOf("direct", "uptodown", "playstore").forEach { flavor ->
             getByName(flavor).java.srcDir("src/unityads/java")
             getByName(flavor).kotlin.srcDir("src/unityads/java")
         }
-        getByName("playstore").java.srcDir("src/nounity/java")
-        getByName("playstore").kotlin.srcDir("src/nounity/java")
         // Payments (owner's call, 2026-09-30). BillingBridge comes from exactly ONE of:
         //  - src/razorpay/java: the Razorpay checkout (BillingBridge + RazorpayActivity) — direct
         //    (website) and uptodown. It extends whichever UpdaterBridge that flavour has.
@@ -557,9 +560,10 @@ dependencies {
     // Uptodown sells Lifetime with the same checkout since 2026-09-30 (owner's call).
     add("uptodownImplementation", "com.razorpay:checkout:1.6.38")
 
-    // Unity Ads (rewarded) — the website APK (direct) and uptodown only; the Play build stays on AdMob.
+    // Unity Ads (rewarded) — the website APK (direct), uptodown and, since 2026-11-01, the Play build.
     add("directImplementation", "com.unity3d.ads:unity-ads:4.16.6")
     add("uptodownImplementation", "com.unity3d.ads:unity-ads:4.16.6")
+    add("playstoreImplementation", "com.unity3d.ads:unity-ads:4.16.6")
 
     // AdMob rewarded ads + Google's consent form (UMP) — playstore, direct and uptodown ONLY
     // (owner's call, 2026-09-29). The other store builds must not carry an ad SDK at all.

@@ -17,7 +17,7 @@
 // generous, never unlimited.
 
 import { API_ORIGIN } from "../api/account";
-import { getAppInfo, nativeSetGuestRules } from "../platform/native";
+import { adNetwork, getAppInfo, nativeSetGuestRules } from "../platform/native";
 
 export type FreeTimeConfig = {
   enabled: boolean;
@@ -131,7 +131,9 @@ export async function refreshAppConfig(): Promise<void> {
   const timer = ctrl ? setTimeout(() => ctrl.abort(), 8000) : null;
   try {
     const info = getAppInfo();
-    const q = `?channel=${encodeURIComponent(info.channel || "direct")}&versionCode=${encodeURIComponent(String(info.build || 0))}`;
+    const net = adNetwork();   // which ad network this build plays, so the server picks the right switch
+    const q = `?channel=${encodeURIComponent(info.channel || "direct")}&versionCode=${encodeURIComponent(String(info.build || 0))}`
+      + (net ? `&network=${encodeURIComponent(net)}` : "");
     const res = await fetch(`${API_ORIGIN}/api/app-config${q}`, { cache: "no-store", signal: ctrl?.signal });
     if (!res.ok) return;                                   // keep what we had
     const json = await res.json();

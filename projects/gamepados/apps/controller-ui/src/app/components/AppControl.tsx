@@ -19,7 +19,7 @@ import { getSession, onSessionChange } from "../store/account";
 import { guestTrial } from "../store/guestTrial";
 import { announceExtraTime } from "../store/rewardedAd";
 import { requestSignIn } from "../store/navIntent";
-import { getAppInfo, nativeCreditGuestFreeTime, openUrl } from "../platform/native";
+import { adNetwork, getAppInfo, nativeCreditGuestFreeTime, openUrl } from "../platform/native";
 import { getInstallId } from "../feedback";
 import { useShellAppearance } from "./CalmShell";
 
@@ -165,7 +165,7 @@ export function FreeTimeButton({ onSignIn }: { onSignIn?: () => void }) {
       const info = getAppInfo();
       const res = await fetch(`${API_ORIGIN}/api/guest/free-time`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ installId: getInstallId(), channel: info.channel || "direct", versionCode: info.build || 0 }),
+        body: JSON.stringify({ installId: getInstallId(), channel: info.channel || "direct", versionCode: info.build || 0, network: adNetwork() || undefined }),
       });
       const json = await res.json().catch(() => ({} as any));
       if (!res.ok || json.success !== true) {

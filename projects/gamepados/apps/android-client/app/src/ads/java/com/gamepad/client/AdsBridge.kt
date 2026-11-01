@@ -78,6 +78,11 @@ open class AdsBridge(activity: MainActivity) : UpdaterBridgeBase(activity) {
     @JavascriptInterface
     fun adsAvailable(): Boolean = true
 
+    /** "admob" or "unity": the page tells the server, so the portal's switch and messages for THIS
+     *  network are the ones this build follows (the Play build moved to Unity on 2026-11-01). */
+    @JavascriptInterface
+    fun adNetwork(): String = BuildConfig.AD_NETWORK
+
     /** Tap: ask for consent if needed, then show an ad (loading one first if none is ready). */
     @JavascriptInterface
     fun showRewardedAd(userId: String) {

@@ -84,6 +84,8 @@ export interface AndroidBridge {
    *  absent everywhere else, so always feature-detect. showRewardedAd answers on
    *  `window.onRewardedAdResult`. userId "" = signed out (the phone banks it). */
   adsAvailable?(): boolean;
+  /** "admob" | "unity" -- which ad network this build plays (1.4.13+); absent in older builds. */
+  adNetwork?(): string;
   showRewardedAd?(userId: string): void;
   preloadRewardedAd?(): void;
   adPrivacyOptionsRequired?(): boolean;
@@ -220,6 +222,12 @@ export function openUrl(url: string): void {
 /** True only in a build that carries the AdMob SDK (playstore, direct, uptodown). */
 export function adsSupported(): boolean {
   return call("adsAvailable", (b) => b.adsAvailable!() === true, false);
+}
+
+/** Which ad network this build plays ("admob" | "unity"), or "" when it cannot say (no ads, or an
+ *  older build). The server uses it to pick the right ads switch and messages. */
+export function adNetwork(): string {
+  return call("adNetwork", (b) => String(b.adNetwork!() || ""), "");
 }
 
 /** Show a rewarded ad (loading one first if needed). False = this build has no
