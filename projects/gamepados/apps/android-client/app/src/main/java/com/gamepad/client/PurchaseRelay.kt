@@ -45,5 +45,15 @@ object PurchaseRelay {
 
     // The Razorpay success payload is built in src/razorpay/RazorpayActivity, not
     // here — this file ships in the Play build, and Play must carry no Razorpay code.
-    // (The Play Billing payload builder was removed on 2026-09-30 with Play Billing.)
+
+    /** A finished Google Play purchase (2026-11-02). The page forwards the token to the server, which
+     *  checks it with Google; nothing here grants anything. */
+    fun play(purchaseToken: String, productId: String, orderId: String?): String =
+        JSONObject()
+            .put("status", "ok")
+            .put("provider", "play")
+            .put("purchaseToken", purchaseToken)
+            .put("productId", productId)
+            .apply { if (orderId != null) put("orderId", orderId) }
+            .toString()
 }

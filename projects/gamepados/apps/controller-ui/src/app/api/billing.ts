@@ -19,6 +19,7 @@
 //      two drift and a store build grows a buy button.
 
 import { ApiError, API_ORIGIN } from "./account";
+import { canBuyWithPlay } from "../platform/native";
 
 export type PlanCode = "FREE" | "THREE_DAY" | "QUARTERLY" | "LIFETIME";
 
@@ -190,7 +191,10 @@ async function request<T>(path: string, { method, body, token }: Req = {}): Prom
 /** Public — the plan list is shown before sign-in too. `channel` must be the
  *  build's own DISTRIBUTION_CHANNEL: it is what decides `purchasable`. */
 export function getPlans(channel: string, currency = "INR") {
-  const q = `?channel=${encodeURIComponent(channel || "direct")}&currency=${encodeURIComponent(currency)}`;
+  // `playBilling=1`: this Play build can pay through Google Play. Without it the server never offers an
+  // older Play build (no billing code inside) a buy button.
+  const q = `?channel=${encodeURIComponent(channel || "direct")}&currency=${encodeURIComponent(currency)}`
+    + (channel === "playstore" && canBuyWithPlay() ? "&playBilling=1" : "");
   return request<{ success: true } & Catalogue>(`/api/billing/plans${q}`);
 }
 
@@ -264,6 +268,15 @@ export function verifyRazorpay(token: string, planCode: PlanCode, result: Razorp
     "/api/billing/razorpay/verify",
     { body: { planCode, ...result }, token },
   );
+}
+
+/** A Google Play purchase token, for the SERVER to check with Google. The plan is decided from what
+ *  Google says was bought, never from anything sent here. `pending`: the payment has not cleared. */
+export function verifyGoogle(token: string, purchaseToken: string) {
+  return request<{
+    success: true; pending?: boolean; message?: string; alreadyCredited?: boolean; acknowledged?: boolean;
+    plan?: PlanCode; endsAt?: string | null;
+  }>("/api/billing/google/purchase", { body: { purchaseToken }, token });
 }
 
 // ─── Play session lifecycle ───────────────────────────────────────────────────

@@ -1,10 +1,10 @@
 package com.gamepad.client
 
-// playstore / aptoide / amazonstore / indusstore / apkpure: deliberately empty.
+// aptoide / amazonstore / indusstore / apkpure: deliberately empty. (playstore has its own
+// BillingBridge in src/playbilling again since 2026-11-02: Google Play Billing.)
 //
-// Play sells nothing since 2026-09-30 (rewarded ads are the only way to more
-// time there); the other four mandate their own billing or have not confirmed
-// ours. So these builds contain no purchase surface at all — not even a
+// These stores mandate their own billing or have not confirmed ours. So these
+// builds contain no purchase surface at all — not even a
 // "manage your plan at gamepad.space" link, which is already a policy breach on
 // Amazon. Because WebView's @JavascriptInterface reflection walks the whole class
 // hierarchy of the bound object, a method absent from this chain is genuinely

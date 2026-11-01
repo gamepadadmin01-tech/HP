@@ -400,14 +400,18 @@ android {
         // Payments (owner's call, 2026-09-30). BillingBridge comes from exactly ONE of:
         //  - src/razorpay/java: the Razorpay checkout (BillingBridge + RazorpayActivity) — direct
         //    (website) and uptodown. It extends whichever UpdaterBridge that flavour has.
-        //  - src/nobilling/java: the empty class — playstore (Play sells NOTHING: time comes only
-        //    from rewarded ads; the old Play Billing bridge is archived in context/archive/) and
-        //    the four stores that mandate their own billing or have not confirmed ours.
+        //  - src/playbilling/java: Google Play Billing (BillingBridge) — playstore only, since
+        //    2026-11-02. Play requires its own billing for digital goods, so the Play build sells
+        //    Lifetime through it and has no Razorpay code at all.
+        //  - src/nobilling/java: the empty class — the four stores that mandate their own billing
+        //    or have not confirmed ours.
         listOf("direct", "uptodown").forEach { flavor ->
             getByName(flavor).java.srcDir("src/razorpay/java")
             getByName(flavor).kotlin.srcDir("src/razorpay/java")
         }
-        listOf("playstore", "aptoide", "amazonstore", "indusstore", "apkpure").forEach { flavor ->
+        getByName("playstore").java.srcDir("src/playbilling/java")
+        getByName("playstore").kotlin.srcDir("src/playbilling/java")
+        listOf("aptoide", "amazonstore", "indusstore", "apkpure").forEach { flavor ->
             getByName(flavor).java.srcDir("src/nobilling/java")
             getByName(flavor).kotlin.srcDir("src/nobilling/java")
         }
@@ -545,10 +549,11 @@ dependencies {
     // and none of the APIs 8.0.0 deleted (queryPurchaseHistory,
     // querySkuDetailsAsync, the no-arg enablePendingPurchases, the skuType
     // queryPurchasesAsync overload) were ever used here.
-    // (2026-09-30) The Play Billing library is GONE from the playstore build: Play sells nothing
-    // now, so there is no billing code, no BILLING permission, and no more "update your Billing
-    // Library by <date>" deadlines. Bring it back together with the archived BillingBridge
-    // (context/archive/play-billing-bridge-2026-09-30/) if Play purchases ever return.
+    // (2026-09-30) The Play Billing library was removed from the playstore build while Play sold
+    // nothing. (2026-11-02) It is back, with the archived BillingBridge cut down to one one-time
+    // product (src/playbilling/java): Google Play requires its own billing for digital goods.
+    // The library adds the BILLING permission by itself; keep it current (Google sets deadlines).
+    add("playstoreImplementation", "com.android.billingclient:billing-ktx:9.1.0")
     // Razorpay Checkout — direct flavor only (our own site's build, no store cut).
     // 1.6.38, NOT 1.6.40. From 1.6.40 the SDK is split into
     // com.razorpay:checkout + com.razorpay:core, and both artifacts declare the

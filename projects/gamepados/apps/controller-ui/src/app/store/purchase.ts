@@ -25,13 +25,16 @@ import * as api from "../api/billing";
 import { ApiError } from "../api/account";
 import { getSession } from "./account";
 import { refresh } from "./billing";
-import { getAppInfo, startRazorpayCheckout } from "../platform/native";
+import {
+  acknowledgePlayPurchase, canBuyWithPlay, getAppInfo, restorePlayPurchases, startPlayPurchase, startRazorpayCheckout,
+} from "../platform/native";
 import { clearBlock } from "./playtime";
 
 /** What the native side posts back to `window.onPurchaseResult`. */
 type NativeResult =
   | { status: "ok"; provider: "razorpay"; razorpay_payment_id: string; razorpay_order_id?: string;
       razorpay_subscription_id?: string; razorpay_signature: string }
+  | { status: "ok"; provider: "play"; purchaseToken: string; productId?: string; orderId?: string }
   | { status: "cancelled" }
   | { status: "error"; message?: string };
 
@@ -79,7 +82,12 @@ function installCallback() {
     pending = null;
     // No waiter: a late answer after the wait timed out. Nothing to settle here —
     // Razorpay's webhook credits the payment server-side regardless.
-    if (!waiter) return;
+    if (!waiter) {
+      // A Play purchase nobody is waiting for (finished while the app was closed, or handed back by
+      // restore): forward it to the server all the same. Safe to repeat: a token is credited once.
+      if (parsed.status === "ok" && parsed.provider === "play") void creditPlayPurchase(parsed.purchaseToken);
+      return;
+    }
     waiter(parsed);
   };
 }
@@ -158,6 +166,49 @@ async function buyWithRazorpay(plan: api.CataloguePlan): Promise<PurchaseOutcome
   }
 }
 
+// ─── Google Play ──────────────────────────────────────────────────────────────
+
+/** Hand a purchase token to the server, which checks it with Google. Never throws. */
+async function creditPlayPurchase(purchaseToken: string): Promise<PurchaseOutcome> {
+  const session = getSession();
+  if (!session) return failed("Sign in to finish this purchase.");
+  try {
+    const out = await api.verifyGoogle(session.token, purchaseToken);
+    if (out.pending) return failed(out.message || "Your payment is still being processed. It will appear once it completes.");
+    // The server acknowledges with Google itself; if it could not, ask Play from the phone as well.
+    if (out.acknowledged === false) acknowledgePlayPurchase(purchaseToken);
+    await refresh();
+    clearBlock();
+    return { ok: true, plan: out.plan };
+  } catch (e) {
+    const msg = e instanceof ApiError ? e.message : "The purchase could not be confirmed.";
+    // Google keeps the purchase, and the app asks again next time (restore), so nothing is lost.
+    return failed(`${msg} If you were charged, it will appear within a few minutes.`);
+  }
+}
+
+async function buyWithPlay(plan: api.CataloguePlan): Promise<PurchaseOutcome> {
+  const session = getSession();
+  if (!session) return failed("Sign in to buy a plan.");
+  if (!plan.playProductId) return failed("That plan is not available on Google Play yet.");
+
+  if (!startPlayPurchase(plan.playProductId, session.user.id)) {
+    return failed("This version of the app cannot take payments. Update from Google Play.");
+  }
+  const r = await awaitResult();
+  if (r.status === "cancelled") return CANCELLED;
+  if (r.status === "error") return failed(r.message || "The payment was not completed.");
+  if (r.provider !== "play") return failed("The payment app answered unexpectedly.");
+  return creditPlayPurchase(r.purchaseToken);
+}
+
+/** On opening the plan screen: ask Play for purchases made while the app was closed, so a paid-for
+ *  Lifetime always arrives. Does nothing outside a Play build with billing, or when signed out. */
+export function syncPlayPurchases(): void {
+  if (getAppInfo().channel !== "playstore" || !canBuyWithPlay() || !getSession()) return;
+  restorePlayPurchases();
+}
+
 // ─── Entry point ──────────────────────────────────────────────────────────────
 
 let busy = false;
@@ -172,7 +223,8 @@ let busy = false;
  */
 export async function purchase(plan: api.CataloguePlan): Promise<PurchaseOutcome> {
   // The Play build sells nothing (2026-09-30) — time comes from rewarded ads.
-  if (getAppInfo().channel === "playstore") return failed("Nothing is sold in this version of the app.");
+  // An older Play build (no Play Billing inside) sells nothing; a newer one buys through Google Play only.
+  if (getAppInfo().channel === "playstore" && !canBuyWithPlay()) return failed("Nothing is sold in this version of the app.");
   if (busy) return failed("A purchase is already in progress.");
   if (!plan.purchasable) return failed("This build cannot sell plans.");
 
@@ -182,8 +234,9 @@ export async function purchase(plan: api.CataloguePlan): Promise<PurchaseOutcome
     const session = getSession();
     if (!session) return failed("Sign in to buy a plan.");
 
-    // (The Play Billing path that stood here was removed on 2026-09-30 along with
-    // the Play Billing library itself; see git history if Play purchases return.)
+    // Google Play requires its own billing for digital goods, so the Play build buys through Google
+    // Play and nothing else (the Razorpay checkout is not in that build at all).
+    if (channel === "playstore") return buyWithPlay(plan);
 
     // Razorpay: the website build, and Uptodown since 2026-09-30 (owner's
     // decision — its build now carries the same checkout, see build.gradle.kts).

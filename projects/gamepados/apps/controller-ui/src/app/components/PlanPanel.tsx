@@ -28,7 +28,7 @@ import {
   getBillingState, onBillingChange, refresh, redeemPromo,
   formatDuration, formatPrice, formatResetsAt,
 } from "../store/billing";
-import { purchase } from "../store/purchase";
+import { purchase, syncPlayPurchases } from "../store/purchase";
 import { localUsedSeconds } from "../store/playtime";
 import { FADE } from "../motion";
 import { getAppInfo } from "../platform/native";
@@ -85,7 +85,7 @@ export function PlanPanel() {
 
   // One read on mount. The panel is not on the input path, so a network call
   // here costs nothing that matters.
-  useEffect(() => { void refresh(); }, []);
+  useEffect(() => { void refresh(); syncPlayPurchases(); }, []);
 
   const ent = state.entitlement;
 
@@ -178,7 +178,7 @@ export function PlanPanel() {
   // `unlimited` covers the gift/promo path (source PROMO or MANUAL), where the
   // plan code can still be a lower tier while the entitlement is effectively
   // uncapped — those users must not be sold a "limit" they do not have either.
-  const offers = (getAppInfo().channel !== "playstore" && catalogue?.purchasable && !ent.unlimited ? catalogue.plans : [])
+  const offers = (catalogue?.purchasable && !ent.unlimited ? catalogue.plans : [])
     .filter(
       (p) =>
         p.code !== "FREE" &&

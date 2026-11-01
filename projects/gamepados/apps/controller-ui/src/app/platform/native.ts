@@ -68,6 +68,12 @@ export interface AndroidBridge {
   // Fire-and-forget; the answer arrives on `window.onPurchaseResult`.
   // (Play Billing's methods were removed on 2026-09-30: Play sells nothing.)
   startRazorpayCheckout?(optionsJson: string): void;
+  // Google Play Billing: only the Play build (1.4.13+ with billing) has these. A purchase answers on
+  // `window.onPurchaseResult` as { status:"ok", provider:"play", purchaseToken, productId }. The phone
+  // never grants anything: the page forwards the token and the SERVER checks it with Google.
+  startPlayPurchase?(productId: string, userId: string): void;
+  restorePurchases?(): void;
+  acknowledgeIfServerCredited?(purchaseToken: string): void;
 
   /** Playtime: forward a capability ticket to the PC over the input socket.
    *  Present on every flavour — quota is not a store-specific concern. */
@@ -255,6 +261,36 @@ export function adPrivacyOptionsRequired(): boolean {
 
 export function showAdPrivacyOptions(): void {
   call("showAdPrivacyOptions", (b) => b.showAdPrivacyOptions!(), undefined);
+}
+
+/** True only in a Play build that carries Google Play Billing (an older Play build does not). */
+export function canBuyWithPlay(): boolean {
+  const b = bridge();
+  return !!b && typeof b.startPlayPurchase === "function";
+}
+
+/** Open Google Play's purchase sheet for `productId`. `userId` is hashed on the phone and stamped on the
+ *  purchase so the server can tell whose it is. False = this build cannot (no sheet was opened). */
+export function startPlayPurchase(productId: string, userId: string): boolean {
+  const b = bridge();
+  if (!b || typeof b.startPlayPurchase !== "function") return false;
+  try {
+    b.startPlayPurchase(productId, userId);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Ask Play to hand back anything this account already owns (a purchase that finished while the app
+ *  was closed). Answers arrive on `window.onPurchaseResult` like a new purchase. */
+export function restorePlayPurchases(): void {
+  call("restorePurchases", (b) => b.restorePurchases!(), undefined);
+}
+
+/** Safety net: acknowledge a purchase the server already credited but could not acknowledge itself. */
+export function acknowledgePlayPurchase(purchaseToken: string): void {
+  call("acknowledgeIfServerCredited", (b) => b.acknowledgeIfServerCredited!(purchaseToken), undefined);
 }
 
 /** Launch Razorpay's checkout sheet with an order created server-side. */
