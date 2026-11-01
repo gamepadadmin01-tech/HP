@@ -28,7 +28,7 @@ import { View, BtnId, DashTab, GamepadPreset, CustomPad, CustomBtnDef, WidgetTyp
 import { CustomPadEditor } from "./components/CustomPadEditor";
 import { FeatureIntroOverlay, recordIntroNav, introRated } from "./FeatureIntroOverlay";
 import { FEEDBACK_URL, initFeedbackSync, markFeedbackSent } from "./feedback";
-import { stickFeel, stickMaxOffset, applyStickCurve, applyStickGain, installStickFeelToggle } from "./stickFeel";
+import { stickFeel, stickMaxOffset, stickResponse, installStickFeelToggle } from "./stickFeel";
 // Connection state is a 4-way classification, not a boolean — a link that is
 // transmitting but never answered is NOT the same as one that is off. See
 // linkState.ts for why that distinction had to exist.
@@ -1320,21 +1320,11 @@ function ControllerScreen({ onBack, isActive: screenActive, activeMapping, custo
       lastGyroHitMax.current.x = isMax;
     }
     
+    // The response (deadzone, curve, sensitivity) lives in stickFeel.ts so a test can hold it equal to the
+    // phone engine's StickMath.response. gain is 1 for the left stick and the player's right-stick sensitivity.
     const processStick = (x: number, y: number, gain = 1) => {
-      const distance = Math.sqrt(x * x + y * y);
-      const deadzoneRadius = (8 / 100) * 60; // 8% default deadzone
-      if (distance >= deadzoneRadius && distance > 0) {
-        // applyStickCurve is the identity at exp 1 (the default), so this is
-        // byte-identical to the previous linear map unless the user opts in.
-        // Mirror of NativeInputEngine.radialDeadzone.
-        // gain is 1 for the left stick and the player's right-stick sensitivity for the right one.
-        const factor = applyStickGain(applyStickCurve((distance - deadzoneRadius) / (60 - deadzoneRadius)), gain);
-        return {
-          x: (x / distance) * factor * 60,
-          y: (y / distance) * factor * 60
-        };
-      }
-      return { x: 0, y: 0 };
+      const r = stickResponse(x, y, gain);
+      return { x: r.x * 60, y: r.y * 60 };
     };
 
     const finalLs = processStick(lx, ly);
@@ -2031,7 +2021,7 @@ function ControllerScreen({ onBack, isActive: screenActive, activeMapping, custo
                     svgRef={svgRef}
                     onStick={onPadStick}
                     onPress={() => { if (btn.haptic > 0) triggerHaptic(Math.round(btn.haptic / 2)); }}
-                    onRelease={() => playHaptic("buttonRelease")}
+                    onRelease={undefined /* no release click: a pad is swiped again and again; the landing tick is enough (native engine does the same) */}
                     onEdge={() => playHaptic("tick")}
                   />
                 );

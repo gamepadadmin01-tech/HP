@@ -124,6 +124,23 @@ export function applyStickCurve(factor: number): number {
   return exp === 1 ? factor : Math.pow(factor, exp);
 }
 
+/**
+ * The whole stick response in one place: circular deadzone, the curve, then the sensitivity gain.
+ * Input is the stick's position in design units (±STICK_MAX_R); output is the normalized -1..1 value that
+ * becomes the axis byte. App.tsx's packet builder calls this for BOTH sticks (gain 1 for the left one), and
+ * StickMath.response is its line-for-line mirror in the phone engine: a test replays the same inputs through
+ * both (stickFeel.test.mjs writes them, StickMathTest.kt reads them), so they cannot drift apart unseen.
+ */
+export function stickResponse(x: number, y: number, gain = 1, curveExp = stickFeel.curveExp): { x: number; y: number } {
+  const distance = Math.sqrt(x * x + y * y);
+  if (distance >= STICK_DEADZONE && distance > 0) {
+    const f = (distance - STICK_DEADZONE) / (STICK_MAX_R - STICK_DEADZONE);
+    const factor = applyStickGain(curveExp === 1 ? f : Math.pow(f, curveExp), gain);
+    return { x: (x / distance) * factor, y: (y / distance) * factor };
+  }
+  return { x: 0, y: 0 };
+}
+
 /** Install window.__setStickFeel. Returns a disposer. */
 export function installStickFeelToggle(onChange: () => void): () => void {
   onFeelChange = onChange;

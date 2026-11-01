@@ -54,8 +54,8 @@ class NativeInputEngine(private val activity: MainActivity) {
         const val K_BTN = 0; const val K_DPAD = 1; const val K_STICK = 2
         const val K_TRIG = 3; const val K_MODE = 4
         const val K_PAD = 5                  // touchpad: a finger slid on it pushes the RIGHT stick (TouchpadMath)
-        const val STICK_MAX_R = 60f          // useStick(60): knob travel in design units
-        const val STICK_DEADZONE = 0.08f * 60f  // processStick: 8% of 60
+        const val STICK_MAX_R = StickMath.MAX_R          // useStick(60): knob travel in design units
+        const val STICK_DEADZONE = StickMath.DEADZONE    // processStick: 8% of 60 (one definition: StickMath)
         const val TRIG_THRESHOLD = 0.85f     // hair-trigger: (100-15)/100
     }
 
@@ -602,7 +602,9 @@ class NativeInputEngine(private val activity: MainActivity) {
         rebuildMaskLocked()
         // Two-stage press+release feel (Widgets.tsx releaseHaptic) — pointerup only,
         // never on cancel; mode selectors don't give a release tick in JS either.
-        if (!cancelled && w.kind != K_MODE) haptic("buttonRelease")
+        // A touchpad is swiped again and again: one soft tick on landing is enough, a release click on
+        // every lift would double the buzzing (the page path omits it too: see the Touchpad in App.tsx).
+        if (!cancelled && w.kind != K_MODE && w.kind != K_PAD) haptic("buttonRelease")
     }
 
     /** Strict 4-way d-pad: single nearest cardinal, inner 28% deadzone (DpadBase.dirsAt). */
@@ -777,22 +779,9 @@ class NativeInputEngine(private val activity: MainActivity) {
         try { activity.injectPayload(p) } catch (e: Throwable) { /* engine not loaded */ }
     }
 
-    private fun radialDeadzone(x: Float, y: Float, gain: Float = 1f): Pair<Float, Float> {
-        val dist = hypot(x.toDouble(), y.toDouble()).toFloat()
-        if (dist < STICK_DEADZONE || dist <= 0f) return 0f to 0f
-        var factor = (dist - STICK_DEADZONE) / (STICK_MAX_R - STICK_DEADZONE)
-        // Radial response curve. Applied to MAGNITUDE only, so direction is untouched
-        // and the circular deadzone keeps its shape (a per-axis curve would reintroduce
-        // the diagonal drift the circular deadzone exists to prevent).
-        // curveExp 1.0 is the identity and reproduces the previous linear map exactly.
-        // Above 1.0 trades top-end travel — where a touch stick is already saturated —
-        // for near-centre resolution: at 1.6, 10% output needs ~1.9mm of thumb travel
-        // instead of ~0.66mm, roughly 3x the fine-aim precision.
-        // dist is clamped to STICK_MAX_R by the caller, so factor is always in [0,1].
-        if (curveExp != 1f) factor = factor.toDouble().pow(curveExp.toDouble()).toFloat()
-        factor = StickMath.applyGain(factor, gain)   // right-stick sensitivity; the left stick passes 1
-        return (x / dist * factor) to (y / dist * factor)
-    }
+    /** The stick response lives in StickMath.response (unit-tested against the page's stickResponse). */
+    private fun radialDeadzone(x: Float, y: Float, gain: Float = 1f): Pair<Float, Float> =
+        StickMath.response(x, y, gain, curveExp)
 
     private fun trigByte(fill: Float): Byte {
         val f = min(1f, fill / TRIG_THRESHOLD)
