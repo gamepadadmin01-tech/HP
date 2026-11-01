@@ -28,7 +28,7 @@ import { View, BtnId, DashTab, GamepadPreset, CustomPad, CustomBtnDef, WidgetTyp
 import { CustomPadEditor } from "./components/CustomPadEditor";
 import { FeatureIntroOverlay, recordIntroNav, introRated } from "./FeatureIntroOverlay";
 import { FEEDBACK_URL, initFeedbackSync, markFeedbackSent } from "./feedback";
-import { stickFeel, stickMaxOffset, applyStickCurve, installStickFeelToggle } from "./stickFeel";
+import { stickFeel, stickMaxOffset, applyStickCurve, applyStickGain, installStickFeelToggle } from "./stickFeel";
 // Connection state is a 4-way classification, not a boolean — a link that is
 // transmitting but never answered is NOT the same as one that is off. See
 // linkState.ts for why that distinction had to exist.
@@ -1320,14 +1320,15 @@ function ControllerScreen({ onBack, isActive: screenActive, activeMapping, custo
       lastGyroHitMax.current.x = isMax;
     }
     
-    const processStick = (x: number, y: number) => {
+    const processStick = (x: number, y: number, gain = 1) => {
       const distance = Math.sqrt(x * x + y * y);
       const deadzoneRadius = (8 / 100) * 60; // 8% default deadzone
       if (distance >= deadzoneRadius && distance > 0) {
         // applyStickCurve is the identity at exp 1 (the default), so this is
         // byte-identical to the previous linear map unless the user opts in.
         // Mirror of NativeInputEngine.radialDeadzone.
-        const factor = applyStickCurve((distance - deadzoneRadius) / (60 - deadzoneRadius));
+        // gain is 1 for the left stick and the player's right-stick sensitivity for the right one.
+        const factor = applyStickGain(applyStickCurve((distance - deadzoneRadius) / (60 - deadzoneRadius)), gain);
         return {
           x: (x / distance) * factor * 60,
           y: (y / distance) * factor * 60
@@ -1337,7 +1338,7 @@ function ControllerScreen({ onBack, isActive: screenActive, activeMapping, custo
     };
 
     const finalLs = processStick(lx, ly);
-    const finalRs = processStick(rx, ry);
+    const finalRs = processStick(rx, ry, stickFeel.rightGain);
 
     // Center on 128 (true neutral for a 0-255 axis). At rest finalLs/Rs = 0 →
     // exactly 128, so the PC's virtual stick sits dead-center and the Windows
@@ -1566,6 +1567,7 @@ function ControllerScreen({ onBack, isActive: screenActive, activeMapping, custo
         // caused 26d5368.
         stickFollow: stickFeel.follow,
         curveExp: stickFeel.curveExp,
+        rightGain: stickFeel.rightGain,
         hapticsEnabled: (window as any).hapticsEnabled !== false,
       });
     };

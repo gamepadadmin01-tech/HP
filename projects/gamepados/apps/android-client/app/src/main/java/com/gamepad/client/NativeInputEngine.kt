@@ -121,6 +121,7 @@ class NativeInputEngine(private val activity: MainActivity) {
     // never made — see pressLocked).
     private var stickFollow = true
     private var curveExp = 1f
+    private var rightGain = 1f               // right-stick sensitivity (StickMath); 1 = unchanged
 
     // Gyro config (pushed from JS; zero captured natively on calibrate)
     @Volatile private var gyroOn = false
@@ -198,7 +199,8 @@ class NativeInputEngine(private val activity: MainActivity) {
             append(o.optJSONArray("widgets")?.toString()); append('|')
             append(o.optString("stickMode")); append('|')
             append(o.optBoolean("stickFollow", true)); append('|')
-            append(o.optDouble("curveExp", 1.0))
+            append(o.optDouble("curveExp", 1.0)); append('|')
+            append(o.optDouble("rightGain", 1.0))
         }
         if (sig == lastGeometrySig && haveMatrix) {
             val exArr = o.optJSONArray("exclusions") ?: JSONArray()
@@ -273,6 +275,7 @@ class NativeInputEngine(private val activity: MainActivity) {
             // Clamped: below 1 would amplify near-centre movement (twitchier than
             // linear, never what anyone wants here); above 3 is unusable.
             curveExp = o.optDouble("curveExp", curveExp.toDouble()).toFloat().coerceIn(1f, 3f)
+            rightGain = StickMath.clampGain(o.optDouble("rightGain", rightGain.toDouble()).toFloat())
             hapticsEnabled = o.optBoolean("hapticsEnabled", hapticsEnabled)
             clearAllInputLocked()
         }
@@ -730,7 +733,7 @@ class NativeInputEngine(private val activity: MainActivity) {
             }
             val rm = hypot(rx.toDouble(), ry.toDouble()).toFloat()
             if (rm > STICK_MAX_R) { rx = rx / rm * STICK_MAX_R; ry = ry / rm * STICK_MAX_R }
-            val (x, y) = radialDeadzone(rx, ry); rsXn = x; rsYn = y
+            val (x, y) = radialDeadzone(rx, ry, rightGain); rsXn = x; rsYn = y
         }
 
         // Gyro merged AFTER the deadzone — identical formula + signs to the JS
@@ -774,7 +777,7 @@ class NativeInputEngine(private val activity: MainActivity) {
         try { activity.injectPayload(p) } catch (e: Throwable) { /* engine not loaded */ }
     }
 
-    private fun radialDeadzone(x: Float, y: Float): Pair<Float, Float> {
+    private fun radialDeadzone(x: Float, y: Float, gain: Float = 1f): Pair<Float, Float> {
         val dist = hypot(x.toDouble(), y.toDouble()).toFloat()
         if (dist < STICK_DEADZONE || dist <= 0f) return 0f to 0f
         var factor = (dist - STICK_DEADZONE) / (STICK_MAX_R - STICK_DEADZONE)
@@ -787,6 +790,7 @@ class NativeInputEngine(private val activity: MainActivity) {
         // instead of ~0.66mm, roughly 3x the fine-aim precision.
         // dist is clamped to STICK_MAX_R by the caller, so factor is always in [0,1].
         if (curveExp != 1f) factor = factor.toDouble().pow(curveExp.toDouble()).toFloat()
+        factor = StickMath.applyGain(factor, gain)   // right-stick sensitivity; the left stick passes 1
         return (x / dist * factor) to (y / dist * factor)
     }
 

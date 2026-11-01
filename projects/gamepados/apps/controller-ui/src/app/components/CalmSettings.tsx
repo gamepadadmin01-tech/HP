@@ -1,7 +1,8 @@
 import React, { useEffect, useId, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { WHEEL_RANGES, clampWheelRange } from "../store/prefs";
-import { Gauge, Vibrate, Cpu } from "lucide-react";
+import { Gauge, Vibrate, Cpu, Crosshair } from "lucide-react";
+import { stickFeel, setRightGain, RIGHT_GAIN_MIN, RIGHT_GAIN_MAX } from "../stickFeel";
 
 export interface CalmSettingsProps {
   children?: React.ReactNode;
@@ -26,11 +27,25 @@ export function CalmSwitch({label, detail, on, onChange}: {label:string; detail?
   </div>;
 }
 
-function Range({label, detail, min, max, value, onChange}: {label:string;detail:string;min:number;max:number;value:number;onChange:(n:number)=>void}) {
+function Range({label, detail, min, max, value, onChange, step = 1, unit = "°"}: {label:string;detail:string;min:number;max:number;value:number;onChange:(n:number)=>void;step?:number;unit?:string}) {
   const id=useId();
-  return <div className="calm-range"><div><label htmlFor={id}>{label}</label><output htmlFor={id}>{value}°</output></div>
-    <input data-testid={`${label.toLowerCase().replace(/\s+/g, '-')}-slider`} id={id} type="range" min={min} max={max} step={1} value={value} aria-describedby={`${id}-detail`} aria-valuetext={`${value} degrees`} onChange={e=>onChange(Number(e.target.value))} />
+  return <div className="calm-range"><div><label htmlFor={id}>{label}</label><output htmlFor={id}>{value}{unit}</output></div>
+    <input data-testid={`${label.toLowerCase().replace(/\s+/g, '-')}-slider`} id={id} type="range" min={min} max={max} step={step} value={value} aria-describedby={`${id}-detail`} aria-valuetext={unit === "°" ? `${value} degrees` : `${value}${unit}`} onChange={e=>onChange(Number(e.target.value))} />
     <p id={`${id}-detail`}>{detail}</p></div>;
+}
+
+/** Right stick sensitivity (a customer asked for it). Talks to the shared stick-feel store directly, so the
+ *  page's packet builder and the phone's touch engine both pick the new value up (see stickFeel.ts). */
+function RightStickSensitivity() {
+  const [pct, setPct] = useState(() => Math.round(stickFeel.rightGain * 100));
+  const set = (v: number) => { setPct(v); setRightGain(v / 100); };
+  return <>
+    <Range label="Right stick sensitivity" min={Math.round(RIGHT_GAIN_MIN * 100)} max={Math.round(RIGHT_GAIN_MAX * 100)} step={5} unit="%" value={pct} onChange={set}
+      detail="Lower this if the camera turns too fast, even when the game's own sensitivity is at its lowest. Higher reaches full speed with less thumb travel. It applies to the on-screen right stick and the touchpad; tilt aim has its own setting above." />
+    <div className="calm-segment" role="group" aria-label="Right stick sensitivity presets">
+      {[50, 75, 100, 150].map((v) => <button key={v} aria-pressed={pct === v} onClick={() => set(v)}>{v === 100 ? "Normal 100%" : v + "%"}</button>)}
+    </div>
+  </>;
 }
 
 export function CalmSettings(p:CalmSettingsProps) {
@@ -67,6 +82,9 @@ export function CalmSettings(p:CalmSettingsProps) {
         {p.gyroMode==="racing" && <CalmSwitch label="Tilt throttle" detail="Tilt forward to accelerate and back to brake (left-stick Y)." on={p.gyroThrottle} onChange={p.setGyroThrottle}/>}
         <CalmSwitch label="Pause when laid flat" detail="Pauses tilt while the phone rests flat. Switch off for continuous motion input." on={p.gyroIdleDetect} onChange={p.setGyroIdleDetect}/>
       </motion.div>}</AnimatePresence>
+    </div></section>
+    <section data-tone="blue" className="calm-settings-section"><h2><Crosshair size={15} />Aim</h2><div className="calm-settings-panel">
+      <RightStickSensitivity />
     </div></section>
     <section data-tone="violet" className="calm-settings-section"><h2><Vibrate size={15} />Feel</h2><div className="calm-settings-panel">
       <CalmSwitch label="App vibration" detail="Feedback for button presses and full-turn bumps." on={p.gyroHaptic} onChange={p.setGyroHaptic}/>

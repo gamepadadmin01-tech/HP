@@ -505,3 +505,10 @@ Automated: controller-ui/transport-switch.test.mjs (13 regression cases). Physic
 
 ## Cold-launch dashboard transitions (2026-09-21)
 Root AnimatePresence initial=false suppressed all newly mounted tab animations for the lifetime of the first dashboard. Visiting Connect replaced its presence context, masking the bug. Keep root presence initial enabled; native first Home uses explicit settled opacity/position only. Run apps/controller-ui/cold-tab-motion.test.mjs against Vite on 127.0.0.1:5187: frame samples must contain intermediate opacity values on the first Settings/Account/Home switches, before any Connect visit, and after returning. Reduced-motion must remain instant. startup-back.test.mjs checks native first Home remains fully visible under the splash; motion-polish.test.mjs checks one route layer and stable cards.
+## Right stick sensitivity and the touchpad (added 2026-11-02, phone test)
+
+- [ ] Settings > Aim: the slider starts at **Normal 100%**; with it untouched the right stick feels exactly as before.
+- [ ] Set it to 50%: in a game, pushing the right stick fully turns the camera about half as fast. Set 150%: full speed arrives with less thumb travel. Both with native input ON and OFF.
+- [ ] The same value applies to the touchpad; tilt aim (3D mode) is not changed by this slider.
+- [ ] Touchpad: idle pad is clean glass (no ring, arrows or words). Edit it: Shape > Circle gives one Diameter slider; touches in the corners of a circle do nothing; Rectangle takes the whole box.
+- [ ] Touchpad + left stick at the same time; lift the finger: the camera stops (instant) or eases (glide).
