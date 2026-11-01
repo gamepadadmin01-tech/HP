@@ -5,6 +5,9 @@ import { useShellAppearance } from "./CalmShell";
 import { ShellMotion } from "./ShellMotion";
 import { CustomPad, CustomBtnDef, WidgetType } from "../types";
 import { RED_NORM, ACCENT_RGB, buttonText } from "./Widgets";
+import { TouchpadArt } from "./Touchpad";
+import { TouchpadSettings } from "./TouchpadSettings";
+import { touchpadSize } from "../touchpad";
 
 // ── Custom pointer-driven slider ──────────────────────────────────────────────
 // Native <input type="range"> does NOT drag reliably inside this editor: the
@@ -80,7 +83,7 @@ const KNOWN_BUTTON_LABELS = new Set([
 // "stickmode" is the Hybrid-stick axis selector (labels "L-Mod"/"R-Mod"); the
 // gameplay engine handles it by TYPE, not label, so it must be here or the editor
 // falsely warns "won't register in games" about a working palette widget.
-const SELF_MAPPED_TYPES = new Set(["dpad", "abxy", "thumbstick", "trigger", "stickmode"]);
+const SELF_MAPPED_TYPES = new Set(["dpad", "abxy", "thumbstick", "trigger", "stickmode", "touchpad"]);
 
 // ── Editor canvas matches the controller's virtual space ──────────────────────
 const CANVAS_W = 1280;
@@ -100,6 +103,7 @@ const DEFAULT_R: Record<WidgetType, number> = {
   dpad: 120,
   abxy: 140,
   stickmode: 40,
+  touchpad: 100,      // default footprint 360 x 220 (touchpadSize)
 };
 
 const FACE = {
@@ -113,6 +117,10 @@ const FACE = {
 // MUST mirror the gameplay render in App.tsx.
 function widgetBox(b: CustomBtnDef) {
   const r = b.r;
+  if (b.type === "touchpad") {
+    const { w, h } = touchpadSize(b);
+    return { x: b.x - w / 2, y: b.y - h / 2, w, h };
+  }
   if (b.type === "trigger") {
     const w = b.w ?? r * 2;
     const h = b.h ?? r * 5.85;
@@ -220,6 +228,12 @@ const WidgetPreview = React.memo(function WidgetPreview({ b }: { b: CustomBtnDef
     );
   }
 
+  if (b.type === "touchpad") {
+    // The same art the live pad uses (idle state), so the editor shows exactly what players get.
+    const { w, h } = touchpadSize(b);
+    return <TouchpadArt id={b.uid} x={x} y={y} w={w} h={h} label={b.label === "Touchpad" ? undefined : b.label} />;
+  }
+
   if (b.type === "trigger") {
     const w = b.w ?? r * 2;
     const h = b.h ?? r * 5.85;
@@ -294,6 +308,8 @@ const ADD_ITEMS: { type: WidgetType; label: string; tag: string; r?: number }[] 
   { type: "thumbstick", label: "LS", tag: "L Stick" },
   { type: "thumbstick", label: "RS", tag: "R Stick" },
   { type: "thumbstick", label: "Hybrid", tag: "Hybrid" },
+  // Slide a finger to push the right stick, like a laptop trackpad
+  { type: "touchpad", label: "Touchpad", tag: "Touchpad", r: 100 },
   // Hybrid-stick mode selectors (switch which axis the Hybrid stick drives)
   { type: "stickmode", label: "L-Mod", tag: "L-Mode", r: 40 },
   { type: "stickmode", label: "R-Mod", tag: "R-Mode", r: 40 },
@@ -319,7 +335,7 @@ const ADD_ITEMS: { type: WidgetType; label: string; tag: string; r?: number }[] 
 
 // Per-type preview radius inside the 140×140 swatch viewBox.
 const previewR = (type: WidgetType) =>
-  type === "trigger" ? 22 : type === "abxy" ? 60 : 52;
+  type === "trigger" ? 22 : type === "abxy" ? 60 : type === "touchpad" ? 30 : 52;
 
 export function CustomPadEditor({
   pad,
@@ -509,7 +525,7 @@ export function CustomPadEditor({
     const newBtn: CustomBtnDef = {
       uid: `cb${Date.now()}`,
       type,
-      shape: type === "trigger" ? "rect" : "circle",
+      shape: type === "trigger" || type === "touchpad" ? "rect" : "circle",
       opacity: 1,
       haptic: 60,
       macroBits: [],
@@ -712,7 +728,13 @@ export function CustomPadEditor({
               </label>
             )}
 
-            {!isCustomSize ? (
+            {selectedBtn.type === "touchpad" ? (
+              <TouchpadSettings
+                b={selectedBtn}
+                update={queueResize}
+                slider={(value, min, max, onChange) => <RangeSlider min={min} max={max} value={value} onChange={onChange} />}
+              />
+            ) : !isCustomSize ? (
               <div className="flex flex-col gap-1">
                 <span className="text-[10px] uppercase font-bold text-zinc-500 tracking-wider">Size</span>
                 <RangeSlider min={40} max={320} value={selectedBtn.r}

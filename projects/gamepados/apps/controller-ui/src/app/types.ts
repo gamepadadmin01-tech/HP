@@ -26,7 +26,10 @@ export type PosOverrideMap = Partial<Record<string, BtnPosOverride>>;
 //    abxy  → emits  uid_a / uid_b / uid_x / uid_y
 //  LT/RT are always two independent "trigger" widgets — the legacy "ltrt"
 //  compound was removed; splitLegacyLtrt() in App.tsx migrates saved pads.
-export type WidgetType = "button" | "thumbstick" | "trigger" | "macro" | "dpad" | "abxy" | "stickmode";
+//  touchpad → a rectangle where a sliding finger pushes the RIGHT stick like a laptop trackpad
+//             (rules: touchpad.ts, mirrored natively by TouchpadMath.kt). Pads saved before it
+//             existed have none, and an older app that imports one shows it as a dead button.
+export type WidgetType = "button" | "thumbstick" | "trigger" | "macro" | "dpad" | "abxy" | "stickmode" | "touchpad";
 export type WidgetShape = "circle" | "rect" | "cluster";
 
 // Optional responsive anchor. Used ONLY by the standard preset so its widgets
@@ -53,6 +56,12 @@ export type CustomBtnDef = {
   // instantly gives full 100%, like a regular button. Default true preserves the
   // existing analog behavior for pads saved before this option existed.
   analogTrigger?: boolean;
+  // Touchpad widgets only (undefined everywhere else). Read through cleanTouchpadOptions() in
+  // touchpad.ts, so a missing or odd value always becomes the recommended default
+  // (speed / instant / 1). tpFeel: "speed" | "distance"; tpRelease: "instant" | "glide"; tpSens 0.3-3.
+  tpFeel?: "speed" | "distance";
+  tpRelease?: "instant" | "glide";
+  tpSens?: number;
   normColor: string;
   heldColor: string;
   groupId?: string;

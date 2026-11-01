@@ -1,0 +1,158 @@
+// Run: node touchpad-dom.test.mjs
+// Renders the real <Touchpad> in headless Chrome, drives it with a real mouse (which Chrome turns
+// into pointer events) and checks BOTH what it pushes on the right stick AND what it draws.
+// Also feeds it the same messages the Android engine sends, to check the native animation path.
+import assert from "node:assert/strict";
+import { build } from "esbuild";
+import puppeteer from "puppeteer";
+
+const entry = `
+import React from "react";
+import { createRoot } from "react-dom/client";
+import { Touchpad } from "./src/app/components/Touchpad";
+import { applyNativePadVisuals } from "./src/app/touchpadVisual";
+const log = []; window.__log = log; window.__apply = applyNativePadVisuals;
+const q = new URLSearchParams(location.search);
+function App() {
+  const ref = React.useRef(null);
+  return (
+    <svg ref={ref} id="s" viewBox="0 0 1280 570" width="1280" height="570" style={{ background: "#111", display: "block" }}>
+      <Touchpad id="tp1" x={640} y={285} w={400} h={240} svgRef={ref}
+        feel={q.get("feel") || undefined} release={q.get("release") || undefined} sens={q.get("sens") ? +q.get("sens") : undefined}
+        onStick={(id, x, y) => log.push([x, y])} onPress={() => log.push("press")}
+        onRelease={() => log.push("release")} onEdge={() => log.push("edge")} />
+    </svg>
+  );
+}
+createRoot(document.getElementById("root")).render(<App />);
+`;
+
+const out = await build({
+  stdin: { contents: entry, resolveDir: new URL(".", import.meta.url).pathname.replace(/^\/(\w:)/, "$1"), loader: "tsx", sourcefile: "entry.tsx" },
+  bundle: true, write: false, format: "iife", jsx: "automatic", platform: "browser", logLevel: "silent",
+  define: { "process.env.NODE_ENV": '"production"' },
+});
+const html = `<!doctype html><meta charset="utf-8"><body style="margin:0"><div id="root"></div><script>${out.outputFiles[0].text.replace(/<\/script>/g, "<\\/script>")}</script>`;
+
+const browser = await puppeteer.launch({ executablePath: "C:/Program Files/Google/Chrome/Application/chrome.exe", headless: true });
+const errors = [];
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+async function fresh(query = "") {
+  const page = await browser.newPage();
+  page.on("pageerror", (e) => errors.push(e.message));
+  page.on("console", (m) => { if (m.type() === "error") errors.push(m.text()); });
+  await page.setViewport({ width: 1280, height: 570 });
+  // serve the page from an http-like origin so query strings work
+  await page.setRequestInterception(true);
+  page.on("request", (r) => r.url().startsWith("http://pad.test/") ? r.respond({ status: 200, contentType: "text/html", body: html }) : r.abort());
+  await page.goto("http://pad.test/?" + query);
+  await page.waitForSelector("svg#s");
+  return page;
+}
+const state = (page) => page.evaluate(() => {
+  const svg = document.getElementById("s");
+  const act = svg.querySelector("g[style*='transition: opacity']");
+  const groups = [...svg.querySelectorAll("g")];
+  const active = groups.find((g) => g.style.opacity !== "" && g.style.pointerEvents === "none" && g.querySelector("circle[r='58']"));
+  const hint = svg.querySelector('[data-tp="hint"]');
+  const dot = svg.querySelector("circle[r='58']")?.parentElement?.parentElement;
+  const last = window.__log.filter(Array.isArray).slice(-1)[0] || null;
+  return {
+    activeOpacity: active ? active.style.opacity : null,
+    hintOpacity: hint ? hint.style.opacity : null,
+    dotTransform: dot ? dot.style.transform : null,
+    patternShift: svg.querySelector("pattern")?.getAttribute("patternTransform") || null,
+    last, count: window.__log.filter(Array.isArray).length, events: window.__log.filter((x) => typeof x === "string"),
+  };
+});
+async function swipe(page, x0, y0, dx, dy, steps, gap = 16) {
+  await page.mouse.move(x0, y0); await page.mouse.down();
+  for (let i = 1; i <= steps; i++) { await page.mouse.move(x0 + dx * i, y0 + dy * i); await sleep(gap); }
+}
+
+try {
+  // ── idle: the hint is showing, nothing live is drawn
+  {
+    const p = await fresh();
+    const s = await state(p);
+    assert.equal(s.activeOpacity, "0", "idle: the live layer is hidden");
+    assert.notEqual(s.hintOpacity, "0", "idle: the hint is visible");
+    await p.close();
+  }
+
+  // ── speed feel (the recommended default): a fast swipe right pushes the stick right, a stop lets it go home
+  {
+    const p = await fresh();
+    await swipe(p, 560, 285, 22, 0, 12);
+    let s = await state(p);
+    assert.ok(s.last && s.last[0] > 30, `fast swipe right pushes the stick right (got ${s.last && s.last[0]})`);
+    assert.ok(Math.abs(s.last[1]) < 6, "a straight swipe has no sideways push");
+    assert.equal(s.activeOpacity, "1", "touching shows the live layer");
+    assert.equal(s.hintOpacity, "0", "touching hides the hint");
+    assert.ok(/translate\(/.test(s.dotTransform) && !/translate\(640px, 285px\)/.test(s.dotTransform), "the finger dot follows the finger");
+    assert.ok(s.patternShift && /translate\(/.test(s.patternShift), "the dot grid slides under the finger");
+    assert.ok(s.events.includes("press"), "the press haptic fired once on landing");
+    await sleep(450);                                             // finger rests, still down
+    s = await state(p);
+    assert.ok(Math.abs(s.last[0]) < 4, `a resting finger lets the stick go home by itself (got ${s.last[0]})`);
+    await p.mouse.up();
+    await sleep(100);
+    s = await state(p);
+    assert.deepEqual(s.last, [0, 0], "lifting leaves the stick at centre");
+    assert.ok(s.events.includes("release"), "the release haptic fired");
+    await sleep(350);
+    s = await state(p);
+    assert.equal(s.activeOpacity, "0", "everything fades out after the lift");
+    assert.notEqual(s.hintOpacity, "0", "the hint comes back");
+    await p.close();
+  }
+
+  // ── distance feel + glide: pushed by distance, holds while resting, eases home after lifting
+  {
+    const p = await fresh("feel=distance&release=glide");
+    await p.mouse.move(600, 285); await p.mouse.down();
+    await p.mouse.move(645, 285); await sleep(60); await p.mouse.move(645, 285);
+    await sleep(250);
+    let s = await state(p);
+    assert.ok(s.last[0] > 25 && s.last[0] < 35, `45 units of drag is about half a push (got ${s.last[0]})`);
+    await p.mouse.up();
+    await sleep(40);
+    s = await state(p);
+    assert.ok(s.last[0] > 0 && s.last[0] < 30, `glide: the stick eases down rather than snapping (got ${s.last[0]})`);
+    await sleep(900);
+    s = await state(p);
+    assert.deepEqual(s.last, [0, 0], "glide ends exactly at centre");
+    await p.close();
+  }
+
+  // ── sensitivity: higher pushes harder for the same swipe
+  {
+    const lo = await fresh("sens=0.5"); await swipe(lo, 560, 285, 10, 0, 10); const a = (await state(lo)).last[0]; await lo.mouse.up(); await lo.close();
+    const hi = await fresh("sens=2.5"); await swipe(hi, 560, 285, 10, 0, 10); const b = (await state(hi)).last[0]; await hi.mouse.up(); await hi.close();
+    assert.ok(b > a, `higher sensitivity pushes harder (${a} vs ${b})`);
+  }
+
+  // ── native feed: the Android engine sends finger positions; the page only draws them
+  {
+    const p = await fresh();
+    await p.evaluate(() => window.__apply([["tp1", 700, 300, 30, 0]]));
+    let s = await state(p);
+    assert.equal(s.activeOpacity, "1", "native feed: the live layer shows");
+    assert.ok(/700px, 300px/.test(s.dotTransform), `native feed: the dot is at the finger (${s.dotTransform})`);
+    await p.evaluate(() => window.__apply([["tp1", 710, 300, 45, 0]]));
+    s = await state(p);
+    assert.ok(/710px, 300px/.test(s.dotTransform), "native feed: the dot follows");
+    await p.evaluate(() => window.__apply([]));
+    await sleep(350);
+    s = await state(p);
+    assert.equal(s.activeOpacity, "0", "native feed: an empty list sends the pad idle");
+    await p.evaluate(() => window.__apply(undefined));          // an old message with no pad list must be harmless
+    assert.equal(s.count, 0, "the native feed pushed nothing onto the stick (the engine does that itself)");
+    await p.close();
+  }
+
+  assert.deepEqual(errors, [], "no console or page errors");
+  console.log("touchpad-dom.test.mjs — all assertions passed");
+} finally {
+  await browser.close();
+}

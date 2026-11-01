@@ -36,6 +36,13 @@ const GLIDE_TAU = 0.08;               // seconds: the "glide" return after lifti
 const MIN_DT = 0.004;                 // seconds: floor on the time between two moves (stops speed spikes)
 const ZERO_EPS = 0.5;                 // design units: below this a gliding stick counts as centred
 
+/** The pad's footprint in design units. A touchpad is stored like a trigger: centre x/y, optional
+ *  w/h, and a radius `r` that only sets the default shape (3.6 : 2.2, a laptop-trackpad-ish slab).
+ *  ONE definition for the editor, the page and the native geometry export, so they never disagree. */
+export function touchpadSize(b: { r: number; w?: number; h?: number }): { w: number; h: number } {
+  return { w: b.w ?? b.r * 3.6, h: b.h ?? b.r * 2.2 };
+}
+
 /** Clamp whatever a saved pad says into the range the pad understands. */
 export function cleanTouchpadOptions(o: { feel?: unknown; release?: unknown; sens?: unknown }) {
   const feel: TouchpadFeel = o.feel === "distance" ? "distance" : "speed";
@@ -67,6 +74,18 @@ export class TouchpadState {
    *  the caller keeps ticking until this is false. */
   get active(): boolean {
     return this.held || Math.abs(this.x) > 0 || Math.abs(this.y) > 0;
+  }
+
+  /** Where the finger first touched / where it is now — for the pad's visuals only. */
+  get originX(): number { return this.ox; }
+  get originY(): number { return this.oy; }
+  get fingerX(): number { return this.lx; }
+  get fingerY(): number { return this.ly; }
+
+  /** Forget everything (the pad was swapped, or the screen lost the touch). */
+  reset(): void {
+    this.held = false;
+    this.x = 0; this.y = 0; this.vx = 0; this.vy = 0;
   }
 
   down(x: number, y: number, t: number): void {

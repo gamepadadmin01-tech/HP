@@ -184,6 +184,25 @@ function makeDefaultPad(padId: string, templateKey: string = "standard", name?: 
       btn("MAP",   560,  90, 34),
       btn("MENU",  700,  90, 34),
     ];
+  } else if (templateKey === "touchpad") {
+    // "Touchpad Camera": the sample pad that shows what the Touchpad widget is for. Movement on the
+    // left thumb, camera on the right thumb as a trackpad (recommended settings: speed + instant),
+    // buttons round the edges. The pad's own idle animation (breathing ring, nudging arrows, "RIGHT
+    // STICK") is the how-to, so there is no separate tutorial to dismiss.
+    const sized = (b: CustomBtnDef, w: number, h: number): CustomBtnDef => ({ ...b, w, h });
+    buttonsList = [
+      btn("LS", 210, 420, 80, "thumbstick"),
+      btn("DPAD", 330, 165, 80, "dpad"),
+      btn("ABXY", 1000, 140, 85, "abxy"),
+      sized(btn("LT", 70, 330, 48, "trigger", "rect"), 90, 200),
+      sized(btn("RT", 1210, 330, 48, "trigger", "rect"), 90, 200),
+      btn("LB", 190, 80, 44),
+      btn("RB", 1170, 80, 44),
+      btn("view", 480, 60, 32),
+      btn("home", 640, 60, 32),
+      btn("menu", 800, 60, 32),
+      sized(btn("Touchpad", 880, 400, 100, "touchpad", "rect"), 440, 260),
+    ];
   } else if (templateKey === "blank") {
     buttonsList = [];
   } else {
@@ -192,7 +211,7 @@ function makeDefaultPad(padId: string, templateKey: string = "standard", name?: 
   
   return {
     padId,
-    name: name || (templateKey === "fps" ? "FPS Pro Layout" : templateKey === "fighter" ? "Fighter Arcade" : templateKey === "racing" ? "Racing Layout" : templateKey === "rpg" ? "RPG Adventure" : templateKey === "blank" ? "Blank Canvas" : "My Custom Pad"),
+    name: name || (templateKey === "fps" ? "FPS Pro Layout" : templateKey === "fighter" ? "Fighter Arcade" : templateKey === "racing" ? "Racing Layout" : templateKey === "rpg" ? "RPG Adventure" : templateKey === "touchpad" ? "Touchpad Camera" : templateKey === "blank" ? "Blank Canvas" : "My Custom Pad"),
     color: CUSTOM_COLORS[Math.floor(Math.random() * CUSTOM_COLORS.length)],
     buttons: buttonsList
   };
@@ -227,6 +246,7 @@ export function hapticForRole(type: string, label?: string): number {
   const l = (label || "").trim().toUpperCase();
   if (type === "trigger") return 45;                                                  // medium click (a touch, not a long pull)
   if (type === "dpad") return 22;                                                     // light
+  if (type === "touchpad") return 30;                                                 // one soft tick when the finger lands
   if (["↑", "↓", "←", "→", "UP", "DOWN", "LEFT", "RIGHT"].includes(l)) return 22;     // light d-pad
   if (["VIEW", "MENU", "HOME", "START", "SELECT", "BACK", "OPTIONS"].includes(l)) return 18; // light system
   if (["LB", "RB", "L1", "R1"].includes(l)) return 45;                                // medium bumper
@@ -409,6 +429,9 @@ function useStick(maxR: number, svgRef: React.RefObject<SVGSVGElement | null>, o
 }
 
 import { Btn, Dpad, RightStick, TriggerPill, RED_NORM, RED_HELD, ACCENT_RGB, buttonText } from "./components/Widgets";
+import { Touchpad } from "./components/Touchpad";
+import { touchpadSize, cleanTouchpadOptions } from "./touchpad";
+import { applyNativePadVisuals } from "./touchpadVisual";
 
 // ─── Gyro indicator material ─────────────────────────────────────────────────
 // SMOKED GLASS, matching the pad buttons. The bar used to be a solid #2CAABA
@@ -525,6 +548,12 @@ function buildNativeGeometry(pad: CustomPad): any[] {
       const up = btn.label.toUpperCase();
       const which = (up.startsWith("HYBRID") || up === "STICK") ? "H" : (up.startsWith("L") ? "L" : "R");
       widgets.push({ k: "stick", x: btn.x, y: btn.y, r: btn.r, which, vis: btn.uid, hap });
+    } else if (btn.type === "touchpad") {
+      // Right-stick touchpad (rules in touchpad.ts, mirrored by TouchpadMath.kt). The native engine
+      // runs the same maths; the three settings travel with the geometry so the two cannot drift.
+      const { w, h } = touchpadSize(btn);
+      const o = cleanTouchpadOptions({ feel: btn.tpFeel, release: btn.tpRelease, sens: btn.tpSens });
+      widgets.push({ k: "pad", x: btn.x, y: btn.y, w, h, vis: btn.uid, feel: o.feel, release: o.release, sens: o.sens, hap });
     } else if (btn.type === "stickmode") {
       widgets.push({ k: "mode", x: btn.x, y: btn.y, r: btn.r, mode: btn.label === "R-Mod" ? "R" : "L", hap });
     } else if (btn.type === "trigger") {
@@ -1106,6 +1135,15 @@ function ControllerScreen({ onBack, isActive: screenActive, activeMapping, custo
   }, []);
   const rstick = useStick(60, svgRef, () => sendTelemetryRef.current());
   const lstick = useStick(60, svgRef, () => sendTelemetryRef.current());
+  // What each touchpad widget is pushing on the RIGHT stick right now (page-side touch only; with
+  // native input on, the Android engine adds the same thing itself). Added to the real stick in the
+  // packet builder below, so a thumbstick and a touchpad can be used together.
+  const padSticksRef = useRef(new Map<string, { x: number; y: number }>());
+  const onPadStick = useCallback((uid: string, x: number, y: number) => {
+    if (x === 0 && y === 0) padSticksRef.current.delete(uid);
+    else padSticksRef.current.set(uid, { x, y });
+    sendTelemetryRef.current();
+  }, []);
   const stickModeRef = useRef<"L" | "R">("L");
   const [stickMode, setStickMode] = useState<"L" | "R">("L");
   const selectStickMode = useCallback((mode: "L" | "R") => {
@@ -1262,6 +1300,13 @@ function ControllerScreen({ onBack, isActive: screenActive, activeMapping, custo
     // Right Stick X/Y with Circular Deadzone outer mapping
     let rx = rstick.posRef.current.x;
     let ry = rstick.posRef.current.y;
+    // Touchpad widgets push the right stick too. Summed, then held inside the stick's circle.
+    // Mirror of NativeInputEngine.buildAndInjectLocked.
+    if (padSticksRef.current.size) {
+      padSticksRef.current.forEach((p) => { rx += p.x; ry += p.y; });
+      const rm = Math.hypot(rx, ry);
+      if (rm > 60) { rx = (rx / rm) * 60; ry = (ry / rm) * 60; }
+    }
     
     // Left Stick X/Y from the left thumbstick touch (movement).
     let lx = lstick.posRef.current.x;
@@ -1601,6 +1646,7 @@ function ControllerScreen({ onBack, isActive: screenActive, activeMapping, custo
         if (lstick.knobRef.current) lstick.knobRef.current.style.transform = `translate(${v.lx || 0}px, ${v.ly || 0}px)`;
         if (rstick.knobRef.current) rstick.knobRef.current.style.transform = `translate(${v.rx || 0}px, ${v.ry || 0}px)`;
         if (v.m && v.m !== stickModeRef.current) selectStickMode(v.m === "R" ? "R" : "L");
+        applyNativePadVisuals(v.p);   // touchpad finger/ripple animation: draws straight onto SVG, no React state
       } catch {}
     };
     return () => { delete (window as any).__nvis; };
@@ -1974,6 +2020,26 @@ function ControllerScreen({ onBack, isActive: screenActive, activeMapping, custo
                       if (btn.haptic > 0) triggerHaptic(Math.round(btn.haptic / 2));
                     }}
                     up={upCustom}
+                  />
+                );
+              }
+
+              // TOUCHPAD — slide a finger to push the RIGHT stick (rules: touchpad.ts, Touchpad.tsx).
+              // With native input on the Android engine owns the finger and this only draws.
+              if (btn.type === "touchpad") {
+                const { w: tpW, h: tpH } = touchpadSize(btn);
+                return (
+                  <Touchpad
+                    key={btn.uid}
+                    id={btn.uid}
+                    x={btn.x} y={btn.y} w={tpW} h={tpH}
+                    label={btn.label === "Touchpad" ? undefined : btn.label}
+                    feel={btn.tpFeel} release={btn.tpRelease} sens={btn.tpSens}
+                    svgRef={svgRef}
+                    onStick={onPadStick}
+                    onPress={() => { if (btn.haptic > 0) triggerHaptic(Math.round(btn.haptic / 2)); }}
+                    onRelease={() => playHaptic("buttonRelease")}
+                    onEdge={() => playHaptic("tick")}
                   />
                 );
               }
@@ -2648,6 +2714,15 @@ function PadThumbWidget({ b, accent }: { b: CustomBtnDef; accent: string }) {
         <text x={x} y={y} textAnchor="middle" dominantBaseline="central" fontSize={r * 0.35}
           fontWeight={800} fill="rgba(40,40,40,0.9)"
           style={{ fontFamily: "'Inter',sans-serif", pointerEvents: "none" }}>{tag}</text>
+      </g>
+    );
+  }
+  if (b.type === "touchpad") {
+    const { w, h } = touchpadSize(b);
+    return (
+      <g>
+        <rect x={x - w / 2} y={y - h / 2} width={w} height={h} rx={Math.min(w, h) * 0.14} fill={fill} stroke={stroke} strokeWidth={2} />
+        {txt(x, y, "TOUCHPAD", Math.min(w, h) * 0.13)}
       </g>
     );
   }
@@ -3396,10 +3471,11 @@ function DashboardScreen({
   const [pendingEditPad, setPendingEditPad] = useState<CustomPad | null>(null);
 
   const TEMPLATE_DEFAULT_NAMES: Record<string, string> = {
-    standard: "My Custom Pad", blank: "Blank Canvas", fps: "FPS Pro Layout", fighter: "Fighter Arcade", racing: "Racing Layout", rpg: "RPG Adventure"
+    standard: "My Custom Pad", blank: "Blank Canvas", fps: "FPS Pro Layout", fighter: "Fighter Arcade", racing: "Racing Layout", rpg: "RPG Adventure", touchpad: "Touchpad Camera"
   };
   const BLUEPRINTS = [
     { key: "standard", name: "Standard",   desc: "Full-size wireless controller layout.",       icon: "🟢", color: "from-[#5D90CB]/30 to-[#5D90CB]/10" },
+    { key: "touchpad", name: "Touchpad Camera", desc: "Slide a finger like a laptop trackpad to turn the camera.", icon: "🖐️", color: "from-[#2CAABA]/30 to-[#2CAABA]/10" },
   ];
 
   const nameInputRef = useRef<HTMLInputElement>(null);

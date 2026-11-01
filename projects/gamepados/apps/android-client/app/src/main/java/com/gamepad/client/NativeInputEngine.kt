@@ -53,6 +53,7 @@ class NativeInputEngine(private val activity: MainActivity) {
     private companion object {
         const val K_BTN = 0; const val K_DPAD = 1; const val K_STICK = 2
         const val K_TRIG = 3; const val K_MODE = 4
+        const val K_PAD = 5                  // touchpad: a finger slid on it pushes the RIGHT stick (TouchpadMath)
         const val STICK_MAX_R = 60f          // useStick(60): knob travel in design units
         const val STICK_DEADZONE = 0.08f * 60f  // processStick: 8% of 60
         const val TRIG_THRESHOLD = 0.85f     // hair-trigger: (100-15)/100
@@ -71,8 +72,11 @@ class NativeInputEngine(private val activity: MainActivity) {
         val digital: Boolean,                // trig: tap = instant 100%, no feathering
         val std: Boolean,                    // trig: vis belongs to the standard held set
         val mode: Char,                      // mode selector: 'L' / 'R'
-        val hap: String                      // press-haptic tier ("" = off)
-    )
+        val hap: String,                     // press-haptic tier ("" = off)
+        val padMath: TouchpadMath? = null    // touchpad only: the movement rules + this pad's live state
+    ) {
+        var padFull = false                  // touchpad only: stick is at its stop (one edge tick per arrival)
+    }
 
     private class Binding(val widget: Widget) {
         var dirUp = false; var dirDown = false; var dirLeft = false; var dirRight = false
@@ -156,6 +160,14 @@ class NativeInputEngine(private val activity: MainActivity) {
     private var lastLx = Float.NaN; private var lastLy = Float.NaN
     private var lastRx = Float.NaN; private var lastRy = Float.NaN
     private var lastMode = ' '
+    // Touchpad finger animation: [fingerX, fingerY, stickX, stickY] per ACTIVE pad (8 at most).
+    // Preallocated and compared in place, like the rest of pushVisuals — no allocation per frame.
+    private val padIds = arrayOfNulls<String>(8)
+    private val padVals = FloatArray(32)
+    private var padN = 0
+    private val lastPadIds = arrayOfNulls<String>(8)
+    private val lastPadVals = FloatArray(32)
+    private var lastPadN = 0
 
     /** Invisible full-screen touch layer. Sits above the WebView in gameContainer. */
     val overlay: View = @SuppressLint("ViewConstructor") object : View(activity) {
@@ -219,7 +231,7 @@ class NativeInputEngine(private val activity: MainActivity) {
         for (i in 0 until wArr.length()) {
             val w = wArr.getJSONObject(i)
             val kind = when (w.getString("k")) {
-                "dpad" -> K_DPAD; "stick" -> K_STICK; "trig" -> K_TRIG; "mode" -> K_MODE; else -> K_BTN
+                "dpad" -> K_DPAD; "stick" -> K_STICK; "trig" -> K_TRIG; "mode" -> K_MODE; "pad" -> K_PAD; else -> K_BTN
             }
             val bitsObj = if (kind == K_DPAD) w.getJSONObject("bits") else null
             val visObj = if (kind == K_DPAD) w.getJSONObject("vis") else null
@@ -240,7 +252,9 @@ class NativeInputEngine(private val activity: MainActivity) {
                 digital = w.optBoolean("digital", false),
                 std = w.optBoolean("std", false),
                 mode = (w.optString("mode", "L").firstOrNull() ?: 'L'),
-                hap = w.optString("hap", "")
+                hap = w.optString("hap", ""),
+                padMath = if (kind == K_PAD) TouchpadMath(
+                    w.optString("feel", ""), w.optString("release", ""), w.optDouble("sens", 1.0)) else null
             ))
         }
         synchronized(lock) {
@@ -359,13 +373,13 @@ class NativeInputEngine(private val activity: MainActivity) {
                     val b = Binding(hit)
                     // useStick/DpadBase own ONE pointer (pid guard) — a second finger
                     // on the same stick/d-pad is ignored, never a second driver.
-                    if ((hit.kind == K_STICK || hit.kind == K_DPAD) &&
+                    if ((hit.kind == K_STICK || hit.kind == K_DPAD || hit.kind == K_PAD) &&
                         bindings.values.any { it.widget === hit && !it.inert }) {
                         b.inert = true
                         bindings[pid] = b
                     } else {
                         bindings[pid] = b
-                        pressLocked(b, designX(cssX, cssY), designY(cssX, cssY))
+                        pressLocked(b, designX(cssX, cssY), designY(cssX, cssY), ev.eventTime)
                         buildAndInjectLocked()
                     }
                 }
@@ -383,7 +397,7 @@ class NativeInputEngine(private val activity: MainActivity) {
                             continue
                         }
                         if (b.inert) continue
-                        if (moveLocked(b, designX(cssX, cssY), designY(cssX, cssY))) changed = true
+                        if (moveLocked(b, designX(cssX, cssY), designY(cssX, cssY), ev.eventTime)) changed = true
                     }
                     if (changed) buildAndInjectLocked()
                 }
@@ -444,7 +458,7 @@ class NativeInputEngine(private val activity: MainActivity) {
             val inside = when (w.kind) {
                 K_BTN -> if (w.rect) (px >= w.x - w.w / 2 && px <= w.x + w.w / 2 && py >= w.y - w.h / 2 && py <= w.y + w.h / 2)
                          else hypot((px - w.x).toDouble(), (py - w.y).toDouble()) <= w.r
-                K_TRIG -> (px >= w.x - w.w / 2 && px <= w.x + w.w / 2 && py >= w.y - w.h / 2 && py <= w.y + w.h / 2)
+                K_TRIG, K_PAD -> (px >= w.x - w.w / 2 && px <= w.x + w.w / 2 && py >= w.y - w.h / 2 && py <= w.y + w.h / 2)
                 else -> hypot((px - w.x).toDouble(), (py - w.y).toDouble()) <= w.r   // dpad/stick/mode = circle
             }
             if (inside) return w
@@ -454,9 +468,17 @@ class NativeInputEngine(private val activity: MainActivity) {
 
     // ── Press / move / release semantics — mirrors Widgets.tsx exactly ──
 
-    private fun pressLocked(b: Binding, px: Float, py: Float) {
+    private fun pressLocked(b: Binding, px: Float, py: Float, t: Long = SystemClock.uptimeMillis()) {
         val w = b.widget
         when (w.kind) {
+            K_PAD -> {
+                // Landing never deflects the stick (TouchpadMath.down); the finger only starts to
+                // push once it slides. One soft tick on landing, like any other widget.
+                w.padMath?.down(px.toDouble(), py.toDouble(), t)
+                if (w.vis.isNotEmpty()) visHeldCustom.add(w.vis)
+                haptic(w.hap)
+                ensurePadTicker()
+            }
             K_BTN -> {
                 if (w.vis.isNotEmpty()) visHeldCustom.add(w.vis)
                 haptic(w.hap)
@@ -509,9 +531,15 @@ class NativeInputEngine(private val activity: MainActivity) {
         rebuildMaskLocked()
     }
 
-    private fun moveLocked(b: Binding, px: Float, py: Float): Boolean {
+    private fun moveLocked(b: Binding, px: Float, py: Float, t: Long = SystemClock.uptimeMillis()): Boolean {
         val w = b.widget
         when (w.kind) {
+            K_PAD -> {
+                val m = w.padMath ?: return false
+                val changed = m.move(px.toDouble(), py.toDouble(), t)
+                if (changed) padEdgeHaptic(w, m)
+                return changed
+            }
             K_DPAD -> return applyDpadLocked(b, px, py)
             K_STICK -> {
                 // Origin captured at press: the widget centre when stickFollow is off,
@@ -542,6 +570,13 @@ class NativeInputEngine(private val activity: MainActivity) {
     private fun releaseLocked(b: Binding, cancelled: Boolean) {
         val w = b.widget
         when (w.kind) {
+            K_PAD -> {
+                // A cancelled gesture must not glide: the touch was taken away, not lifted.
+                if (cancelled) w.padMath?.reset() else w.padMath?.up(SystemClock.uptimeMillis())
+                w.padFull = false
+                if (w.vis.isNotEmpty()) visHeldCustom.remove(w.vis)
+                ensurePadTicker()               // a "glide" release still has to ease home
+            }
             K_BTN -> { if (w.vis.isNotEmpty()) visHeldCustom.remove(w.vis) }
             K_DPAD -> {
                 b.dirUp = false; b.dirDown = false; b.dirLeft = false; b.dirRight = false
@@ -613,8 +648,51 @@ class NativeInputEngine(private val activity: MainActivity) {
         buttonsMask = m
     }
 
+    // ── Touchpad ticker ──
+    // A finger that stops moving sends no more touch events, but the "speed" feel must still bring
+    // the stick back to centre, and a "glide" release must still ease home. So while any pad is
+    // active a frame callback ticks it (vsync-aligned, nothing runs once every pad is idle).
+    private var padTickScheduled = false
+    private val padTickCallback = Choreographer.FrameCallback {
+        padTickScheduled = false
+        var anyActive = false
+        var changed = false
+        synchronized(lock) {
+            if (active) {
+                val now = SystemClock.uptimeMillis()
+                for (w in widgets) {
+                    val m = w.padMath ?: continue
+                    if (!m.active) continue
+                    if (m.tick(now)) { changed = true; padEdgeHaptic(w, m) }
+                    if (m.active) anyActive = true
+                }
+                if (changed) buildAndInjectLocked()
+            }
+        }
+        if (changed) scheduleVisuals()
+        if (anyActive) ensurePadTicker()
+    }
+
+    /** Start the ticker if it is not already running. Safe from any thread. */
+    private fun ensurePadTicker() {
+        activity.runOnUiThread {
+            if (!padTickScheduled) {
+                padTickScheduled = true
+                Choreographer.getInstance().postFrameCallback(padTickCallback)
+            }
+        }
+    }
+
+    /** One soft tick each time a pad's push arrives at the stick's stop (re-armed once it eases off). */
+    private fun padEdgeHaptic(w: Widget, m: TouchpadMath) {
+        val mag = hypot(m.x, m.y) / TouchpadMath.STICK_R
+        if (mag >= 0.98 && !w.padFull) { w.padFull = true; haptic("tick") }
+        else if (mag < 0.9) w.padFull = false
+    }
+
     private fun clearAllInputLocked() {
         bindings.clear()
+        for (w in widgets) { w.padMath?.reset(); w.padFull = false }
         buttonsMask = 0
         ltFill = 0f; rtFill = 0f
         lsX = 0f; lsY = 0f; rsX = 0f; rsY = 0f
@@ -640,7 +718,16 @@ class NativeInputEngine(private val activity: MainActivity) {
             val (x, y) = radialDeadzone(lsX, lsY); lsXn = x; lsYn = y
         }
         run {
-            val (x, y) = radialDeadzone(rsX, rsY); rsXn = x; rsYn = y
+            // Touchpads push the right stick too: summed with the real stick, then held inside its
+            // circle (mirror of the page's packet builder in App.tsx).
+            var rx = rsX; var ry = rsY
+            for (w in widgets) {
+                val m = w.padMath ?: continue
+                if (m.x != 0.0 || m.y != 0.0) { rx += m.x.toFloat(); ry += m.y.toFloat() }
+            }
+            val rm = hypot(rx.toDouble(), ry.toDouble()).toFloat()
+            if (rm > STICK_MAX_R) { rx = rx / rm * STICK_MAX_R; ry = ry / rm * STICK_MAX_R }
+            val (x, y) = radialDeadzone(rx, ry); rsXn = x; rsYn = y
         }
 
         // Gyro merged AFTER the deadzone — identical formula + signs to the JS
@@ -745,13 +832,25 @@ class NativeInputEngine(private val activity: MainActivity) {
             lt = ltFill; rt = rtFill
             lx = lsX; ly = lsY; rx = rsX; ry = rsY
             mode = stickMode
+            padN = 0
+            for (w in widgets) {
+                val m = w.padMath ?: continue
+                if (!m.active || padN >= 8) continue
+                padIds[padN] = w.vis
+                padVals[padN * 4] = m.fingerX.toFloat(); padVals[padN * 4 + 1] = m.fingerY.toFloat()
+                padVals[padN * 4 + 2] = m.x.toFloat();   padVals[padN * 4 + 3] = m.y.toFloat()
+                padN++
+            }
         }
+        var padSame = padN == lastPadN
+        if (padSame) for (i in 0 until padN * 4) if (padVals[i] != lastPadVals[i]) { padSame = false; break }
+        if (padSame) for (i in 0 until padN) if (padIds[i] != lastPadIds[i]) { padSame = false; break }
         // Dedup BEFORE building anything. The old code serialized the whole object and
         // then discarded the string on a match, paying every allocation on every frame
         // even when nothing had changed — which is the common case while a pad is held
         // steady. Comparing the raw values costs no allocation at all.
         if (mode == lastMode && lt == lastLt && rt == lastRt &&
-            lx == lastLx && ly == lastLy && rx == lastRx && ry == lastRy &&
+            lx == lastLx && ly == lastLy && rx == lastRx && ry == lastRy && padSame &&
             curHeldCustom == lastHeldCustom && curHeldStd == lastHeldStd) return
 
         lastLt = lt; lastRt = rt; lastLx = lx; lastLy = ly
@@ -769,6 +868,19 @@ class NativeInputEngine(private val activity: MainActivity) {
         o.put("lx", lx.toDouble()); o.put("ly", ly.toDouble())
         o.put("rx", rx.toDouble()); o.put("ry", ry.toDouble())
         o.put("m", mode.toString())
+        // Touchpad animation feed. Sent while any pad is active, plus once more (empty) when the
+        // last one goes idle, so the page can fade its finger dot out.
+        if (padN > 0 || lastPadN > 0) {
+            val p = JSONArray()
+            for (i in 0 until padN) {
+                p.put(JSONArray().put(padIds[i]).put(padVals[i * 4].toDouble()).put(padVals[i * 4 + 1].toDouble())
+                    .put(padVals[i * 4 + 2].toDouble()).put(padVals[i * 4 + 3].toDouble()))
+            }
+            o.put("p", p)
+        }
+        lastPadN = padN
+        for (i in 0 until padN) lastPadIds[i] = padIds[i]
+        System.arraycopy(padVals, 0, lastPadVals, 0, padN * 4)
         activity.evalJs("if(window.__nvis)window.__nvis($o);")
     }
 

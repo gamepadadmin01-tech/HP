@@ -57,6 +57,18 @@ class TouchpadMath(feel: String? = null, release: String? = null, sens: Double? 
     /** True while the pad still has something to say (finger down, or a glide still running). */
     val active: Boolean get() = held || abs(x) > 0.0 || abs(y) > 0.0
 
+    /** Where the finger first touched / where it is now — for the pad's visuals only. */
+    val originX: Double get() = ox
+    val originY: Double get() = oy
+    val fingerX: Double get() = lx
+    val fingerY: Double get() = ly
+
+    /** Forget everything (the pad was swapped, or the screen lost the touch). */
+    fun reset() {
+        held = false
+        x = 0.0; y = 0.0; vx = 0.0; vy = 0.0
+    }
+
     fun down(px: Double, py: Double, t: Long) {
         held = true
         ox = px; oy = py; lx = px; ly = py
