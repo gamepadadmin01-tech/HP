@@ -32,7 +32,7 @@ const LEAD_MAX = 34;      // design units: never further ahead than this
 const VEL_TAU = 0.03;     // seconds: how quickly the speed estimate follows the finger
 const SETTLE_MS = 70;     // no new frame for this long: the finger stopped, so the dot sits exactly on it
 const TRAIL_MS = 150;     // how much of the finger's path the trail shows
-const TRAIL_MAX = 14;     // most points kept
+const TRAIL_MAX = 10;     // most points kept
 
 const reducedMotion = (): boolean => {
   try { return typeof matchMedia !== "undefined" && matchMedia("(prefers-reduced-motion: reduce)").matches; }
@@ -71,12 +71,12 @@ export function TouchpadArt({ id, x, y, w, h, label, round }: {
       {/* contact shadow */}
       <ellipse cx={x} cy={y + h * 0.46} rx={w * 0.46} ry={h * 0.12} fill="url(#padUnder)" />
       {/* glass body */}
-      <Shp round={round} x={x} y={y} w={w} h={h} rx={rx} fill={RED_NORM} stroke="rgba(255,255,255,0.07)" strokeWidth={1.5} />
+      <Shp round={round} x={x} y={y} w={w} h={h} rx={rx} fill={RED_NORM} stroke="rgba(255,255,255,0.07)" strokeWidth={0.75} />
       <g clipPath={`url(#tpc-${k})`}>
         <rect x={left} y={top} width={w} height={h} fill={`url(#tpv-${k})`} />
         <rect x={left} y={top} width={w} height={h * 0.46} fill="url(#padSpec)" opacity={0.4} />
       </g>
-      <Shp round={round} x={x} y={y} w={w} h={h} rx={rx} fill="none" stroke="url(#padRim)" strokeWidth={1.5} opacity={0.55} />
+      <Shp round={round} x={x} y={y} w={w} h={h} rx={rx} fill="none" stroke="url(#padRim)" strokeWidth={0.75} opacity={0.55} />
       {/* No joystick drawing and no default text: a clean surface. Only a name the player typed shows. */}
       {label ? (
         <text x={x} y={top + h - fs * 1.1} textAnchor="middle" fontSize={fs} fontWeight={700} letterSpacing={fs * 0.16}
@@ -121,6 +121,7 @@ function TouchpadBase({ id, x, y, w, h, label, round, feel, release, sens, svgRe
   const anim = useRef({
     on: false, full: false, ox: 0, oy: 0,
     px: 0, py: 0, pt: 0, vx: 0, vy: 0,          // the previous frame and the finger's smoothed speed
+    mq: -1, eased: false, tx: 0, ty: 0,         // push level last drawn; dot easing flag; last trail point
     settle: 0 as ReturnType<typeof setTimeout> | 0,
     trail: [] as { x: number; y: number; t: number }[],
   });
@@ -138,7 +139,7 @@ function TouchpadBase({ id, x, y, w, h, label, round, feel, release, sens, svgRe
 
     if (!f) {
       if (!a.on) return;
-      a.on = false; a.full = false; a.trail = [];
+      a.on = false; a.full = false; a.trail = []; a.mq = -1;
       if (a.settle) { clearTimeout(a.settle); a.settle = 0; }
       act.style.opacity = "0";
       if (trailRef.current) trailRef.current.style.opacity = "0";
@@ -173,17 +174,25 @@ function TouchpadBase({ id, x, y, w, h, label, round, feel, release, sens, svgRe
     const clampLead = (v: number) => Math.max(-LEAD_MAX, Math.min(LEAD_MAX, v * LEAD));
     const dx = Math.max(g.l, Math.min(g.r, f.fx + clampLead(a.vx)));
     const dy = Math.max(g.t, Math.min(g.b, f.fy + clampLead(a.vy)));
-    if (dotRef.current) { dotRef.current.style.transition = ""; dotRef.current.style.transform = `translate(${dx}px, ${dy}px)`; }
-    if (haloRef.current) haloRef.current.style.transform = `scale(${1 + 0.7 * mag})`;
-    // the edge glows with how hard the stick is pushed
-    if (edgeRef.current) edgeRef.current.style.opacity = String(0.12 + 0.6 * mag);
+    if (dotRef.current) {
+      if (a.eased) { dotRef.current.style.transition = ""; a.eased = false; }
+      dotRef.current.style.transform = `translate(${dx}px, ${dy}px)`;
+    }
+    // The halo swells and the edge glows with how hard the stick is pushed. They only change in eighths:
+    // the edge glow covers the whole pad, so redrawing it on every frame was the most expensive thing here.
+    const mq = Math.round(mag * 8) / 8;
+    if (mq !== a.mq) {
+      a.mq = mq;
+      if (haloRef.current) haloRef.current.style.transform = `scale(${1 + 0.7 * mq})`;
+      if (edgeRef.current) edgeRef.current.style.opacity = String(0.12 + 0.6 * mq);
+    }
 
     // A finger that stops sends no more frames, so settle the dot exactly onto it by ourselves.
     if (a.settle) clearTimeout(a.settle);
     const fx = f.fx, fy = f.fy;
     a.settle = setTimeout(() => {
       a.settle = 0; a.vx = 0; a.vy = 0;
-      if (dotRef.current) { dotRef.current.style.transition = "transform 0.08s ease-out"; dotRef.current.style.transform = `translate(${fx}px, ${fy}px)`; }
+      if (dotRef.current) { a.eased = true; dotRef.current.style.transition = "transform 0.08s ease-out"; dotRef.current.style.transform = `translate(${fx}px, ${fy}px)`; }
       if (trailRef.current) trailRef.current.style.opacity = "0";
       a.trail = [];
     }, SETTLE_MS);
@@ -277,26 +286,26 @@ function TouchpadBase({ id, x, y, w, h, label, round, feel, release, sens, svgRe
           </radialGradient>
         </defs>
         <g clipPath={`url(#tpc-${k})`}>
-          <circle ref={rippleRef} r={80} fill="none" stroke={accent(0.9)} strokeWidth={3} opacity={0}
+          <circle ref={rippleRef} r={80} fill="none" stroke={accent(0.9)} strokeWidth={1.5} opacity={0}
             style={{ transformBox: "fill-box", transformOrigin: "center" }} />
-          <circle ref={originRef} r={16} fill="none" stroke={accent(0.7)} strokeWidth={2.5} strokeDasharray="3 6" opacity={0} />
-          <path ref={trailRef} fill="none" stroke={accent(0.85)} strokeWidth={12} strokeLinecap="round" strokeLinejoin="round" opacity={0} />
+          <circle ref={originRef} r={16} fill="none" stroke={accent(0.7)} strokeWidth={1.25} strokeDasharray="3 6" opacity={0} />
+          <path ref={trailRef} fill="none" stroke={accent(0.85)} strokeWidth={6} strokeLinecap="round" strokeLinejoin="round" opacity={0} />
           <g ref={dotRef} style={{ transform: `translate(${x}px, ${y}px)` }}>
             <g ref={haloRef} style={{ transition: "transform 0.12s ease-out" }}>
-              <circle r={58} fill={`url(#tph-${k})`} />
+              <circle r={46} fill={`url(#tph-${k})`} />
             </g>
             <g ref={coreRef} style={{ transform: "scale(0.55)", transition: "transform 0.22s cubic-bezier(0.22,1,0.36,1)" }}>
               <circle r={17} fill={accent(0.95)} />
-              <circle r={17} fill="none" stroke="rgba(255,255,255,0.7)" strokeWidth={2} />
+              <circle r={17} fill="none" stroke="rgba(255,255,255,0.7)" strokeWidth={1.25} />
               <circle r={6} fill="rgba(255,255,255,0.85)" />
             </g>
           </g>
         </g>
-        <Shp round={round} ref={edgeRef} x={x} y={y} w={w - 4} h={h - 4} rx={Math.max(0, rx - 2)} fill="none"
-          stroke={accent(1)} strokeWidth={7} opacity={0.12} />
+        <Shp round={round} ref={edgeRef} x={x} y={y} w={w - 2} h={h - 2} rx={Math.max(0, rx - 1)} fill="none"
+          stroke={accent(1)} strokeWidth={3.5} opacity={0.12} />
       </g>
       <Shp round={round} ref={rimRef} x={x} y={y} w={w} h={h} rx={rx} fill="none"
-        stroke="rgba(255,255,255,0.07)" strokeWidth={2.5}
+        stroke="rgba(255,255,255,0.07)" strokeWidth={1.25}
         style={{ pointerEvents: "none", transition: "stroke 0.16s ease-out" }} />
 
       {/* the touch surface */}

@@ -54,7 +54,7 @@ try {
       const costs = [];
       let dotMoves = 0, last = "";
       const svg = document.getElementById("s");
-      const dot = svg.querySelector("circle[r='58']").parentElement.parentElement;
+      const dot = svg.querySelector("circle[r='46']").parentElement.parentElement;
       for (let i = 0; i < 900; i++) {
         // a finger drawing a circle of radius 70 around the middle, with the stick following it
         const a = i / 18, fx = 640 + Math.cos(a) * 70, fy = 285 + Math.sin(a) * 70;
@@ -65,10 +65,10 @@ try {
         const tr = dot.style.transform; if (tr !== last) { dotMoves++; last = tr; }
         await new Promise((res) => requestAnimationFrame(res));
       }
-      const live = svg.querySelector("g[style*='transition: opacity'][style*='opacity: 1']") !== null || [...svg.querySelectorAll("g")].some((g) => g.style.opacity === "1" && g.querySelector("circle[r='58']"));
+      const live = svg.querySelector("g[style*='transition: opacity'][style*='opacity: 1']") !== null || [...svg.querySelectorAll("g")].some((g) => g.style.opacity === "1" && g.querySelector("circle[r='46']"));
       window.__apply([]);                                   // the engine says: no active pad any more
       await new Promise((res) => setTimeout(res, 400));
-      const idleOpacity = [...svg.querySelectorAll("g")].filter((g) => g.querySelector("circle[r='58']") && g.style.pointerEvents === "none").map((g) => g.style.opacity);
+      const idleOpacity = [...svg.querySelectorAll("g")].filter((g) => g.querySelector("circle[r='46']") && g.style.pointerEvents === "none").map((g) => g.style.opacity);
       const grid = svg.querySelector("pattern, [data-tp='grid'], line") ? "present" : "0";
       costs.sort((x, y) => x - y);
       return {

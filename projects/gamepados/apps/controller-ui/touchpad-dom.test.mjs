@@ -53,13 +53,13 @@ const state = (page) => page.evaluate(() => {
   const svg = document.getElementById("s");
   const act = svg.querySelector("g[style*='transition: opacity']");
   const groups = [...svg.querySelectorAll("g")];
-  const active = groups.find((g) => g.style.opacity !== "" && g.style.pointerEvents === "none" && g.querySelector("circle[r='58']"));
+  const active = groups.find((g) => g.style.opacity !== "" && g.style.pointerEvents === "none" && g.querySelector("circle[r='46']"));
   const lines = svg.querySelectorAll("line").length;           // straight streaks: there must be none
   const trailPath = svg.querySelector("path[stroke-linecap='round']");
   const text = [...svg.querySelectorAll("text")].map((t) => t.textContent).join("|");
   const surface = [...svg.querySelectorAll("rect,ellipse")].find((e) => e.getAttribute("fill") === "transparent");
   const sb = surface ? surface.getBoundingClientRect() : null;
-  const dot = svg.querySelector("circle[r='58']")?.parentElement?.parentElement;
+  const dot = svg.querySelector("circle[r='46']")?.parentElement?.parentElement;
   const last = window.__log.filter(Array.isArray).slice(-1)[0] || null;
   return {
     activeOpacity: active ? active.style.opacity : null,
