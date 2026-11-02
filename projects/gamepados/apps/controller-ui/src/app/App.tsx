@@ -26,7 +26,7 @@ import { motion, AnimatePresence, useIsPresent, useReducedMotion } from "framer-
 // ─── Types ────────────────────────────────────────────────────────────────────
 import { View, BtnId, DashTab, GamepadPreset, CustomPad, CustomBtnDef, WidgetType, WidgetShape, WidgetAnchor, BtnPosOverride, PosOverrideMap } from "./types";
 import { CustomPadEditor } from "./components/CustomPadEditor";
-import { FeatureIntroOverlay, recordIntroNav, introRated } from "./FeatureIntroOverlay";
+import { FeatureIntroOverlay, recordSessionEnd, noteControllerOpened, suppressIntroOnce, introRated } from "./FeatureIntroOverlay";
 import { FEEDBACK_URL, initFeedbackSync, markFeedbackSent } from "./feedback";
 import { stickFeel, stickMaxOffset, stickResponse, installStickFeelToggle } from "./stickFeel";
 // Connection state is a 4-way classification, not a boolean — a link that is
@@ -1049,6 +1049,7 @@ function ControllerScreen({ onBack, isActive: screenActive, activeMapping, custo
   useEffect(() => {
     if (!isActive || !outOfTime || hasSession || leavingForPlans.current) return;
     leavingForPlans.current = true;
+    suppressIntroOnce();   // thrown out because play time ran out: this is the worst moment to ask for a rating
     requestDashboardTab("account");
     onBack();
   }, [isActive, outOfTime, hasSession, onBack]);
@@ -4109,6 +4110,7 @@ export default function App() {
   }, []);
 
   function navigateTo(target: View) {
+    if (target === "controller") noteControllerOpened();   // starts the session clock; opening the controller never asks for a rating
     if ((view === "dashboard" && target === "controller") || (view === "controller" && target === "dashboard")) {
       runCurtainSequence(() => {
         const bridge = (window as any).AndroidBridge;
@@ -4122,7 +4124,8 @@ export default function App() {
       });
       // #3: a Controller<->Dashboard move is the paced trigger for the
       // feature-intro rating prompt (no-op once rated).
-      if (recordIntroNav()) setShowIntro(true);
+      // Only when the player CLOSES the controller after a real session, and a moment after the curtain, never during it.
+      if (target === "dashboard" && recordSessionEnd()) window.setTimeout(() => { if (viewRef.current === "dashboard") setShowIntro(true); }, 1200);
     } else {
       setView(target);
       viewRef.current = target;

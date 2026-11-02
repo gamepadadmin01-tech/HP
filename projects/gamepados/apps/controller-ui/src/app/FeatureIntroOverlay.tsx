@@ -2,8 +2,9 @@
 //
 // Lifecycle:
 //  • Never forced. The ✕ and the backdrop always dismiss.
-//  • Dismissed without rating → returns later, paced by Controller↔Dashboard
-//    transitions (recordIntroNav / snoozeIntro).
+//  • Dismissed without rating → returns much later, and only a few times (see the pacing rules below).
+//  • Never asked when the controller OPENS, and never right after a forced exit (out of play time):
+//    only after a real session the player closed themselves (recordSessionEnd).
 //  • A submitted rating sets a persisted flag and the feature goes inert — the
 //    parent stops rendering it, so its state and timers are torn down.
 //
@@ -12,7 +13,8 @@
 //    until Submit is pressed, because a swipe that starts on a star used to fire
 //    a permanent 1-star rating.
 //  • It never thanks someone for a bad rating. Under 4 stars it asks what went
-//    wrong and sends that to support instead of fishing for a store review.
+//    wrong and sends that to support instead of fishing for a store review. That reason is REQUIRED
+//    (owner, 2026-11-02: too many ratings arrived as a bare star with no comment); 4 and 5 stay one tap.
 //
 // The thank-you step invites EVERY rater to follow the Instagram page (Akhil's
 // call, 2026-09-23 — not only the 4-5 star ones). It used to close itself after
@@ -33,13 +35,26 @@ import { useShellAppearance } from "./components/CalmShell";
 import { useOverlayFocus } from "./components/useOverlayFocus";
 
 const RATED_KEY = "feature_rated_v2"; // bump the suffix to re-introduce in a future version
-const NAV_KEY = "intro_nav_count";
-const NEXT_KEY = "intro_next_show";
-// Transitions before the first ask. Enough that the user has genuinely played,
-// come back, and done it again — asking after one round trip reads as nagging.
-const FIRST_SHOW_AT = 4;
-// After a dismiss-without-rating, wait this many more transitions before re-asking.
-const REPEAT_INTERVAL = 6;
+// ── Pacing (owner, 2026-11-02) ──────────────────────────────────────────────────────────────────
+// The prompt used to count every Controller<->Dashboard move, in BOTH directions: it could pop up while the
+// controller was opening, and right after the app threw a player out for running out of play time, which
+// is where a lot of 1-star ratings came from. Now:
+//   * it never appears when the controller opens, only after the player CLOSES it themselves;
+//   * only after a real session (MIN_SESSION_MS), never after a forced exit (suppressIntroOnce);
+//   * the first ask comes after FIRST_SHOW_AT such sessions; after any ask at least REPEAT_INTERVAL more
+//     sessions AND MIN_GAP_MS must pass; and never more than MAX_ASKS times in total.
+const SESSIONS_KEY = "intro2_sessions";   // real sessions that ended on the player's own choice
+const NEXT_KEY = "intro2_next";           // ask again once the count reaches this
+const ASKS_KEY = "intro2_asks";           // how many times the prompt has been shown
+const LAST_KEY = "intro2_last";           // when it was last shown (ms since 1970)
+export const FIRST_SHOW_AT = 5;
+export const REPEAT_INTERVAL = 15;
+export const MIN_SESSION_MS = 5 * 60 * 1000;
+export const MIN_GAP_MS = 3 * 24 * 60 * 60 * 1000;
+export const MAX_ASKS = 3;
+/** Ratings below this need a written reason (4 and 5 stay one tap). */
+export const COMMENT_REQUIRED_BELOW = 4;
+export const MIN_NOTE_CHARS = 5;
 
 const ACCENT = "var(--calm-accent, #abc8db)";
 const STAR_ON = "#F5C451";
@@ -59,8 +74,7 @@ export function introRated(): boolean {
 function markRated() {
   try {
     localStorage.setItem(RATED_KEY, "1");
-    localStorage.removeItem(NAV_KEY);
-    localStorage.removeItem(NEXT_KEY);
+    for (const k of [SESSIONS_KEY, NEXT_KEY, ASKS_KEY, LAST_KEY, "intro_nav_count", "intro_next_show"]) localStorage.removeItem(k);
   } catch {
     /* ignore */
   }
@@ -76,30 +90,55 @@ function readInt(key: string, dflt: number): number {
   }
 }
 
-/**
- * Record one Controller↔Dashboard transition and report whether the overlay
- * should now be shown. No-op (returns false) once the user has rated.
- */
-export function recordIntroNav(): boolean {
-  if (introRated()) return false;
-  const count = readInt(NAV_KEY, 0) + 1;
-  const nextShow = readInt(NEXT_KEY, FIRST_SHOW_AT);
+function writeInt(key: string, v: number) {
   try {
-    localStorage.setItem(NAV_KEY, String(count));
+    localStorage.setItem(key, String(v));
   } catch {
     /* ignore */
   }
-  return count >= nextShow;
 }
 
-/** Push the next appearance out after a dismiss-without-rating. */
-function snoozeIntro() {
-  const count = readInt(NAV_KEY, 0);
-  try {
-    localStorage.setItem(NEXT_KEY, String(count + REPEAT_INTERVAL));
-  } catch {
-    /* ignore */
+/** The whole "is it time to ask?" rule, with no storage in it so a test can check it. */
+export function shouldShowIntro(s: { sessions: number; next: number; asks: number; last: number; now: number }): boolean {
+  return s.asks < MAX_ASKS && s.sessions >= s.next && (s.last === 0 || s.now - s.last >= MIN_GAP_MS);
+}
+
+let openedAt = 0;
+let forcedExit = false;
+
+/** The controller just opened. Starts the session clock. Never shows anything. */
+export function noteControllerOpened(now: number = Date.now()): void {
+  openedAt = now;
+  forcedExit = false;
+}
+
+/** The app is about to send the player out by itself (out of play time): that exit must not ask. */
+export function suppressIntroOnce(): void {
+  forcedExit = true;
+}
+
+/**
+ * The player closed the controller. Returns true when the prompt should now be shown. Only a real session
+ * that the player ended themselves counts. When it says yes the ask is recorded and the next one pushed out
+ * right away, so closing the app before answering cannot bring it straight back.
+ */
+export function recordSessionEnd(now: number = Date.now()): boolean {
+  if (introRated()) return false;
+  const forced = forcedExit;
+  const started = openedAt;
+  forcedExit = false;
+  openedAt = 0;
+  if (forced || !started || now - started < MIN_SESSION_MS) return false;
+  const sessions = readInt(SESSIONS_KEY, 0) + 1;
+  writeInt(SESSIONS_KEY, sessions);
+  const asks = readInt(ASKS_KEY, 0);
+  const show = shouldShowIntro({ sessions, next: readInt(NEXT_KEY, FIRST_SHOW_AT), asks, last: readInt(LAST_KEY, 0), now });
+  if (show) {
+    writeInt(ASKS_KEY, asks + 1);
+    writeInt(LAST_KEY, now);
+    writeInt(NEXT_KEY, sessions + REPEAT_INTERVAL);
   }
+  return show;
 }
 
 // Motion: one spring, used for the card and the star pops, so everything on
@@ -145,7 +184,7 @@ export function FeatureIntroOverlay({
     if (!picked) return;
     // Four or five is a happy user: thank them and stop. Below that, ask what
     // went wrong — a complaint we can act on beats a star we can't.
-    if (picked >= 4) finish(picked);
+    if (picked >= COMMENT_REQUIRED_BELOW) finish(picked);
     else setStep("note");
   }
 
@@ -154,7 +193,6 @@ export function FeatureIntroOverlay({
   // already saved, so it is simply the end.
   const dismiss = () => {
     if (step === "done") { onRated(); return; }
-    snoozeIntro();
     onClose();
   };
   useOverlayFocus(open, dialogRef, dismiss);
@@ -308,8 +346,8 @@ export function FeatureIntroOverlay({
                       What went wrong?
                     </h2>
                     <p style={{ fontSize: 12.5, color: MUTED, lineHeight: 1.55, margin: "8px 6px 0" }}>
-                      Tell us what to fix and it reaches the team directly. Skip
-                      if you'd rather not.
+                      Tell us what to fix and it reaches the team directly. A short
+                      reason is needed, so we can actually fix it.
                     </p>
                     <textarea
                       value={note}
@@ -317,31 +355,22 @@ export function FeatureIntroOverlay({
                       rows={4}
                       placeholder="Lag, a button that doesn't work, anything…"
                       style={{
-                        width: "100%", marginTop: 16, padding: 12,
+                        width: "100%", boxSizing: "border-box", marginTop: 16, padding: 12,
                         borderRadius: 12, background: SUNK,
                         border: "1px solid rgba(79,134,198,0.14)",
                         color: "var(--calm-ink, #f0f2ed)", fontSize: 13, lineHeight: 1.5,
                         fontFamily: "system-ui, sans-serif", resize: "none", outline: "none",
                       }}
                     />
-                    <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
-                      <button
-                        onClick={() => finish(picked)}
-                        style={{
-                          flex: 1, padding: "12px 0", borderRadius: 12,
-                          background: "var(--calm-soft, #292f31)",
-                          border: "1px solid var(--calm-line, #343c3f)",
-                          color: "var(--calm-muted, #a6b0b3)", fontSize: 13, fontWeight: 600,
-                          touchAction: "manipulation", cursor: "pointer",
-                        }}
-                      >
-                        Skip
-                      </button>
+                    <p style={{ fontSize: 11, color: MUTED, margin: "8px 2px 0", minHeight: 15, textAlign: "left" }}>
+                      {note.trim().length < MIN_NOTE_CHARS ? `Please write at least ${MIN_NOTE_CHARS} characters so we can fix it.` : " "}
+                    </p>
+                    <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
                       <motion.button
                         onClick={() => finish(picked, note)}
-                        disabled={note.trim().length < 3}
+                        disabled={note.trim().length < MIN_NOTE_CHARS}
                         whileTap={{ scale: 0.98 }}
-                        animate={{ opacity: note.trim().length < 3 ? 0.45 : 1 }}
+                        animate={{ opacity: note.trim().length < MIN_NOTE_CHARS ? 0.45 : 1 }}
                         transition={FADE}
                         style={{
                           flex: 1.4, padding: "12px 0", borderRadius: 12, border: "none",
