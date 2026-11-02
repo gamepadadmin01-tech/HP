@@ -329,9 +329,10 @@ function Meter({ used, limit, exhausted }: { used: number; limit: number; exhaus
 
 export function PlanCard({ plan, onChoose }: { plan: CataloguePlan; onChoose?: (plan: CataloguePlan) => void }) {
   useSyncExternalStore(onPlayPricesChange, getPlayPricesVersion, getPlayPricesVersion);
-  useEffect(() => { if (plan.priceFromStore) requestPlayPrices([plan.playProductId]); }, [plan.priceFromStore, plan.playProductId]);
-  // The price to show: ours on the website build; on Play, the price Google Play itself reports.
-  const price = !plan.priceFromStore ? formatPrice(plan.priceMinor, plan.currency) : getPlayPrice(plan.playProductId) || playPriceFallback(plan);
+  useEffect(() => { if (__PLAY__) requestPlayPrices([plan.playProductId]); }, [plan.playProductId]);
+  // The price to show: on Play, only the price Google Play itself reports (the one set in Play Console);
+  // everywhere else, ours (rupees in India, dollars elsewhere).
+  const price = __PLAY__ ? getPlayPrice(plan.playProductId) : formatPrice(plan.priceMinor, plan.currency);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const [done, setDone] = useState(false);
@@ -467,19 +468,6 @@ function PromoRow() {
 // ─── Shared shells ────────────────────────────────────────────────────────────
 // Same shapes TabAccount uses. Duplicated rather than exported across files so
 // this panel can be moved without dragging the account tab's layout with it.
-
-/** When Google Play has not reported a price (a test build installed outside Play, or Play still loading),
- *  players in India still see the price, because the India price of the Play product is set to the same
- *  ₹ amount as our own catalogue (owner, 2026-11-02: keep the two equal). Everywhere else, nothing: a
- *  guessed foreign price could be wrong. */
-function playPriceFallback(plan: CataloguePlan): string | null {
-  try {
-    // India's zone has two names: many browsers and phones still report the old "Asia/Calcutta".
-    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    if (plan.currency === "INR" && (tz === "Asia/Kolkata" || tz === "Asia/Calcutta")) return formatPrice(plan.priceMinor, "INR");
-  } catch { /* no Intl: show no number */ }
-  return null;
-}
 
 /** "Have a code?" inside the Account card: one quiet line that opens the code box, so a rarely used field
  *  does not take a whole block of the page. */

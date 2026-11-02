@@ -587,3 +587,28 @@ dependencies {
         add("${flavor}Implementation", "com.google.android.libraries.identity.googleid:googleid:1.1.1")
     }
 }
+
+// ── Two UI bundles, one per kind of build (owner, 2026-11-02) ────────────────
+// The controller UI is built twice from the same source (apps/controller-ui: `npm run build:all`):
+//   dist/index.html       -> src/main/assets/dist/index.html       every flavour except Play
+//   dist-play/index.html  -> src/playstore/assets/dist/index.html  the Google Play flavour
+// A flavour's own assets override main's, so the Play build never even contains the other bundle. The Play
+// bundle has no Razorpay code and no price of ours (Google Play shows its own); the other bundle shows
+// rupees in India and dollars elsewhere. Each bundle carries <meta name="gp-bundle" content="play|web">.
+// This check stops the build when a flavour is about to ship the wrong one (or none), which is the mistake
+// that would otherwise only show up on a customer's phone.
+tasks.configureEach {
+    val m = Regex("^merge(Playstore|Direct|Aptoide|Uptodown|Amazonstore|Indusstore|Apkpure)(Debug|Release)Assets$").find(name)
+    if (m != null) {
+        val play = m.groupValues[1] == "Playstore"
+        doFirst {
+            val rel = if (play) "src/playstore/assets/dist/index.html" else "src/main/assets/dist/index.html"
+            val want = if (play) "play" else "web"
+            val f = file(rel)
+            check(f.exists() && f.readText().contains("name=\"gp-bundle\" content=\"$want\"")) {
+                "$name: $rel is missing or is not the '$want' UI bundle. In apps/controller-ui run `npm run build:all`, then copy " +
+                    "dist/index.html -> app/src/main/assets/dist/ and dist-play/index.html -> app/src/playstore/assets/dist/."
+            }
+        }
+    }
+}

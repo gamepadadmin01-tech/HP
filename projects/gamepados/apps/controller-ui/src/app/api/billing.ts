@@ -190,7 +190,20 @@ async function request<T>(path: string, { method, body, token }: Req = {}): Prom
 
 /** Public — the plan list is shown before sign-in too. `channel` must be the
  *  build's own DISTRIBUTION_CHANNEL: it is what decides `purchasable`. */
-export function getPlans(channel: string, currency = "INR") {
+/** Which currency this player sees prices in on the website and other non-Play builds: rupees in India,
+ *  dollars everywhere else (owner, 2026-11-02: Lifetime is Rs 19 in India and $0.50 elsewhere). India is
+ *  decided by the phone's time zone or region setting. The Play build ignores this: Google Play shows its own. */
+export function regionCurrency(): "INR" | "USD" {
+  try {
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (tz === "Asia/Kolkata" || tz === "Asia/Calcutta") return "INR";
+    const langs = (typeof navigator !== "undefined" && navigator.languages && navigator.languages.length ? navigator.languages : [navigator.language]) || [];
+    if (langs.some((l) => /-IN$/i.test(String(l)))) return "INR";
+  } catch { /* no Intl: fall through to dollars */ }
+  return "USD";
+}
+
+export function getPlans(channel: string, currency: string = __PLAY__ ? "INR" : regionCurrency()) {
   // `playBilling=1`: this Play build can pay through Google Play. Without it the server never offers an
   // older Play build (no billing code inside) a buy button.
   const q = `?channel=${encodeURIComponent(channel || "direct")}&currency=${encodeURIComponent(currency)}`

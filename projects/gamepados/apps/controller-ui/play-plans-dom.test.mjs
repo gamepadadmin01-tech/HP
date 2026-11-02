@@ -1,4 +1,7 @@
 // Run: node play-plans-dom.test.mjs
+// Two UI bundles (2026-11-02): the Google Play bundle (__PLAY__ true) and the one every other build ships.
+//   Play bundle : shows ONLY the price Google Play reports; never ours, never a guess.
+//   Other bundle: rupees in India (Lifetime ₹19), dollars elsewhere (Lifetime $0.50).
 // "I can't see plans in the Play build" (2026-11-02): the signed-out Plans screen still had the old rule
 // "the Play build sells nothing" hard-coded. The REAL GuestPlans screen in headless Chrome, pretending to be:
 //   (a) the Play build WITH Google billing   -> must show the Lifetime plan (price comes from Play, not us)
@@ -16,12 +19,16 @@ import { createRoot } from "react-dom/client";
 import { GuestPlans } from "./src/app/components/GuestPlans";
 createRoot(document.getElementById("root")).render(<div style={{ width: 420 }}><GuestPlans /></div>);
 `;
-const out = await build({
-  stdin: { contents: entry, resolveDir: new URL(".", import.meta.url).pathname.replace(/^\/(\w:)/, "$1"), loader: "tsx", sourcefile: "entry.tsx" },
-  bundle: true, write: false, format: "iife", jsx: "automatic", platform: "browser", logLevel: "silent",
-  define: { "process.env.NODE_ENV": '"production"' },
-});
-const html = `<!doctype html><meta charset="utf-8"><body><div id="root"></div><script>${out.outputFiles[0].text.replace(/<\/script>/g, "<\\/script>")}</script>`;
+async function bundle(play) {
+  const out = await build({
+    stdin: { contents: entry, resolveDir: new URL(".", import.meta.url).pathname.replace(/^\/(\w:)/, "$1"), loader: "tsx", sourcefile: "entry.tsx" },
+    bundle: true, write: false, format: "iife", jsx: "automatic", platform: "browser", logLevel: "silent",
+    define: { "process.env.NODE_ENV": '"production"', __PLAY__: play ? "true" : "false" },
+  });
+  return `<!doctype html><meta charset="utf-8"><body><div id="root"></div><script>${out.outputFiles[0].text.replace(/<\/script>/g, "<\\/script>")}</script>`;
+}
+const htmlPlay = await bundle(true), htmlWeb = await bundle(false);
+const requested = [];
 
 const browser = await puppeteer.launch({ executablePath: "C:/Program Files/Google/Chrome/Application/chrome.exe", headless: true });
 const errors = [];
@@ -43,15 +50,17 @@ async function open({ channel, billing, playPrice = null, tz = "Asia/Kolkata" })
   await page.setRequestInterception(true);
   page.on("request", (r) => {
     const u = new URL(r.url());
-    if (u.origin === "http://plans.test") return r.respond({ status: 200, contentType: "text/html", body: html });
+    if (u.origin === "http://plans.test") return r.respond({ status: 200, contentType: "text/html", body: channel === "playstore" ? htmlPlay : htmlWeb });
     const json = (body) => r.respond({ status: 200, contentType: "application/json", headers: { "Access-Control-Allow-Origin": "*" }, body: JSON.stringify(body) });
     if (u.pathname === "/api/billing/plans") {
       const ch = u.searchParams.get("channel");
       // the real server's rule: the Play build is only offered the shop when it says playBilling=1
-      const purchasable = ch === "direct" || (ch === "playstore" && u.searchParams.get("playBilling") === "1");
+      const purchasable = ch === "direct" || ch === "uptodown" || (ch === "playstore" && u.searchParams.get("playBilling") === "1");
+      const cur = (u.searchParams.get("currency") || "INR").toUpperCase();
+      requested.push(cur);
       return json({
-        success: true, channel: ch, currency: "INR", purchasable,
-        plans: [{ code: "LIFETIME", displayName: "Lifetime", currency: "INR", priceMinor: 1900, unlimited: true, dailySeconds: null,
+        success: true, channel: ch, currency: cur, purchasable,
+        plans: [{ code: "LIFETIME", displayName: "Lifetime", currency: cur, priceMinor: cur === "USD" ? 50 : 1900, unlimited: true, dailySeconds: null,
           durationHours: null, durationMonths: null, purchasable, priceFromStore: ch === "playstore", playProductId: ch === "playstore" ? "gpos_lifetime" : undefined }],
       });
     }
@@ -76,11 +85,12 @@ try {
     assert.doesNotMatch(t, /₹/, "never our rupee price instead of Play's");
     await p.close();
   }
-  // (a2) Play cannot say the price (a test install from outside Play), player in India: our matching ₹ price
+  // (a2) Play cannot say the price (a test install from outside Play), player in India: still no price of ours
   {
     const p = await open({ channel: "playstore", billing: true, playPrice: null, tz: "Asia/Kolkata" });
     const t = await text(p);
-    assert.match(t, /₹\s?19/, "India sees ₹19 even when Play has not answered");
+    assert.match(t, /Price shown by\s+Google Play/, "India too: the Play build waits for Google Play's price");
+    assert.doesNotMatch(t, /₹|\$|19|0\.50/, "and never shows our own number, even in India");
     await p.close();
   }
   // (a3) Play cannot say the price, player outside India: no guessed number, an honest line instead
@@ -102,14 +112,24 @@ try {
     assert.doesNotMatch(t, /Explore plans|See plans/i);
     await p.close();
   }
-  // (c) the website build: unchanged
+  // (c) the website build: rupees in India, dollars everywhere else
   {
-    const p = await open({ channel: "direct", billing: false });
+    const p = await open({ channel: "direct", billing: false, tz: "Asia/Kolkata" });
     const t = await text(p);
     assert.match(t, /Lifetime/, "the website build still shows the plan");
-    assert.match(t, /19/, "with our own price");
+    assert.match(t, /₹\s?19\b/, "in India the price is ₹19");
+    assert.doesNotMatch(t, /\$/, "with no dollar sign");
     await p.close();
+    const q = await open({ channel: "direct", billing: false, tz: "America/New_York" });
+    const t2 = await text(q);
+    assert.match(t2, /\$0\.50/, "outside India the price is $0.50");
+    assert.doesNotMatch(t2, /₹/, "with no rupee sign");
+    await q.close();
+    const g = await open({ channel: "uptodown", billing: false, tz: "Europe/Berlin" });
+    assert.match(await text(g), /\$0\.50/, "the other non-Play builds follow the same rule (Germany: $0.50)");
+    await g.close();
   }
+  assert.ok(requested.includes("USD") && requested.includes("INR"), "the catalogue was asked for dollars and for rupees");
   assert.deepEqual(errors, [], "no page errors");
   console.log("play-plans-dom.test.mjs — all assertions passed");
 } finally {

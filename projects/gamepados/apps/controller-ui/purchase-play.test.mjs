@@ -30,6 +30,7 @@ const stubs = {
 
 const out = await build({
   entryPoints: ["src/app/store/purchase.ts"], bundle: true, write: false, format: "esm", platform: "node", logLevel: "silent",
+  define: { __PLAY__: "true" },   // this file tests the Google Play bundle
   plugins: [{
     name: "stubs",
     setup(b) {

@@ -17,10 +17,23 @@ function figmaAssetResolver() {
   }
 }
 
-export default defineConfig(({command}) => ({
+// Two builds of the same UI (owner, 2026-11-02): the Google Play build and everything else. Mode "play" sets
+// __PLAY__, so code that only the other builds need (Razorpay, our own prices) is removed from the Play bundle
+// at build time, and the Play bundle goes to dist-play/. Each bundle carries a marker the Android build checks.
+function bundleMarker(kind: 'play' | 'web') {
+  return {
+    name: 'gp-bundle-marker',
+    transformIndexHtml: () => [{ tag: 'meta', attrs: { name: 'gp-bundle', content: kind }, injectTo: 'head-prepend' as const }],
+  }
+}
+
+export default defineConfig(({command, mode}) => ({
   base: command === 'serve' ? '/' : './',
+  define: { __PLAY__: JSON.stringify(mode === 'play') },
+  build: { outDir: mode === 'play' ? 'dist-play' : 'dist' },
   plugins: [
     figmaAssetResolver(),
+    bundleMarker(mode === 'play' ? 'play' : 'web'),
     // Only use viteSingleFile for production builds, not dev server
     ...(command === 'build' ? [viteSingleFile()] : []),
     // The React and Tailwind plugins are both required for Make, even if

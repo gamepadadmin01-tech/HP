@@ -40,6 +40,7 @@ venv/
 # Vite / bundler output. NOTE: apps/android-client/.../assets/dist/index.html is
 # NOT ignored — the APK ships it and it must be tracked.
 apps/controller-ui/dist/
+apps/controller-ui/dist-play/
 !apps/android-client/app/src/main/assets/dist/
 
 # ─────────────────────────────────────────────────────────────────────────────

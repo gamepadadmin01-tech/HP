@@ -236,15 +236,21 @@ export async function purchase(plan: api.CataloguePlan): Promise<PurchaseOutcome
 
     // Google Play requires its own billing for digital goods, so the Play build buys through Google
     // Play and nothing else (the Razorpay checkout is not in that build at all).
-    if (channel === "playstore") return buyWithPlay(plan);
+    // (An if/else on purpose: the build drops the whole else branch from the Play bundle, taking the
+    // Razorpay code with it. A plain early return would leave that code in the bundle, unused.)
+    if (__PLAY__) {
+      return buyWithPlay(plan);
+    } else {
+      if (channel === "playstore") return failed("Plans cannot be bought in this version of the app.");
 
-    // Razorpay: the website build, and Uptodown since 2026-09-30 (owner's
-    // decision — its build now carries the same checkout, see build.gradle.kts).
-    if (channel === "direct" || channel === "uptodown") return buyWithRazorpay(plan);
+      // Razorpay: the website build, and Uptodown since 2026-09-30 (owner's
+      // decision — its build now carries the same checkout, see build.gradle.kts).
+      if (channel === "direct" || channel === "uptodown") return buyWithRazorpay(plan);
 
-    // amazonstore, aptoide, indusstore, apkpure — the store's own billing is
-    // mandatory (or unconfirmed), so there is nothing to launch and nothing to link.
-    return failed("Plans cannot be bought in this version of the app.");
+      // amazonstore, aptoide, indusstore, apkpure — the store's own billing is
+      // mandatory (or unconfirmed), so there is nothing to launch and nothing to link.
+      return failed("Plans cannot be bought in this version of the app.");
+    }
   } finally {
     busy = false;
   }

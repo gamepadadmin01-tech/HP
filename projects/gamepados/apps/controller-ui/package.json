@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "build": "vite build",
+    "build:play": "vite build --mode play",
+    "build:all": "vite build && vite build --mode play",
     "dev": "vite"
   },
   "dependencies": {

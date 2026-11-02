@@ -47,6 +47,7 @@ try {
   await page.reload();await pause();
   await click('[data-testid="nav-account-button"]');
   if(plan==='FREE') {
+   await page.waitForSelector('.calm-promo-fold');await page.click('.calm-promo-fold');await pause();   // the code box sits behind "Have a code?" since the Account card redesign
    await page.waitForSelector('[aria-label="Promo code"]');
    await page.focus('[aria-label="Promo code"]');await pause();
    assert.equal(await page.$eval('[aria-label="Promo code"]',e=>getComputedStyle(e).outlineStyle),'none');

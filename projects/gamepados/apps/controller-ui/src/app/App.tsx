@@ -3347,7 +3347,7 @@ function UpdateChecker({ compact = false }: { compact?: boolean }) {
              // user to sideload an APK breaks Play (and most marketplaces')
              // distribution policy. Store builds get a neutral retry message —
              // their store already handles delivering the update.
-             getDistributionChannel() !== "direct" ? "Couldn't check right now. Try again shortly." :
+             (__PLAY__ || getDistributionChannel() !== "direct") ? "Couldn't check right now. Try again shortly." :
              reachedServer.current
                ? <>Our update service isn't responding. Get the latest version at{" "}
                    <a href="https://gamepad.space/#download" target="_blank" rel="noreferrer"

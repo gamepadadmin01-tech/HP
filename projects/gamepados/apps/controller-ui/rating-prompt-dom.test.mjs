@@ -22,7 +22,7 @@ createRoot(document.getElementById("root")).render(<App />);
 const out = await build({
   stdin: { contents: entry, resolveDir: new URL(".", import.meta.url).pathname.replace(/^\/(\w:)/, "$1"), loader: "tsx", sourcefile: "entry.tsx" },
   bundle: true, write: false, format: "iife", jsx: "automatic", platform: "browser", logLevel: "silent",
-  define: { "process.env.NODE_ENV": '"production"' },
+  define: { "process.env.NODE_ENV": '"production"', __PLAY__: "false" },
 });
 const html = `<!doctype html><meta charset="utf-8"><body><div id="root"></div><script>${out.outputFiles[0].text.replace(/<\/script>/g, "<\\/script>")}</script>`;
 
