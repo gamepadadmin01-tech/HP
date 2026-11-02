@@ -269,8 +269,13 @@ android {
         //      the Touchpad Camera sample pad), Unity rewarded ads in the direct and uptodown builds
         //      (Play stays on AdMob), ads offered only under 30 minutes, and every pop-up and sheet
         //      now opens and closes smoothly with one shared set of motion rules.
-        versionCode = 67
-        versionName = "1.4.13"
+        // 68 = 1.4.14 (2026-11-02): two UI bundles (Google Play: Google Play Billing + Google's own price,
+        //      no Razorpay; everything else: Rs 19 in India and $0.50 elsewhere), Unity ads and Google Play
+        //      Billing in the Play build, ad-failure reporting with 20 free minutes, a clean touchpad
+        //      (rectangle or circle) with the right-stick sensitivity setting, the Watch-an-ad button on
+        //      the Play tab, a lighter "Make it your own" pop-up, and refresh rate capped at 120 Hz.
+        versionCode = 68
+        versionName = "1.4.14"
 
         // AdMob test IDs by default; the release build type swaps in the live ones (see top of file).
         buildConfigField("String", "ADMOB_REWARDED_ID", "\"$admobTestRewardedId\"")

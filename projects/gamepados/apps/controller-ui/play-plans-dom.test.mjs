@@ -32,10 +32,11 @@ const requested = [];
 
 const browser = await puppeteer.launch({ executablePath: "C:/Program Files/Google/Chrome/Application/chrome.exe", headless: true });
 const errors = [];
-async function open({ channel, billing, playPrice = null, tz = "Asia/Kolkata" }) {
+async function open({ channel, billing, playPrice = null, tz = "Asia/Kolkata", langs = null }) {
   const page = await browser.newPage();
   page.on("pageerror", (e) => errors.push(e.message));
   await page.emulateTimezone(tz);
+  if (langs) await page.evaluateOnNewDocument((l) => { Object.defineProperty(navigator, "languages", { get: () => l }); Object.defineProperty(navigator, "language", { get: () => l[0] }); }, langs);
   await page.evaluateOnNewDocument((channel, billing, playPrice) => {
     try { localStorage.clear(); } catch {}
     const bridge = {
@@ -125,6 +126,16 @@ try {
     assert.match(t2, /\$0\.50/, "outside India the price is $0.50");
     assert.doesNotMatch(t2, /₹/, "with no rupee sign");
     await q.close();
+    // an Indian phone set to an Indian language/region is still rupees, even when its time zone is not India's (travelling, VPN)
+    const h = await open({ channel: "direct", billing: false, tz: "Asia/Dubai", langs: ["hi-IN", "en-IN"] });
+    assert.match(await text(h), /₹\s?19\b/, "region India (hi-IN) in another time zone: still ₹19");
+    await h.close();
+    const c2 = await open({ channel: "direct", billing: false, tz: "Asia/Calcutta" });
+    assert.match(await text(c2), /₹\s?19\b/, "the old time-zone name Asia/Calcutta: ₹19");
+    await c2.close();
+    const us = await open({ channel: "direct", billing: false, tz: "America/Los_Angeles", langs: ["en-US"] });
+    assert.match(await text(us), /\$0\.50/, "USA: $0.50");
+    await us.close();
     const g = await open({ channel: "uptodown", billing: false, tz: "Europe/Berlin" });
     assert.match(await text(g), /\$0\.50/, "the other non-Play builds follow the same rule (Germany: $0.50)");
     await g.close();
