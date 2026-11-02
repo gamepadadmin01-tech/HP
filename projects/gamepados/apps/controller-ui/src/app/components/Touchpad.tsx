@@ -11,10 +11,10 @@
 // the stick is being pushed):
 //   • idle        a clean dark glass surface, like a laptop trackpad. Nothing is drawn on it (only a
 //                 name the player typed). Rectangle or circle, chosen in the layout editor
-//   • touch       a ripple spreads from the finger, a faint dot grid fades in, a glowing dot follows the finger
-//   • sliding     the dot grid slides under the finger like a real trackpad surface; the edge glows
-//                 with how hard the stick is pushed; speed feel leaves a comet and a short trail,
-//                 distance feel draws a tension line back to where the finger first landed
+//   • touch       a ripple spreads from the finger and a glowing dot sits right under it
+//   • sliding     the dot stays glued to the finger (see LEAD below) and leaves a short trail along
+//                 the finger's REAL path; the edge glows with how hard the stick is pushed. Nothing
+//                 else moves: no background grid, no straight streaks
 //   • full push   the rim lights up (and the phone ticks) once, like a stick hitting its stop
 //   • lift        everything eases out; with "glide" the dot visibly slides home with the stick
 
@@ -25,9 +25,14 @@ import { ACCENT_RGB, RED_NORM, PadGlassDefs } from "./Widgets";
 
 const accent = (a: number) => `rgba(${ACCENT_RGB}, ${a})`;
 const safeId = (s: string) => s.replace(/[^a-zA-Z0-9_-]/g, "");
-const TRAIL = 6;          // afterimage dots behind the finger
-const GRID = 34;          // dot-grid spacing, design units
-const PARALLAX = 0.45;    // how far the grid slides per unit of finger travel
+// The phone reports the finger a frame or two late (it has to cross into the web view), so the dot looks
+// like it trails the finger. The dot is drawn that much AHEAD along the finger's own speed to cancel it.
+const LEAD = 0.034;       // seconds of look-ahead
+const LEAD_MAX = 34;      // design units: never further ahead than this
+const VEL_TAU = 0.03;     // seconds: how quickly the speed estimate follows the finger
+const SETTLE_MS = 70;     // no new frame for this long: the finger stopped, so the dot sits exactly on it
+const TRAIL_MS = 150;     // how much of the finger's path the trail shows
+const TRAIL_MAX = 14;     // most points kept
 
 const reducedMotion = (): boolean => {
   try { return typeof matchMedia !== "undefined" && matchMedia("(prefers-reduced-motion: reduce)").matches; }
@@ -44,9 +49,8 @@ const Shp = React.forwardRef<SVGElement, ShpProps>(({ round, x, y, w, h, rx = 0,
   ? <ellipse ref={ref as React.Ref<SVGEllipseElement>} cx={x} cy={y} rx={w / 2} ry={h / 2} {...(p as React.SVGProps<SVGEllipseElement>)} />
   : <rect ref={ref as React.Ref<SVGRectElement>} x={x - w / 2} y={y - h / 2} width={w} height={h} rx={rx} {...(p as React.SVGProps<SVGRectElement>)} />);
 
-export function TouchpadArt({ id, x, y, w, h, label, round, patternRef }: {
+export function TouchpadArt({ id, x, y, w, h, label, round }: {
   id: string; x: number; y: number; w: number; h: number; label?: string; round?: boolean;
-  patternRef?: React.Ref<SVGPatternElement>;
 }) {
   const k = safeId(id);
   const rx = Math.min(w, h) * 0.14;
@@ -57,9 +61,6 @@ export function TouchpadArt({ id, x, y, w, h, label, round, patternRef }: {
       <PadGlassDefs />
       <defs>
         <clipPath id={`tpc-${k}`}><Shp round={round} x={x} y={y} w={w} h={h} rx={rx} /></clipPath>
-        <pattern ref={patternRef} id={`tpg-${k}`} patternUnits="userSpaceOnUse" width={GRID} height={GRID}>
-          <circle cx={GRID / 2} cy={GRID / 2} r={1.7} fill="rgba(255,255,255,0.20)" />
-        </pattern>
         <radialGradient id={`tpv-${k}`} cx="0.5" cy="0.5" r="0.75">
           <stop offset="55%" stopColor="#000" stopOpacity="0" />
           <stop offset="100%" stopColor="#000" stopOpacity="0.42" />
@@ -72,10 +73,6 @@ export function TouchpadArt({ id, x, y, w, h, label, round, patternRef }: {
       {/* glass body */}
       <Shp round={round} x={x} y={y} w={w} h={h} rx={rx} fill={RED_NORM} stroke="rgba(255,255,255,0.07)" strokeWidth={1.5} />
       <g clipPath={`url(#tpc-${k})`}>
-        {/* the dot grid is only there while a finger is down (it slides under the finger) */}
-        <g data-tp="grid" style={{ opacity: 0, transition: "opacity 0.25s ease-out" }}>
-          <rect x={left} y={top} width={w} height={h} fill={`url(#tpg-${k})`} />
-        </g>
         <rect x={left} y={top} width={w} height={h} fill={`url(#tpv-${k})`} />
         <rect x={left} y={top} width={w} height={h * 0.46} fill="url(#padSpec)" opacity={0.4} />
       </g>
@@ -111,25 +108,24 @@ function TouchpadBase({ id, x, y, w, h, label, round, feel, release, sens, svgRe
   const reduce = useRef(reducedMotion());
 
   // refs to the nodes the animation moves
-  const patternRef = useRef<SVGPatternElement>(null);
-  const rootRef = useRef<SVGGElement>(null);
   const activeRef = useRef<SVGGElement>(null);
-  const gridRef = useRef<SVGGElement | null>(null);
   const dotRef = useRef<SVGGElement>(null);
   const haloRef = useRef<SVGGElement>(null);
   const coreRef = useRef<SVGGElement>(null);
   const edgeRef = useRef<SVGElement>(null);
   const rimRef = useRef<SVGElement>(null);
-  const tensionRef = useRef<SVGLineElement>(null);
   const originRef = useRef<SVGCircleElement>(null);
-  const cometRef = useRef<SVGLineElement>(null);
-  const trailRef = useRef<SVGGElement>(null);
+  const trailRef = useRef<SVGPathElement>(null);
   const rippleRef = useRef<SVGCircleElement>(null);
 
   const anim = useRef({
     on: false, full: false, ox: 0, oy: 0,
-    trail: [] as { x: number; y: number }[],
+    px: 0, py: 0, pt: 0, vx: 0, vy: 0,          // the previous frame and the finger's smoothed speed
+    settle: 0 as ReturnType<typeof setTimeout> | 0,
+    trail: [] as { x: number; y: number; t: number }[],
   });
+  const geo = useRef({ l: 0, t: 0, r: 0, b: 0 });
+  geo.current = { l: left, t: top, r: left + w, b: top + h };
   const optsRef = useRef(opts); optsRef.current = opts;
   const cbRef = useRef({ onStick, onPress, onRelease, onEdge });
   cbRef.current = { onStick, onPress, onRelease, onEdge };
@@ -139,14 +135,13 @@ function TouchpadBase({ id, x, y, w, h, label, round, feel, release, sens, svgRe
     const a = anim.current;
     const act = activeRef.current;
     if (!act) return;
-    if (!gridRef.current) gridRef.current = rootRef.current?.querySelector('[data-tp="grid"]') as SVGGElement | null;
-    const grid = gridRef.current;
 
     if (!f) {
       if (!a.on) return;
       a.on = false; a.full = false; a.trail = [];
+      if (a.settle) { clearTimeout(a.settle); a.settle = 0; }
       act.style.opacity = "0";
-      if (grid) grid.style.opacity = "0";
+      if (trailRef.current) trailRef.current.style.opacity = "0";
       if (coreRef.current) coreRef.current.style.transform = "scale(0.55)";
       if (rimRef.current) rimRef.current.style.stroke = "rgba(255,255,255,0.07)";
       return;
@@ -155,8 +150,8 @@ function TouchpadBase({ id, x, y, w, h, label, round, feel, release, sens, svgRe
     const mag = Math.min(1, Math.hypot(f.dx, f.dy) / STICK_R);
     if (!a.on) {
       a.on = true; a.ox = f.fx; a.oy = f.fy; a.trail = [];
+      a.px = f.fx; a.py = f.fy; a.pt = performance.now(); a.vx = 0; a.vy = 0;
       act.style.opacity = "1";
-      if (grid) grid.style.opacity = "1";
       if (coreRef.current) coreRef.current.style.transform = "scale(1)";
       const rp = rippleRef.current;
       if (rp && !reduce.current && rp.animate) {
@@ -167,52 +162,50 @@ function TouchpadBase({ id, x, y, w, h, label, round, feel, release, sens, svgRe
       }
     }
 
-    // the finger dot and its halo (the halo swells with the push)
-    if (dotRef.current) dotRef.current.style.transform = `translate(${f.fx}px, ${f.fy}px)`;
+    // Where to draw the dot: on the finger, nudged ahead by its own speed to cancel the report delay.
+    const now = performance.now();
+    const dt = Math.max((now - a.pt) / 1000, 0.008);
+    const kv = 1 - Math.exp(-dt / VEL_TAU);
+    a.vx += ((f.fx - a.px) / dt - a.vx) * kv;
+    a.vy += ((f.fy - a.py) / dt - a.vy) * kv;
+    a.px = f.fx; a.py = f.fy; a.pt = now;
+    const g = geo.current;
+    const clampLead = (v: number) => Math.max(-LEAD_MAX, Math.min(LEAD_MAX, v * LEAD));
+    const dx = Math.max(g.l, Math.min(g.r, f.fx + clampLead(a.vx)));
+    const dy = Math.max(g.t, Math.min(g.b, f.fy + clampLead(a.vy)));
+    if (dotRef.current) { dotRef.current.style.transition = ""; dotRef.current.style.transform = `translate(${dx}px, ${dy}px)`; }
     if (haloRef.current) haloRef.current.style.transform = `scale(${1 + 0.7 * mag})`;
-    // the dot grid slides under the finger like a trackpad surface
-    patternRef.current?.setAttribute("patternTransform", `translate(${(f.fx * PARALLAX).toFixed(1)} ${(f.fy * PARALLAX).toFixed(1)})`);
     // the edge glows with how hard the stick is pushed
     if (edgeRef.current) edgeRef.current.style.opacity = String(0.12 + 0.6 * mag);
 
-    const distance = optsRef.current.feel === "distance";
-    const t = tensionRef.current, o = originRef.current, c = cometRef.current, tr = trailRef.current;
-    if (distance) {
-      if (t) {
-        t.setAttribute("x1", String(a.ox)); t.setAttribute("y1", String(a.oy));
-        t.setAttribute("x2", String(f.fx)); t.setAttribute("y2", String(f.fy));
-        t.style.opacity = String(Math.min(1, mag * 3));
-        t.style.strokeWidth = String(2 + 4 * mag);
-      }
+    // A finger that stops sends no more frames, so settle the dot exactly onto it by ourselves.
+    if (a.settle) clearTimeout(a.settle);
+    const fx = f.fx, fy = f.fy;
+    a.settle = setTimeout(() => {
+      a.settle = 0; a.vx = 0; a.vy = 0;
+      if (dotRef.current) { dotRef.current.style.transition = "transform 0.08s ease-out"; dotRef.current.style.transform = `translate(${fx}px, ${fy}px)`; }
+      if (trailRef.current) trailRef.current.style.opacity = "0";
+      a.trail = [];
+    }, SETTLE_MS);
+
+    const o = originRef.current, tr = trailRef.current;
+    if (optsRef.current.feel === "distance") {
+      // a floating stick: a ring marks where the finger first landed
       if (o) { o.setAttribute("cx", String(a.ox)); o.setAttribute("cy", String(a.oy)); o.style.opacity = "1"; }
-      if (c) c.style.opacity = "0";
       if (tr) tr.style.opacity = "0";
     } else {
-      if (t) t.style.opacity = "0";
       if (o) o.style.opacity = "0";
-      const m = Math.hypot(f.dx, f.dy);
-      if (c) {
-        if (m < 1.5) c.style.opacity = "0";
-        else {
-          const len = 16 + 120 * mag;
-          c.setAttribute("x1", String(f.fx)); c.setAttribute("y1", String(f.fy));
-          c.setAttribute("x2", String(f.fx - (f.dx / m) * len)); c.setAttribute("y2", String(f.fy - (f.dy / m) * len));
-          c.style.opacity = String(0.2 + 0.7 * mag);
-          c.style.strokeWidth = String(4 + 10 * mag);
-        }
-      }
       if (tr && !reduce.current) {
-        a.trail.push({ x: f.fx, y: f.fy });
-        if (a.trail.length > TRAIL) a.trail.shift();
-        const kids = tr.children;
-        for (let i = 0; i < kids.length; i++) {
-          const p = a.trail[a.trail.length - 1 - i];
-          const el = kids[i] as SVGCircleElement;
-          if (!p) { el.style.opacity = "0"; continue; }
-          el.setAttribute("cx", String(p.x)); el.setAttribute("cy", String(p.y));
-          el.style.opacity = String((1 - i / TRAIL) * 0.5 * Math.min(1, mag * 2.5));
-        }
-        tr.style.opacity = "1";
+        // the trail is the finger's real path, a few frames of it, so it bends where the finger bends
+        const tl = a.trail;
+        tl.push({ x: dx, y: dy, t: now });
+        while (tl.length > TRAIL_MAX || (tl.length > 0 && now - tl[0].t > TRAIL_MS)) tl.shift();
+        if (tl.length >= 2) {
+          let d = `M${tl[0].x.toFixed(1)} ${tl[0].y.toFixed(1)}`;
+          for (let i = 1; i < tl.length; i++) d += `L${tl[i].x.toFixed(1)} ${tl[i].y.toFixed(1)}`;
+          tr.setAttribute("d", d);
+          tr.style.opacity = String(0.55 * Math.min(1, mag * 2.5));
+        } else tr.style.opacity = "0";
       }
     }
 
@@ -267,12 +260,13 @@ function TouchpadBase({ id, x, y, w, h, label, round, feel, release, sens, svgRe
 
   useEffect(() => () => {
     if (raf.current) cancelAnimationFrame(raf.current);
+    if (anim.current.settle) clearTimeout(anim.current.settle);
     if (last.current.x !== 0 || last.current.y !== 0) cbRef.current.onStick(id, 0, 0);
   }, [id]);
 
   return (
-    <g ref={rootRef}>
-      <TouchpadArt id={id} x={x} y={y} w={w} h={h} label={label} round={round} patternRef={patternRef} />
+    <g>
+      <TouchpadArt id={id} x={x} y={y} w={w} h={h} label={label} round={round} />
 
       {/* live layers: invisible until a finger arrives */}
       <g ref={activeRef} style={{ opacity: 0, transition: "opacity 0.25s ease-out", pointerEvents: "none" }}>
@@ -285,14 +279,8 @@ function TouchpadBase({ id, x, y, w, h, label, round, feel, release, sens, svgRe
         <g clipPath={`url(#tpc-${k})`}>
           <circle ref={rippleRef} r={80} fill="none" stroke={accent(0.9)} strokeWidth={3} opacity={0}
             style={{ transformBox: "fill-box", transformOrigin: "center" }} />
-          <line ref={tensionRef} stroke={accent(0.75)} strokeLinecap="round" strokeWidth={3} opacity={0} />
           <circle ref={originRef} r={16} fill="none" stroke={accent(0.7)} strokeWidth={2.5} strokeDasharray="3 6" opacity={0} />
-          <line ref={cometRef} stroke={accent(0.85)} strokeLinecap="round" strokeWidth={6} opacity={0} />
-          <g ref={trailRef} opacity={0}>
-            {Array.from({ length: TRAIL }, (_, i) => (
-              <circle key={i} r={14 - i * 1.6} fill={accent(0.9)} opacity={0} />
-            ))}
-          </g>
+          <path ref={trailRef} fill="none" stroke={accent(0.85)} strokeWidth={12} strokeLinecap="round" strokeLinejoin="round" opacity={0} />
           <g ref={dotRef} style={{ transform: `translate(${x}px, ${y}px)` }}>
             <g ref={haloRef} style={{ transition: "transform 0.12s ease-out" }}>
               <circle r={58} fill={`url(#tph-${k})`} />

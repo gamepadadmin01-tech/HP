@@ -69,7 +69,7 @@ try {
       window.__apply([]);                                   // the engine says: no active pad any more
       await new Promise((res) => setTimeout(res, 400));
       const idleOpacity = [...svg.querySelectorAll("g")].filter((g) => g.querySelector("circle[r='58']") && g.style.pointerEvents === "none").map((g) => g.style.opacity);
-      const grid = svg.querySelector('[data-tp="grid"]').style.opacity;
+      const grid = svg.querySelector("pattern, [data-tp='grid'], line") ? "present" : "0";
       costs.sort((x, y) => x - y);
       return {
         commits: window.__commits - commitsBefore, dotMoves, live, idleOpacity, grid,
@@ -83,7 +83,7 @@ try {
     assert.ok(r.dotMoves > 850, `the finger dot moved on nearly every frame (${r.dotMoves}/900)`);
     assert.ok(r.live, "the live layer was visible while the finger was down");
     assert.ok(r.idleOpacity.every((o) => o === "0"), "everything fades out when the finger lifts");
-    assert.equal(r.grid, "0", "the dot grid is gone again");
+    assert.equal(r.grid, "0", "no grid and no straight streak anywhere");
     await page.close();
   }
   assert.deepEqual(errors, [], "no frame threw");

@@ -54,7 +54,8 @@ const state = (page) => page.evaluate(() => {
   const act = svg.querySelector("g[style*='transition: opacity']");
   const groups = [...svg.querySelectorAll("g")];
   const active = groups.find((g) => g.style.opacity !== "" && g.style.pointerEvents === "none" && g.querySelector("circle[r='58']"));
-  const grid = svg.querySelector('[data-tp="grid"]');
+  const lines = svg.querySelectorAll("line").length;           // straight streaks: there must be none
+  const trailPath = svg.querySelector("path[stroke-linecap='round']");
   const text = [...svg.querySelectorAll("text")].map((t) => t.textContent).join("|");
   const surface = [...svg.querySelectorAll("rect,ellipse")].find((e) => e.getAttribute("fill") === "transparent");
   const sb = surface ? surface.getBoundingClientRect() : null;
@@ -62,13 +63,13 @@ const state = (page) => page.evaluate(() => {
   const last = window.__log.filter(Array.isArray).slice(-1)[0] || null;
   return {
     activeOpacity: active ? active.style.opacity : null,
-    gridOpacity: grid ? grid.style.opacity : null,
+    lines, hasGrid: !!svg.querySelector("pattern, [data-tp='grid']"),
+    trailD: trailPath ? trailPath.getAttribute("d") : null, trailOpacity: trailPath ? trailPath.style.opacity : null,
     text,
     hasJoystickDrawing: !!svg.querySelector(".gp-tp-breath, .gp-tp-nl, .gp-tp-nr, .gp-tp-nu, .gp-tp-nd"),
     surfaceTag: surface ? surface.tagName : null,
     surfaceBox: sb ? { l: sb.left, t: sb.top, w: sb.width, h: sb.height } : null,
     dotTransform: dot ? dot.style.transform : null,
-    patternShift: svg.querySelector("pattern")?.getAttribute("patternTransform") || null,
     last, count: window.__log.filter(Array.isArray).length, events: window.__log.filter((x) => typeof x === "string"),
   };
 });
@@ -83,7 +84,8 @@ try {
     const p = await fresh();
     const s = await state(p);
     assert.equal(s.activeOpacity, "0", "idle: the live layer is hidden");
-    assert.equal(s.gridOpacity, "0", "idle: the dot grid is hidden, the surface is clean");
+    assert.equal(s.hasGrid, false, "no dot grid on the pad at all, the surface is clean");
+    assert.equal(s.lines, 0, "no straight lines anywhere on the pad");
     assert.equal(s.hasJoystickDrawing, false, "idle: no joystick drawing (ring or arrows) on the pad");
     assert.equal(s.text, "", "idle: no words on the pad unless the player typed a name");
     await p.close();
@@ -97,9 +99,10 @@ try {
     assert.ok(s.last && s.last[0] > 30, `fast swipe right pushes the stick right (got ${s.last && s.last[0]})`);
     assert.ok(Math.abs(s.last[1]) < 6, "a straight swipe has no sideways push");
     assert.equal(s.activeOpacity, "1", "touching shows the live layer");
-    assert.equal(s.gridOpacity, "1", "touching fades the dot grid in");
     assert.ok(/translate\(/.test(s.dotTransform) && !/translate\(640px, 285px\)/.test(s.dotTransform), "the finger dot follows the finger");
-    assert.ok(s.patternShift && /translate\(/.test(s.patternShift), "the dot grid slides under the finger");
+    assert.equal(s.hasGrid, false, "touching never brings a background grid back");
+    assert.equal(s.lines, 0, "and never draws a straight streak out of the finger");
+    assert.ok(s.trailD && s.trailD.startsWith("M") && s.trailD.includes("L"), "the trail is a path made of where the finger really went");
     assert.ok(s.events.includes("press"), "the press haptic fired once on landing");
     await sleep(450);                                             // finger rests, still down
     s = await state(p);
@@ -112,7 +115,6 @@ try {
     await sleep(350);
     s = await state(p);
     assert.equal(s.activeOpacity, "0", "everything fades out after the lift");
-    assert.equal(s.gridOpacity, "0", "the grid fades out again after the lift");
     await p.close();
   }
 
@@ -190,7 +192,22 @@ try {
     assert.ok(/700px, 300px/.test(s.dotTransform), `native feed: the dot is at the finger (${s.dotTransform})`);
     await p.evaluate(() => window.__apply([["tp1", 710, 300, 45, 0]]));
     s = await state(p);
-    assert.ok(/710px, 300px/.test(s.dotTransform), "native feed: the dot follows");
+    const at = (t) => { const m = /translate\(([-\d.]+)px, ([-\d.]+)px\)/.exec(t); return m ? { x: +m[1], y: +m[2] } : null; };
+    let d = at(s.dotTransform);
+    assert.ok(d.x >= 710 && d.x <= 710 + 34, `native feed: while moving right the dot is a little AHEAD of the reported finger, to cancel the report delay (${d.x})`);
+    assert.equal(d.y, 300, "and never drifts sideways");
+    // a finger that stops sends no more frames: the dot must settle exactly onto it by itself
+    await sleep(260);
+    s = await state(p);
+    d = at(s.dotTransform);
+    assert.equal(d.x, 710, `native feed: once the finger rests the dot sits exactly on it (${d.x})`);
+    // the pad's own edge is a wall: a fast finger near it never pulls the dot outside the pad
+    await p.evaluate(() => { window.__apply([["tp1", 1100, 300, 30, 0]]); window.__apply([["tp1", 1270, 300, 60, 0]]); });
+    s = await state(p);
+    d = at(s.dotTransform);
+    const box = s.surfaceBox;
+    assert.ok(d.x <= box.l + box.w + 0.5, `the look-ahead never pushes the dot off the pad (${d.x} vs right edge ${box.l + box.w})`);
+    assert.ok(d.x >= box.l - 0.5, "and never off its left edge either");
     await p.evaluate(() => window.__apply([]));
     await sleep(350);
     s = await state(p);
