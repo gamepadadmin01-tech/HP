@@ -84,8 +84,11 @@ account system lives in the main tree. Its 3 unpushed commits are preserved as p
   `apps/android-client/local.properties` (`sdk.dir`), `build_exact_composite.py`,
   `create_stacked_promo.py`, `tools/regression-check.sh`, and `HP/.claude/launch.json`.
   **This has silently broken the build twice before.**
-- **Always copy `apps/controller-ui/dist/index.html` → `apps/android-client/app/src/main/assets/dist/`
-  before building the APK**, or it silently ships the previous UI.
+- **Two UI bundles since 2026-11-02.** In `apps/controller-ui` run `npm run build:all`, then copy
+  `dist/index.html` → `apps/android-client/app/src/main/assets/dist/` (every flavour except Play) **and**
+  `dist-play/index.html` → `apps/android-client/app/src/playstore/assets/dist/` (Google Play only), or the APK
+  silently ships the previous UI. The Play bundle has no Razorpay and shows only Google Play's price; the other
+  bundle shows ₹19 in India and $0.50 elsewhere. Gradle stops the build if a flavour has the wrong bundle.
 - **The PC server is the Rust one, `apps/pc-server-rs`.** The old Python server (`apps/pc-server`)
   was retired and moved to `context/archive/dead-code-2026-09-30/apps/pc-server` on 2026-09-30
   (owner-approved). Its PyInstaller notes (Pillow ≥ 12 needs `PIL.ImageFont`/`PIL._imagingft`)
