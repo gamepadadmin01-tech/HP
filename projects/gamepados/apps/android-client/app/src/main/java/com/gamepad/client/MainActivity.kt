@@ -522,13 +522,18 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback, android.hardwa
         window.decorView.setBackgroundColor(Color.parseColor("#070910"))
         WindowCompat.setDecorFitsSystemWindows(window, false)
 
-        // Render at the display's MAX refresh rate (e.g. 120Hz) instead of the default
-        // 60Hz, so the WebView UI + animations can be smooth on high-refresh phones.
-        // Picks the highest-rate supported mode; harmless/no-op on 60Hz-only devices.
+        // Render at the display's highest refresh rate UP TO 120Hz instead of the default 60Hz, so the
+        // WebView UI + animations are smooth on high-refresh phones. 120 is the cap (owner, 2026-11-02):
+        // a 144/165Hz mode gives the web view a ~6ms frame budget, and it drops frames under load, so a
+        // steady 120 feels better. The touchpad and stick visuals are tied to this frame clock, so they
+        // are capped too. If a phone has no mode at or below 120 (rare), the lowest mode is used.
+        // Harmless/no-op on 60Hz-only devices.
         try {
             val disp = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) display
                        else @Suppress("DEPRECATION") windowManager.defaultDisplay
-            disp?.supportedModes?.maxByOrNull { it.refreshRate }?.let { best ->
+            val modes = disp?.supportedModes
+            (modes?.filter { it.refreshRate <= 121f }?.maxByOrNull { it.refreshRate }
+                ?: modes?.minByOrNull { it.refreshRate })?.let { best ->
                 val lp = window.attributes
                 lp.preferredDisplayModeId = best.modeId
                 lp.preferredRefreshRate = best.refreshRate
