@@ -310,7 +310,7 @@
 .gp-shell .console-launch { background: #ff5500; color: #09090b; }
 .gp-shell .console-hero-foot > span:first-child { color: #6cdbed; }
 .gp-shell .console-hero-foot > span:nth-of-type(2) { color: #bd96e4; }
-.gp-shell .calm-allowance { margin: 16px 0 27px; padding: 14px 12px; background: var(--console-violet-tint); border: 1px solid var(--console-violet-line); border-radius: 12px; }
+.gp-shell .calm-allowance { margin: 0; padding: 14px 12px; background: var(--console-violet-tint); border: 1px solid var(--console-violet-line); border-radius: 12px; }
 .gp-shell .console-allowance-icon { width: 32px; background: transparent; color: var(--console-violet); }
 .gp-shell .calm-allowance .console-eyebrow { color: var(--console-violet); font-size: 8px; }
 .gp-shell .calm-allowance button { min-width: 44px; color: var(--console-violet); }
@@ -437,6 +437,19 @@
    with only a small arrow that could be pressed. The arrow is now just decoration inside the button. */
 .gp-shell .calm-allowance { width: 100%; text-align: left; font: inherit; cursor: pointer; -webkit-tap-highlight-color: transparent; transition: transform .16s ease-out, border-color .16s ease-out; }
 .gp-shell .calm-allowance:active { transform: scale(.985); }
+/* The play-time card with the ad button beside it (2026-11-02). The row owns the spacing the card used to. */
+.gp-shell .calm-allowance-block { margin: 16px 0 27px; }
+.gp-shell .calm-allowance-row { display: flex; align-items: stretch; gap: 10px; }
+.gp-shell .calm-allowance-row > .calm-allowance { flex: 1 1 0; width: auto; min-width: 0; margin: 0; }
+.gp-shell .calm-ad-chip { flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-width: 96px; min-height: 64px; padding: 8px 12px; border-radius: 12px; border: 1px solid var(--calm-accent); background: var(--calm-tint, rgba(171,200,219,.10)); color: var(--calm-accent); font: inherit; cursor: pointer; -webkit-tap-highlight-color: transparent; transition: transform .16s ease-out, opacity .16s ease-out; }
+.gp-shell .calm-ad-chip:active:not(:disabled) { transform: scale(.97); }
+.gp-shell .calm-ad-chip:disabled { opacity: .7; cursor: default; }
+.gp-shell .calm-ad-chip:focus-visible { outline: 2px solid var(--calm-accent); outline-offset: 2px; }
+.gp-shell .calm-ad-chip-main { font: 700 12px var(--calm-body); line-height: 1.2; color: var(--calm-ink); text-align: center; }
+.gp-shell .calm-ad-chip-sub { font: 700 13px var(--calm-display); line-height: 1.1; color: var(--calm-accent); }
+.gp-shell .calm-ad-status { margin: 8px 2px 0; font-size: 12px; line-height: 1.45; color: var(--calm-good, var(--calm-muted)); }
+.gp-shell .calm-ad-status[data-phase="error"] { color: var(--calm-error, #ffaba6); }
+@media (prefers-reduced-motion: reduce) { .gp-shell .calm-ad-chip, .gp-shell .calm-ad-chip:active { transition: none; transform: none; } }
 .gp-shell .calm-allowance:focus-visible { outline: 2px solid var(--console-violet, #bd96e4); outline-offset: 2px; }
 .gp-shell .calm-allowance-go { min-width: 44px; min-height: 44px; display: grid; place-items: center; color: var(--console-violet, var(--calm-muted)); }
 @media (prefers-reduced-motion: reduce) { .gp-shell .calm-allowance, .gp-shell .calm-allowance:active { transition: none; transform: none; } }

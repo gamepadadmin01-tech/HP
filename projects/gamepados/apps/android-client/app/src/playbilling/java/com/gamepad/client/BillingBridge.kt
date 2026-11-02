@@ -90,8 +90,15 @@ open class BillingBridge(activity: MainActivity) : UpdaterBridge(activity) {
                 .build()
             client.queryProductDetailsAsync(params) { result, queryResult ->
                 val product = queryResult.productDetailsList.firstOrNull()
-                if (result.responseCode != BillingClient.BillingResponseCode.OK || product == null) {
-                    PurchaseRelay.post(PurchaseRelay.error("That plan is not available on Google Play yet."))
+                if (result.responseCode != BillingClient.BillingResponseCode.OK) {
+                    PurchaseRelay.post(PurchaseRelay.error(readable(result)))
+                } else if (product == null) {
+                    // Google Play does not know this item for THIS install. Typical reasons: the app was installed
+                    // from a file instead of Google Play (purchases only work in the Play-installed version), the
+                    // version uploaded to Play does not carry billing yet, or the product is not active.
+                    PurchaseRelay.post(PurchaseRelay.error(
+                        "Google Play does not offer this item to this install. Buying only works in the version " +
+                        "installed from Google Play. If you installed from a file, install it from Play instead."))
                 } else {
                     launch(product, accountId)
                 }

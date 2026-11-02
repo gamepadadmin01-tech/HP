@@ -8,6 +8,7 @@ import { formatDuration } from "../store/billing";
 import { getSession, onSessionChange } from "../store/account";
 import { getAppConfig, onAppConfigChange, ruleWords } from "../store/appConfig";
 import { requestDashboardTab } from "../store/navIntent";
+import { AdRewardChip, AdRewardStatus } from "./AdRewardChip";
 
 type Appearance = "light" | "dark";
 const themeEvent = "gp-shell-appearance";
@@ -78,7 +79,7 @@ export function ConnectionSummary({ telemetry, onClick }: { telemetry?: LinkTele
   return <div className="calm-connection" data-link-state={state} role="status">{body}</div>;
 }
 
-export function DashboardAllowance() {
+function AllowanceCard() {
   const [session, setSession] = useState(getSession);
   const [remaining, setRemaining] = useState(() => guestTrial().remainingSeconds);
   const cfg = useSyncExternalStore(onAppConfigChange, getAppConfig, getAppConfig);
@@ -103,4 +104,17 @@ export function DashboardAllowance() {
     <span className="sr-only">{session ? "View account" : "View plans"}</span>
     <span className="calm-allowance-go" data-testid="view-plans-button" aria-hidden="true"><ChevronRight size={19} /></span>
   </button>;
+}
+/** The play-time card with the "Watch an ad +30 min" button right beside it (owner, 2026-11-02), and a line
+ *  under both saying what the last ad did. The button only exists where ads exist and work. */
+export function DashboardAllowance() {
+  return (
+    <div className="calm-allowance-block">
+      <div className="calm-allowance-row">
+        <AllowanceCard />
+        <AdRewardChip />
+      </div>
+      <AdRewardStatus />
+    </div>
+  );
 }
