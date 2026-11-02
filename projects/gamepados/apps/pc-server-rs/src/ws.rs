@@ -717,8 +717,6 @@ mod tests {
         assert_eq!(parse_header(req, "missing"), None);
     }
 
-    use super::*;
-
     /// Standard SHA-1 vectors — if these are wrong the handshake silently fails.
     #[test]
     fn sha1_matches_known_vectors() {

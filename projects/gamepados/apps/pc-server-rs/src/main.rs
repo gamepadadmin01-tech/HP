@@ -752,34 +752,26 @@ fn run_udp<S: pc_server_rs::net::PadSink + Send + 'static>(
                 frames.clear();
                 handshakes.clear();
                 tickets.clear();
-                if pc_server_rs::grx::is_handshake(&buf[..n]) {
-                    handshakes.push((addr, buf[..n].to_vec(), local));
-                } else if pc_server_rs::ticket::looks_like_ticket(&buf[..n]) {
-                    // One integer compare for an input frame — see the doc
-                    // comment on looks_like_ticket. Verification happens AFTER
-                    // the drain, never here.
-                    let mut t = [0u8; pc_server_rs::ticket::TICKET_LEN];
-                    t.copy_from_slice(&buf[..n]);
-                    tickets.push((pc_server_rs::net::session_key(&addr), t));
-                } else {
-                    push_frame(&mut frames, addr, &buf[..n], local);
-                }
-                sock.set_nonblocking(true).ok();
-                loop {
-                    match replier.recv_from(&sock, &mut buf) {
-                        Ok((n2, a2, l2)) => {
-                            if pc_server_rs::grx::is_handshake(&buf[..n2]) {
-                                handshakes.push((a2, buf[..n2].to_vec(), l2));
-                            } else if pc_server_rs::ticket::looks_like_ticket(&buf[..n2]) {
-                                let mut t = [0u8; pc_server_rs::ticket::TICKET_LEN];
-                                t.copy_from_slice(&buf[..n2]);
-                                tickets.push((pc_server_rs::net::session_key(&a2), t));
-                            } else {
-                                push_frame(&mut frames, a2, &buf[..n2], l2);
-                            }
-                        }
-                        Err(_) => break, // WouldBlock: queue drained
+                // Sorts one datagram: handshake, ticket, or input frame.
+                let mut sort = |data: &[u8], addr, local| {
+                    if pc_server_rs::grx::is_handshake(data) {
+                        handshakes.push((addr, data.to_vec(), local));
+                    } else if pc_server_rs::ticket::looks_like_ticket(data) {
+                        // One integer compare for an input frame — see the doc
+                        // comment on looks_like_ticket. Verification happens AFTER
+                        // the drain, never here.
+                        let mut t = [0u8; pc_server_rs::ticket::TICKET_LEN];
+                        t.copy_from_slice(data);
+                        tickets.push((pc_server_rs::net::session_key(&addr), t));
+                    } else {
+                        push_frame(&mut frames, addr, data, local);
                     }
+                };
+                sort(&buf[..n], addr, local);
+                sock.set_nonblocking(true).ok();
+                // WouldBlock ends the loop: the queue is drained.
+                while let Ok((n2, a2, l2)) = replier.recv_from(&sock, &mut buf) {
+                    sort(&buf[..n2], a2, l2);
                 }
                 sock.set_nonblocking(false).ok();
 
