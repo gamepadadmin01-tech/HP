@@ -5,7 +5,6 @@
 // ad button, and while ads are off the "Get free time" button) → sign-in and Support last.
 // Builds without ads have no free card at all, so callers check freePlayAvailable() first.
 
-import React from "react";
 import { adsSupported } from "../platform/native";
 import { AdRewardButton } from "./AdRewardButton";
 import { AdsDownNote } from "./AppControl";

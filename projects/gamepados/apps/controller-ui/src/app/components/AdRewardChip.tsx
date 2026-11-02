@@ -8,7 +8,7 @@
 // Lives in its own file, not in AdRewardButton, because CalmShell imports it and AdRewardButton pulls in
 // AppControl, which imports CalmShell: that would be an import loop.
 
-import React, { useEffect, useSyncExternalStore } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 import { PlayCircle, Loader2 } from "lucide-react";
 import { getSession, onSessionChange } from "../store/account";
 import { getBillingState, onBillingChange, refresh } from "../store/billing";

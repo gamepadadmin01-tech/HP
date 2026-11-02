@@ -1,9 +1,8 @@
-import React, { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { prepareWirelessConnection } from "../transportCoordinator";
 import { pendingWireless, confirmWireless } from "../store/connectionMemory";
 // @ts-ignore - createPortal types
 import { createPortal } from "react-dom";
-import { motion, AnimatePresence } from "framer-motion";
 import { X, QrCode } from "lucide-react";
 import { useShellAppearance } from "./CalmShell";
 

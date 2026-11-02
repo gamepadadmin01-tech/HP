@@ -613,7 +613,7 @@ export const RightStick = React.memo(RightStickBase, (p, n) =>
   p.held.has(p.id) === n.held.has(n.id)
 );
 
-function TriggerPillBase({ x, y, w, h, rx, label, id, held, dn, up, fill, onFillChange, svgRef, digital = false }: {
+function TriggerPillBase({ x, y, w, h, rx, label, id, dn, up, fill, onFillChange, svgRef, digital = false }: {
   x: number; y: number; w: number; h: number; rx: number; label: string;
   id: BtnId; held: Set<string>; dn: (id: BtnId) => void; up: (id: BtnId) => void;
   fill: number; onFillChange: (v: number) => void;

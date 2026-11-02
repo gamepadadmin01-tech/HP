@@ -229,21 +229,6 @@ function SyncPanel() {
   );
 }
 
-/** Matches the toggle used throughout the System tab. */
-function Toggle({ on, onChange }: { on: boolean; onChange: (v: boolean) => void }) {
-  return (
-    <button
-      onClick={() => onChange(!on)}
-      role="switch"
-      aria-checked={on}
-      data-no-press
-      className={`relative w-12 h-6 rounded-full transition-colors duration-200 flex-shrink-0 ${on ? "bg-primary" : "bg-muted"}`}
-    >
-      <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform duration-200 ${on ? "translate-x-6" : ""}`} />
-    </button>
-  );
-}
-
 /** "just now" / "5 min ago" / "3 days ago" — a timestamp nobody has to decode. */
 function relativeTime(iso: string): string {
   const then = new Date(iso).getTime();

@@ -1,9 +1,9 @@
-import { savedPc, connectionMode, rememberMode, pendingWireless, confirmWireless, cancelPendingWireless, selectedLayout, rememberLayout, dashboardTab, rememberTab } from "./store/connectionMemory";
+import { savedPc, connectionMode, rememberMode, pendingWireless, confirmWireless, cancelPendingWireless, selectedLayout, rememberLayout, rememberTab } from "./store/connectionMemory";
 import { createTransportCoordinator, USB_CHOICE_EVENT, WIRELESS_CHOICE_EVENT, prepareWirelessConnection } from "./transportCoordinator";
 import React, { useState, useRef, useEffect, useCallback, useMemo, useSyncExternalStore } from "react";
 // @ts-ignore - Ignore missing declaration file error
 import { createPortal } from "react-dom";
-import { Home, Usb, Activity, Gamepad2, X, Settings, User, Check, ArrowUpRight, Plus, ChevronRight, MoreHorizontal } from "lucide-react";
+import { Home, Gamepad2, X, Settings, User, Check, ArrowUpRight, Plus, ChevronRight, MoreHorizontal } from "lucide-react";
 import { QRScanOverlay } from "./components/Dialogs";
 import { PlaytimeLockout } from "./components/PlaytimeLockout";
 import { PlaytimeToast } from "./components/PlaytimeToast";
@@ -21,7 +21,7 @@ import { ShellMotion } from "./components/ShellMotion";
 import { ShellScreenTransition } from "./components/ShellScreenTransition";
 import { SignInScreen } from "./components/SignInScreen";
 import { Ticket } from "lucide-react";
-import { getAppInfo, playSellsNothing } from "./platform/native";
+import { playSellsNothing } from "./platform/native";
 import { motion, AnimatePresence, useIsPresent, useReducedMotion } from "framer-motion";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -29,11 +29,7 @@ import { View, BtnId, DashTab, GamepadPreset, CustomPad, CustomBtnDef, WidgetTyp
 import { CustomPadEditor } from "./components/CustomPadEditor";
 import { FeatureIntroOverlay, recordSessionEnd, noteControllerOpened, suppressIntroOnce, introRated } from "./FeatureIntroOverlay";
 import { FEEDBACK_URL, initFeedbackSync, markFeedbackSent } from "./feedback";
-import { stickFeel, stickMaxOffset, stickResponse, installStickFeelToggle } from "./stickFeel";
-// Connection state is a 4-way classification, not a boolean — a link that is
-// transmitting but never answered is NOT the same as one that is off. See
-// linkState.ts for why that distinction had to exist.
-import { linkState, linkLabel, linkHint, linkColor } from "./linkState";
+import { stickFeel, stickResponse, installStickFeelToggle } from "./stickFeel";
 // Saved layouts are owned by the store, not by this component. mkUid lives
 // there too because pad migrations mint widget ids.
 import {
@@ -42,13 +38,12 @@ import {
 } from "./store/pads";
 import { scheduleSync, onSignedInSync } from "./store/sync";
 import {
-  loadGyroPrefs, saveGyroPrefs, getWiredPref, setWiredPref,
-  nativeInputEnabled, setNativeInputEnabled, clampWheelRange, WHEEL_RANGES,
+  loadGyroPrefs, saveGyroPrefs, getWiredPref,
+  nativeInputEnabled, setNativeInputEnabled, clampWheelRange,
 } from "./store/prefs";
-import type { WiredPref } from "./store/prefs";
 import { TabAccount, AppSupport } from "./components/TabAccount";
 import { getSession, onSessionChange, revalidate } from "./store/account";
-import { SPRING, SPRING_SNAP, FADE, STEP, EXIT, cardIn, backdropIn, sheetIn, toastIn } from "./motion";
+import { SPRING, SPRING_SNAP, FADE, cardIn, backdropIn, sheetIn, toastIn } from "./motion";
 
 const GAMEPAD_PRESETS: GamepadPreset[] = [
   // color drives THREE things on the Home card: the selected ring, the status
@@ -1002,12 +997,11 @@ function useGyro(maxAngle: number = 45, deadzone: number = 0, onGyroChange?: () 
 }
 
 // ─── Controller Screen ────────────────────────────────────────────────────────
-function ControllerScreen({ onBack, isActive: screenActive, activeMapping, customPad, controllerLayout, posOverride, gyroOn, setGyroOn, gyroMaxAngle, gyroWheel, gyroMode, gyroDeadzone, gyroHaptic, gyroThrottle, gyroIdleDetect, rumbleOn }: {
+function ControllerScreen({ onBack, isActive: screenActive, activeMapping, customPad, controllerLayout, gyroOn, setGyroOn, gyroMaxAngle, gyroWheel, gyroMode, gyroDeadzone, gyroHaptic, gyroThrottle, gyroIdleDetect, rumbleOn }: {
   onBack: () => void; isActive: boolean;
   activeMapping: Partial<Record<BtnId, string>>;
   customPad?: CustomPad;
   controllerLayout?: "standard" | "mobile";
-  posOverride?: PosOverrideMap;
   gyroOn: boolean;
   setGyroOn: (v: boolean) => void;
   gyroMaxAngle: number;
@@ -1059,7 +1053,7 @@ function ControllerScreen({ onBack, isActive: screenActive, activeMapping, custo
     if (!isActive) return;
 
     // The bridge calls this when a rumble packet arrives from PC
-    (window as any).onRumblePacket = (leftMotor: number, rightMotor: number, ltHaptic: number, rtHaptic: number) => {
+    (window as any).onRumblePacket = (leftMotor: number, rightMotor: number) => {
       if (rumbleOn) {
         // Rumble is on or off; the game decides how hard it shakes. There is no
         // user intensity multiplier — a slider that scaled the game's own signal
@@ -1180,19 +1174,6 @@ function ControllerScreen({ onBack, isActive: screenActive, activeMapping, custo
   // (The on-controller latency badge and the 200 ms telemetry poll that fed it
   // were removed on 2026-10-01: each poll stored a new object and re-rendered
   // the whole pad five times a second, for a number players don't need.)
-
-  // Web browser emulation buffer logging state
-  const [hudTelemetry, setHudTelemetry] = useState<{
-    hex: string[];
-    buttons: number;
-    lt: number;
-    rt: number;
-    lsX: number;
-    lsY: number;
-    rsX: number;
-    rsY: number;
-    ts: string;
-  } | null>(null);
 
   const isCustom = true;
   const activePad = useMemo(() => {
@@ -1380,23 +1361,6 @@ function ControllerScreen({ onBack, isActive: screenActive, activeMapping, custo
       } catch (err) {
         console.error("Native sendGamepadPacket failed:", err);
       }
-    }
-
-    // 7. Render Emulated Live Data in browser environment
-    if (!jsiSend) {
-      const bytes = new Uint8Array(buffer);
-      const hexArr = Array.from(bytes).map(b => b.toString(16).padStart(2, "0").toUpperCase());
-      setHudTelemetry({
-        hex: hexArr,
-        buttons: bitmask,
-        lt: ltByte,
-        rt: rtByte,
-        lsX: lsXByte,
-        lsY: lsYByte,
-        rsX: rsXByte,
-        rsY: rsYByte,
-        ts: now.toString(),
-      });
     }
   }, [uidBitMap, macroDefs, gyroOn]);
 
@@ -1859,10 +1823,6 @@ function ControllerScreen({ onBack, isActive: screenActive, activeMapping, custo
               const _anchorOff = rawBtn.anchor === "center" ? offsetCenter
                                : rawBtn.anchor === "right"  ? offsetRight : 0;
               const btn: CustomBtnDef = _anchorOff ? { ...rawBtn, x: rawBtn.x + _anchorOff } : rawBtn;
-              const size = btn.r;
-              const w = btn.w ?? size;
-              const h = btn.h ?? size;
-
               const triggerH = (hpt: number) => {
                  if (hpt > 0) triggerHaptic(Math.round(hpt / 2));
               };
@@ -2211,28 +2171,6 @@ function ScannerScreen({ onDashboard }: { onDashboard: () => void }) {
       : <CalmConnect telemetry={realTelemetry} appearance={appearance} onAppearance={toggle}
           onBack={onDashboard} onScan={() => setShowScanner(true)} onManual={manualConnect} />}
   </div>;
-}
-
-// ─── Shared dashboard helpers ─────────────────────────────────────────────────
-function Card({ children, className = "", style }: { children: React.ReactNode; className?: string; style?: React.CSSProperties }) {
-  return <div className={`bg-card border border-border rounded-xl ${className}`} style={style}>{children}</div>;
-}
-function SectionDivider({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="flex items-center gap-3 mt-2 mb-3">
-      <div className="flex-1 h-px bg-border" />
-      <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-[0.18em]">{children}</span>
-      <div className="flex-1 h-px bg-border" />
-    </div>
-  );
-}
-function Toggle({ on, onChange }: { on: boolean; onChange: (v: boolean) => void }) {
-  return (
-    <button onClick={() => onChange(!on)}
-      className={`relative w-12 h-6 rounded-full transition-colors duration-200 flex-shrink-0 ${on ? "bg-primary" : "bg-muted"}`}>
-      <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform duration-200 ${on ? "translate-x-6" : ""}`} />
-    </button>
-  );
 }
 
 // ─── Gamepad preset card ──────────────────────────────────────────────────────
@@ -2848,7 +2786,6 @@ function TabHome({ realTelemetry, onLaunch, onConnect, onLaunchEditor, selectedP
   pendingEditPad: CustomPad | null;
   onClearPendingEditPad: () => void;
 }) {
-  const [editingPad, setEditingPad] = useState<CustomPad | null>(null);
   const [editingPreset, setEditingPreset] = useState<GamepadPreset | null>(null);
   useEffect(() => {
     (window as any).__presetBack = () => {
@@ -2896,8 +2833,7 @@ function TabHome({ realTelemetry, onLaunch, onConnect, onLaunchEditor, selectedP
   // open the editor automatically.
   useEffect(() => {
     if (pendingEditPad) {
-      if (onLaunchEditor) onLaunchEditor(pendingEditPad);
-      else setEditingPad(pendingEditPad);
+      onLaunchEditor?.(pendingEditPad);
       onClearPendingEditPad();
     }
   }, [pendingEditPad]);
@@ -2918,7 +2854,7 @@ function TabHome({ realTelemetry, onLaunch, onConnect, onLaunchEditor, selectedP
         {controllers.map(({ id, preset, pad }) => pad ? <CustomPadSlot key={id} pad={pad}
           active={selectedPresetId === id} onSelect={() => onSelectPreset(id)}
           onPlay={() => { onSelectPreset(id); onLaunch(); }}
-          onEdit={() => { if (onLaunchEditor) onLaunchEditor(pad); else setEditingPad(pad); }}
+          onEdit={() => onLaunchEditor?.(pad)}
           onDelete={() => onDeleteCustomPad(id)} onDuplicate={() => onDuplicateCustomPad(pad)} onShare={() => sharePad(pad)} />
           : <GamepadCard key={id} preset={presetOverrides[id] ? { ...preset!, mapping: { ...preset!.mapping, ...presetOverrides[id] } } : preset!}
               active={selectedPresetId === id} isModified={!!presetOverrides[id]}
@@ -4091,7 +4027,6 @@ export default function App() {
               activeMapping={activeMapping}
               customPad={activeCustomPad}
               controllerLayout={activeCustomPad ? "standard" : controllerLayout}
-              posOverride={posOverrides[selectedPresetId]}
               gyroOn={gyroOn} setGyroOn={setGyroOn}
               gyroMaxAngle={gyroEffectiveAngle}
               gyroWheel={gyroWheel}

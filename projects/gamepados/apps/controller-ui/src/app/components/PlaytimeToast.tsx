@@ -23,7 +23,7 @@
 // its own after a few seconds, and a close button would be one more thing to
 // mis-tap during play.
 
-import React, { useSyncExternalStore } from "react";
+import { useSyncExternalStore } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Clock } from "lucide-react";
 import { SPRING_SNAP, toastIn } from "../motion";

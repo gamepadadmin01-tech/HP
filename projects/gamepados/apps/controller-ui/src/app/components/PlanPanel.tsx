@@ -32,7 +32,6 @@ import { purchase, syncPlayPurchases } from "../store/purchase";
 import { getPlayPrice, getPlayPricesVersion, onPlayPricesChange, requestPlayPrices } from "../store/playPrices";
 import { localUsedSeconds } from "../store/playtime";
 import { FADE } from "../motion";
-import { getAppInfo } from "../platform/native";
 import { FreeCard, FreeDivider, freePlayAvailable } from "./FreePlay";
 import { getAppConfig, onAppConfigChange, ruleWords } from "../store/appConfig";
 

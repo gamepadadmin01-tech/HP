@@ -43,7 +43,7 @@ import * as api from "../api/billing";
 import { ApiError } from "../api/account";
 import { getSession } from "./account";
 import { getBillingState, refresh as refreshBilling } from "./billing";
-import { getAppInfo, playSellsNothing, sendPlaytimeTicket } from "../platform/native";
+import { playSellsNothing, sendPlaytimeTicket } from "../platform/native";
 import { readJson, writeJson, KEYS } from "./storage";
 import { guestTrial } from "./guestTrial";
 import { outOfTimeText } from "./appConfig";

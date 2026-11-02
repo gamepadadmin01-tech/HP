@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { Clock, ArrowLeft, CloudOff } from "lucide-react";
 import { motion, useReducedMotion } from "framer-motion";
 import { getPlans, type Catalogue, type PlanCode } from "../api/billing";

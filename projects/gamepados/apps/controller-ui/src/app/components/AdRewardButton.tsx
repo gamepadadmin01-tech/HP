@@ -6,7 +6,7 @@
 // Under it: what the player has saved, or the result of the last ad. Hidden,
 // with a one-line note instead, once 30 minutes or more are held (an hour until 2026-10-30).
 
-import React, { useEffect, useSyncExternalStore } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 import { PlayCircle, Loader2 } from "lucide-react";
 import { getSession, onSessionChange } from "../store/account";
 import { getBillingState, onBillingChange, formatDuration } from "../store/billing";

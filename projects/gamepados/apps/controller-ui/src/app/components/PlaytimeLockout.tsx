@@ -10,7 +10,6 @@
 // the useful information is when they can again, and that there is a way out.
 // Everything else is in the Account tab, one tap behind the button.
 
-import React from "react";
 import { motion } from "framer-motion";
 import { FADE, backdropIn } from "../motion";
 import { Clock } from "lucide-react";
