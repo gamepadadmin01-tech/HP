@@ -55,7 +55,7 @@ const state = (page) => page.evaluate(() => {
   const groups = [...svg.querySelectorAll("g")];
   const active = groups.find((g) => g.style.opacity !== "" && g.style.pointerEvents === "none" && g.querySelector("circle[r='46']"));
   const lines = svg.querySelectorAll("line").length;           // straight streaks: there must be none
-  const trailPath = svg.querySelector("path[stroke-linecap='round']");
+  const bands = [...svg.querySelectorAll("path[stroke-linecap='round']")];   // the trail: three age bands
   const text = [...svg.querySelectorAll("text")].map((t) => t.textContent).join("|");
   const surface = [...svg.querySelectorAll("rect,ellipse")].find((e) => e.getAttribute("fill") === "transparent");
   const sb = surface ? surface.getBoundingClientRect() : null;
@@ -64,7 +64,7 @@ const state = (page) => page.evaluate(() => {
   return {
     activeOpacity: active ? active.style.opacity : null,
     lines, hasGrid: !!svg.querySelector("pattern, [data-tp='grid']"),
-    trailD: trailPath ? trailPath.getAttribute("d") : null, trailOpacity: trailPath ? trailPath.style.opacity : null,
+    trailD: bands.length ? bands.map((p) => p.getAttribute("d") || "").join(" ") : null, bandCount: bands.length,
     text,
     hasJoystickDrawing: !!svg.querySelector(".gp-tp-breath, .gp-tp-nl, .gp-tp-nr, .gp-tp-nu, .gp-tp-nd"),
     surfaceTag: surface ? surface.tagName : null,
@@ -102,6 +102,7 @@ try {
     assert.ok(/translate\(/.test(s.dotTransform) && !/translate\(640px, 285px\)/.test(s.dotTransform), "the finger dot follows the finger");
     assert.equal(s.hasGrid, false, "touching never brings a background grid back");
     assert.equal(s.lines, 0, "and never draws a straight streak out of the finger");
+    assert.equal(s.bandCount, 3, "the trail is drawn in three age bands (older = fainter and thinner)");
     assert.ok(s.trailD && s.trailD.startsWith("M") && s.trailD.includes("L"), "the trail is a path made of where the finger really went");
     assert.ok(s.events.includes("press"), "the press haptic fired once on landing");
     await sleep(450);                                             // finger rests, still down
@@ -115,6 +116,21 @@ try {
     await sleep(350);
     s = await state(p);
     assert.equal(s.activeOpacity, "0", "everything fades out after the lift");
+    await p.close();
+  }
+
+  // ── the trail melts away slowly after the finger lifts, so the player sees the path they just drew
+  {
+    const trailOpacity = (p) => p.evaluate(() => parseFloat(getComputedStyle(document.querySelector("path[stroke-linecap='round']").parentElement).opacity));
+    const p = await fresh();
+    await swipe(p, 560, 285, 22, 0, 12);
+    assert.ok((await trailOpacity(p)) > 0.95, "while sliding the trail is fully shown");
+    await p.mouse.up();
+    await sleep(150);
+    const mid = await trailOpacity(p);
+    assert.ok(mid > 0.2 && mid < 0.98, `150 ms after the lift the trail is still there, part-way faded (got ${mid})`);
+    await sleep(1000);
+    assert.ok((await trailOpacity(p)) < 0.03, "about a second after the lift the trail is gone");
     await p.close();
   }
 

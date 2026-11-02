@@ -9,7 +9,7 @@ import { motion } from "framer-motion";
 import { CustomBtnDef } from "../types";
 import {
   TouchpadState, cleanTouchpadOptions, touchpadSize, isRoundPad, STICK_R,
-  TP_DEFAULT_FEEL, TP_DEFAULT_RELEASE, TP_DEFAULT_SENS, TP_SENS_MIN, TP_SENS_MAX,
+  TP_DEFAULT_FEEL, TP_DEFAULT_RELEASE, TP_DEFAULT_SENS, TP_SENS_MIN, TP_SENS_MAX, padPushesLeft,
 } from "../touchpad";
 
 type Slider = (value: number, min: number, max: number, onChange: (v: number) => void) => React.ReactNode;
@@ -124,6 +124,7 @@ export function TouchpadSettings({ b, update, slider }: {
   const o = cleanTouchpadOptions({ feel: b.tpFeel, release: b.tpRelease, sens: b.tpSens });
   const { w, h } = touchpadSize(b);
   const round = isRoundPad(b);
+  const left = padPushesLeft(b);
   const isDefault = o.feel === TP_DEFAULT_FEEL && o.release === TP_DEFAULT_RELEASE && o.sens === TP_DEFAULT_SENS;
   const sensPct = Math.round(o.sens * 100);
 
@@ -134,6 +135,17 @@ export function TouchpadSettings({ b, update, slider }: {
         <TryIt b={b} />
         <span className="text-[10px] text-zinc-500 leading-snug">
           The small stick on the right shows what this pad pushes. Change a setting below and try again.
+        </span>
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <span className={LABEL}>Which stick</span>
+        <Segmented group="stick" value={left ? "L" : "R"} onChange={(v) => update({ tpStick: v })}
+          options={[{ id: "L", label: "Left stick" }, { id: "R", label: "Right stick", recommended: true }]} />
+        <span className="text-[10px] text-zinc-500 leading-snug">
+          {left
+            ? "Moves your character: the pad pushes the left stick, like walking or driving. The Distance feel suits it best."
+            : "Turns the camera: the pad pushes the right stick. The Speed feel suits it best."}
         </span>
       </div>
 

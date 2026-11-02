@@ -74,6 +74,7 @@ class NativeInputEngine(private val activity: MainActivity) {
         val mode: Char,                      // mode selector: 'L' / 'R'
         val hap: String,                     // press-haptic tier ("" = off)
         val round: Boolean = false,          // touchpad only: a circle / ellipse instead of a rectangle
+        val padLeft: Boolean = false,        // touchpad only: pushes the LEFT stick instead of the right
         val padMath: TouchpadMath? = null    // touchpad only: the movement rules + this pad's live state
     ) {
         var padFull = false                  // touchpad only: stick is at its stop (one edge tick per arrival)
@@ -257,6 +258,7 @@ class NativeInputEngine(private val activity: MainActivity) {
                 mode = (w.optString("mode", "L").firstOrNull() ?: 'L'),
                 hap = w.optString("hap", ""),
                 round = kind == K_PAD && w.optBoolean("round", false),
+                padLeft = kind == K_PAD && w.optString("stick") == "L",
                 padMath = if (kind == K_PAD) TouchpadMath(
                     w.optString("feel", ""), w.optString("release", ""), w.optDouble("sens", 1.0)) else null
             ))
@@ -723,15 +725,24 @@ class NativeInputEngine(private val activity: MainActivity) {
         // Stick radial deadzone (App.tsx processStick), normalized -1..1.
         var lsXn: Float; var lsYn: Float; var rsXn: Float; var rsYn: Float
         run {
-            val (x, y) = radialDeadzone(lsX, lsY); lsXn = x; lsYn = y
+            // Touchpads set to the LEFT stick push it: summed with the real stick, then held inside its
+            // circle (mirror of mergePadSticks in touchpad.ts).
+            var lx = lsX; var ly = lsY
+            for (w in widgets) {
+                val m = w.padMath ?: continue
+                if (w.padLeft && (m.x != 0.0 || m.y != 0.0)) { lx += m.x.toFloat(); ly += m.y.toFloat() }
+            }
+            val lm = hypot(lx.toDouble(), ly.toDouble()).toFloat()
+            if (lm > STICK_MAX_R) { lx = lx / lm * STICK_MAX_R; ly = ly / lm * STICK_MAX_R }
+            val (x, y) = radialDeadzone(lx, ly); lsXn = x; lsYn = y
         }
         run {
-            // Touchpads push the right stick too: summed with the real stick, then held inside its
+            // Touchpads (except the left-stick ones) push the right stick too: summed with the real stick, then held inside its
             // circle (mirror of the page's packet builder in App.tsx).
             var rx = rsX; var ry = rsY
             for (w in widgets) {
                 val m = w.padMath ?: continue
-                if (m.x != 0.0 || m.y != 0.0) { rx += m.x.toFloat(); ry += m.y.toFloat() }
+                if (!w.padLeft && (m.x != 0.0 || m.y != 0.0)) { rx += m.x.toFloat(); ry += m.y.toFloat() }
             }
             val rm = hypot(rx.toDouble(), ry.toDouble()).toFloat()
             if (rm > STICK_MAX_R) { rx = rx / rm * STICK_MAX_R; ry = ry / rm * STICK_MAX_R }

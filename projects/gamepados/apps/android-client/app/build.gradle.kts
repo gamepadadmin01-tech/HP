@@ -571,9 +571,9 @@ dependencies {
     add("uptodownImplementation", "com.razorpay:checkout:1.6.38")
 
     // Unity Ads (rewarded) — the website APK (direct), uptodown and, since 2026-11-01, the Play build.
-    add("directImplementation", "com.unity3d.ads:unity-ads:4.16.6")
-    add("uptodownImplementation", "com.unity3d.ads:unity-ads:4.16.6")
-    add("playstoreImplementation", "com.unity3d.ads:unity-ads:4.16.6")
+    add("directImplementation", "com.unity3d.ads:unity-ads:4.20.1")
+    add("uptodownImplementation", "com.unity3d.ads:unity-ads:4.20.1")
+    add("playstoreImplementation", "com.unity3d.ads:unity-ads:4.20.1")
 
     // AdMob rewarded ads + Google's consent form (UMP) — playstore, direct and uptodown ONLY
     // (owner's call, 2026-09-29). The other store builds must not carry an ad SDK at all.
