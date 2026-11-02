@@ -8,7 +8,7 @@ import { ApiError } from "../api/account";
 import { getSyncState, onSyncChange, syncNow, lastSyncedAt, cancelScheduledSync } from "../store/sync";
 import { autoSyncEnabled, setAutoSyncEnabled } from "../store/prefs";
 import { PlanPanel } from "./PlanPanel";
-import { GuestPlans } from "./GuestPlans";
+import { GuestPlans } from "./GuestPlans";   // signed out only
 import { CalmSwitch } from "./CalmSettings";
 
 // ─── GamepadOS Account ────────────────────────────────────────────────────────
@@ -60,30 +60,17 @@ export function TabAccount({
   return (
     <div data-testid="profile-screen" className="calm-account space-y-4 pb-8">
       <h1 className="sr-only" data-testid="account-heading">Your plan and profile</h1>
-      <GuestPlans key="guest-plans" />
-      {/* ── Plan, quota and upgrades ── Placed first because it is what this
-          tab is opened to check, and because a limit the user cannot find is
-          indistinguishable from a limit that appeared without warning. ── */}
-      <PlanPanel />
-
-      {/* ── Identity ── */}
-      <section className="calm-profile flex flex-col items-center pt-1">
-        <div className="w-20 h-20 rounded-full flex items-center justify-center mb-3"
-          style={{
-            background: "var(--calm-tint, #293944)",
-            border: "2px solid rgba(79,134,198,0.40)",
-            boxShadow: "none",
-          }}>
-          <span className="text-3xl font-bold calm-ink"
-            style={{ fontFamily: "system-ui, sans-serif" }}>
-            {user.displayName.trim().charAt(0).toUpperCase()}
-          </span>
+      {/* ── The Account card: who you are first, and your plan INSIDE it (owner, 2026-11-02: the plan used
+          to sit above the profile as separate blocks and pushed the account down the page). ── */}
+      <section className="calm-account-card" data-testid="account-card">
+        <div className="calm-acc-head">
+          <div className="calm-acc-avatar" aria-hidden="true">{user.displayName.trim().charAt(0).toUpperCase()}</div>
+          <div className="min-w-0 flex-1">
+            <h2 className="calm-acc-name">{user.displayName}</h2>
+            <p className="calm-acc-mail"><Mail size={11} aria-hidden="true" /> <span>{user.email}</span></p>
+          </div>
         </div>
-        <h2 className="text-xl font-bold calm-ink"
-          style={{ fontFamily: "system-ui, sans-serif" }}>{user.displayName}</h2>
-        <p className="text-xs mt-1 flex items-center gap-1.5" style={{ color: "var(--calm-muted, #a6b0b3)" }}>
-          <Mail size={11} /> {user.email}
-        </p>
+        <PlanPanel embedded />
       </section>
 
 

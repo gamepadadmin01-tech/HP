@@ -29,6 +29,7 @@ import {
   formatDuration, formatPrice, formatResetsAt,
 } from "../store/billing";
 import { purchase, syncPlayPurchases } from "../store/purchase";
+import { getPlayPrice, getPlayPricesVersion, onPlayPricesChange, requestPlayPrices } from "../store/playPrices";
 import { localUsedSeconds } from "../store/playtime";
 import { FADE } from "../motion";
 import { getAppInfo } from "../platform/native";
@@ -78,7 +79,11 @@ function planBullets(p: CataloguePlan): string[] {
   return out;
 }
 
-export function PlanPanel() {
+/** `embedded`: drawn INSIDE the Account card (signed in), so its blocks have no outer frame of their own
+ *  and the code box starts folded away. */
+export function PlanPanel({ embedded = false }: { embedded?: boolean } = {}) {
+  const Section = embedded ? InCardSection : FramedSection;
+  const Panel = embedded ? InCardPanel : FramedPanel;
   const state = useSyncExternalStore(onBillingChange, getBillingState, getBillingState);
   useSyncExternalStore(onAppConfigChange, getAppConfig, getAppConfig);   // the time rules can change
   const words = ruleWords();
@@ -255,6 +260,7 @@ export function PlanPanel() {
         <PlansHero
           title={ent.plan === "FREE" ? "Play without the limit" : "Change plan"}
           offers={offers}
+          embedded={embedded}
         />
       )}
 
@@ -264,9 +270,11 @@ export function PlanPanel() {
         <FreeCard />
       </>}
 
-      {ent.plan !== "LIFETIME" && <Section title="Have a code?">
-        <Panel><PromoRow /></Panel>
-      </Section>}
+      {ent.plan !== "LIFETIME" && (embedded
+        ? <PromoFold />
+        : <Section title="Have a code?">
+            <Panel><PromoRow /></Panel>
+          </Section>)}
 
     </>
   );
@@ -275,15 +283,20 @@ export function PlanPanel() {
 // ─── Pieces ───────────────────────────────────────────────────────────────────
 
 /** The plans, open: the biggest thing on the page after the player's own status. */
-function PlansHero({ title, offers }: { title: string; offers: CataloguePlan[] }) {
+function PlansHero({ title, offers, embedded }: { title: string; offers: CataloguePlan[]; embedded?: boolean }) {
   const words = ruleWords();
+  const Section = embedded ? InCardSection : FramedSection;
+  // Google bills a Play purchase (and handles tax and refunds), so the website's GST / refund line is wrong there.
+  const viaPlay = offers.some((p) => p.priceFromStore);
   return (
     <Section title={title}>
       <div className="space-y-2.5">
         {offers.map((p) => <PlanCard key={p.code} plan={p} />)}
         <p className="text-xs leading-relaxed px-1" style={{ color: MUTED }}>
-          Prices include GST. Access starts immediately, so purchases are final
-          and non-refundable — try your free {words.welcome} first.
+          {viaPlay
+            ? "Paid once through Google Play. Unlimited play starts right away and never expires."
+            : <>Prices include GST. Access starts immediately, so purchases are final
+              and non-refundable — try your free {words.welcome} first.</>}
         </p>
       </div>
     </Section>
@@ -315,6 +328,10 @@ function Meter({ used, limit, exhausted }: { used: number; limit: number; exhaus
 }
 
 export function PlanCard({ plan, onChoose }: { plan: CataloguePlan; onChoose?: (plan: CataloguePlan) => void }) {
+  useSyncExternalStore(onPlayPricesChange, getPlayPricesVersion, getPlayPricesVersion);
+  useEffect(() => { if (plan.priceFromStore) requestPlayPrices([plan.playProductId]); }, [plan.priceFromStore, plan.playProductId]);
+  // The price to show: ours on the website build; on Play, the price Google Play itself reports.
+  const price = !plan.priceFromStore ? formatPrice(plan.priceMinor, plan.currency) : getPlayPrice(plan.playProductId) || playPriceFallback(plan);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const [done, setDone] = useState(false);
@@ -347,13 +364,14 @@ export function PlanCard({ plan, onChoose }: { plan: CataloguePlan; onChoose?: (
             ))}
           </ul>
         </div>
-        {/* On Play the price belongs to Play. Showing ours next to a Play SKU
-            is a policy violation, so the sheet is the only place it appears. */}
-        {!plan.priceFromStore && (
-          <p className="console-plan-price text-xl font-bold shrink-0"
+        {/* On Play the price is Google Play's own (playPrices.ts), never a number of ours that could differ. */}
+        {price ? (
+          <p className="console-plan-price text-xl font-bold shrink-0" data-testid="plan-price"
             style={{ fontFamily: "system-ui, sans-serif", color: "var(--calm-ink, #f0f2ed)" }}>
-            {formatPrice(plan.priceMinor, plan.currency)}
+            {price}
           </p>
+        ) : (
+          <p className="console-plan-price-note shrink-0" data-testid="plan-price-note">Price shown by<br />Google Play</p>
         )}
       </div>
 
@@ -369,7 +387,7 @@ export function PlanCard({ plan, onChoose }: { plan: CataloguePlan; onChoose?: (
         }}>
         {done ? <span className="inline-flex items-center gap-1.5"><Check size={14} /> Active</span>
           : busy ? "Opening…"
-          : plan.priceFromStore ? "See price and buy"
+          : plan.priceFromStore ? (price ? `Buy for ${price}` : "Buy with Google Play")
           : `Get ${plan.displayName}`}
       </button>
 
@@ -450,7 +468,55 @@ function PromoRow() {
 // Same shapes TabAccount uses. Duplicated rather than exported across files so
 // this panel can be moved without dragging the account tab's layout with it.
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+/** When Google Play has not reported a price (a test build installed outside Play, or Play still loading),
+ *  players in India still see the price, because the India price of the Play product is set to the same
+ *  ₹ amount as our own catalogue (owner, 2026-11-02: keep the two equal). Everywhere else, nothing: a
+ *  guessed foreign price could be wrong. */
+function playPriceFallback(plan: CataloguePlan): string | null {
+  try {
+    // India's zone has two names: many browsers and phones still report the old "Asia/Calcutta".
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (plan.currency === "INR" && (tz === "Asia/Kolkata" || tz === "Asia/Calcutta")) return formatPrice(plan.priceMinor, "INR");
+  } catch { /* no Intl: show no number */ }
+  return null;
+}
+
+/** "Have a code?" inside the Account card: one quiet line that opens the code box, so a rarely used field
+ *  does not take a whole block of the page. */
+function PromoFold() {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="calm-incard-section">
+      <button type="button" className="calm-promo-fold" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
+        <Ticket size={14} aria-hidden="true" /> Have a code?
+      </button>
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }}
+            transition={FADE} style={{ overflow: "hidden" }}>
+            <div className="calm-incard-panel"><PromoRow /></div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+/** The blocks of the plan when it sits INSIDE the Account card: a small heading, no frame of its own. */
+function InCardSection({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="calm-incard-section">
+      <h3 className="calm-incard-title">{title}</h3>
+      {children}
+    </div>
+  );
+}
+
+function InCardPanel({ children }: { children: React.ReactNode }) {
+  return <div className="calm-incard-panel">{children}</div>;
+}
+
+function FramedSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section>
       <h3 className="text-xs font-bold mb-2 px-1" style={{ color: MUTED }}>
@@ -461,7 +527,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-function Panel({ children }: { children: React.ReactNode }) {
+function FramedPanel({ children }: { children: React.ReactNode }) {
   return (
     <div className="rounded-xl overflow-hidden divide-y divide-white/5"
       style={{ background: "var(--calm-surface, #202527)", border: "1px solid var(--calm-line, #343c3f)" }}>

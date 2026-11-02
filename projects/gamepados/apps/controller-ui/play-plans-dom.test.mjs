@@ -25,18 +25,21 @@ const html = `<!doctype html><meta charset="utf-8"><body><div id="root"></div><s
 
 const browser = await puppeteer.launch({ executablePath: "C:/Program Files/Google/Chrome/Application/chrome.exe", headless: true });
 const errors = [];
-async function open({ channel, billing }) {
+async function open({ channel, billing, playPrice = null, tz = "Asia/Kolkata" }) {
   const page = await browser.newPage();
   page.on("pageerror", (e) => errors.push(e.message));
-  await page.evaluateOnNewDocument((channel, billing) => {
+  await page.emulateTimezone(tz);
+  await page.evaluateOnNewDocument((channel, billing, playPrice) => {
     try { localStorage.clear(); } catch {}
     const bridge = {
       getDistributionChannel: () => channel, getAppVersionName: () => "1.4.13", getAppVersionCode: () => 67,
       adsAvailable: () => true, adNetwork: () => "unity",
     };
     if (billing) bridge.startPlayPurchase = () => {};
+    // Google Play's answer to "what does gpos_lifetime cost?" (null = Play cannot say, e.g. a test install)
+    if (billing && playPrice) bridge.queryPlayPrices = () => setTimeout(() => window.onPlayPrices(JSON.stringify({ gpos_lifetime: playPrice })), 30);
     window.AndroidBridge = bridge;
-  }, channel, billing);
+  }, channel, billing, playPrice);
   await page.setRequestInterception(true);
   page.on("request", (r) => {
     const u = new URL(r.url());
@@ -63,13 +66,31 @@ async function open({ channel, billing }) {
 const text = (page) => page.evaluate(() => document.querySelector(".guest-plans").innerText);
 
 try {
-  // (a) Play build WITH Google billing: the plan is there, the price is Play's
+  // (a) Play build WITH Google billing: the plan is there, with the price Google Play reports
   {
-    const p = await open({ channel: "playstore", billing: true });
+    const p = await open({ channel: "playstore", billing: true, playPrice: "US$0.50", tz: "America/New_York" });
     const t = await text(p);
     assert.match(t, /Lifetime/, "the Play build with billing shows the Lifetime plan");
-    assert.doesNotMatch(t, /₹\s?19|Rs\.?\s?19|19\.00/, "and never shows OUR price next to a Play product (Play shows its own)");
-    assert.match(t, /price|buy/i, "with a way to see the price and buy");
+    assert.match(t, /US\$0\.50/, "with Google Play's own price, in the player's currency");
+    assert.match(t, /Buy for US\$0\.50/, "and the button says what it costs");
+    assert.doesNotMatch(t, /₹/, "never our rupee price instead of Play's");
+    await p.close();
+  }
+  // (a2) Play cannot say the price (a test install from outside Play), player in India: our matching ₹ price
+  {
+    const p = await open({ channel: "playstore", billing: true, playPrice: null, tz: "Asia/Kolkata" });
+    const t = await text(p);
+    assert.match(t, /₹\s?19/, "India sees ₹19 even when Play has not answered");
+    await p.close();
+  }
+  // (a3) Play cannot say the price, player outside India: no guessed number, an honest line instead
+  {
+    const p = await open({ channel: "playstore", billing: true, playPrice: null, tz: "America/New_York" });
+    const t = await text(p);
+    assert.match(t, /Lifetime/);
+    assert.match(t, /Price shown by\s+Google Play/, "says where the price will appear");
+    assert.match(t, /Buy with Google Play/);
+    assert.doesNotMatch(t, /₹|\$/, "and shows no guessed price");
     assert.match(t, /Watch an ad|Ads come back/i, "the free-time and ads card is still there beside it (a new player holds 30 free minutes, so it says when ads come back)");
     await p.close();
   }

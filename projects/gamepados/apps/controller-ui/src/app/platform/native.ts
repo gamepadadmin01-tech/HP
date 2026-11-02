@@ -73,6 +73,8 @@ export interface AndroidBridge {
   // never grants anything: the page forwards the token and the SERVER checks it with Google.
   startPlayPurchase?(productId: string, userId: string): void;
   restorePurchases?(): void;
+  /** Ask Play for these products' prices; answers on `window.onPlayPrices` as { productId: "₹19.00" }. */
+  queryPlayPrices?(idsCsv: string): void;
   acknowledgeIfServerCredited?(purchaseToken: string): void;
 
   /** Playtime: forward a capability ticket to the PC over the input socket.
@@ -292,6 +294,18 @@ export function startPlayPurchase(productId: string, userId: string): boolean {
  *  was closed). Answers arrive on `window.onPurchaseResult` like a new purchase. */
 export function restorePlayPurchases(): void {
   call("restorePurchases", (b) => b.restorePurchases!(), undefined);
+}
+
+/** Ask Google Play for products' prices (see store/playPrices.ts). False = this build cannot ask. */
+export function queryPlayPrices(ids: string[]): boolean {
+  const b = bridge();
+  if (!b || typeof b.queryPlayPrices !== "function") return false;
+  try {
+    b.queryPlayPrices(ids.join(","));
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /** Safety net: acknowledge a purchase the server already credited but could not acknowledge itself. */

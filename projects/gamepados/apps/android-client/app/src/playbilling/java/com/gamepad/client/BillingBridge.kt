@@ -111,6 +111,37 @@ open class BillingBridge(activity: MainActivity) : UpdaterBridge(activity) {
         }
     }
 
+    /** Ask Google Play for these products' real prices, in the player's own currency, and hand them to the
+     *  page as window.onPlayPrices({ productId: "₹19.00", ... }). Play's price is the one Google charges,
+     *  so it is the only one the plan card may show next to a Play product. A product Play cannot find
+     *  (for example in a test build that was not installed from Play) is simply left out. */
+    @JavascriptInterface
+    fun queryPlayPrices(idsCsv: String) {
+        val ids = idsCsv.split(",").map { it.trim() }.filter { it.isNotEmpty() }.distinct().take(10)
+        if (ids.isEmpty()) return
+        connected {
+            val params = QueryProductDetailsParams.newBuilder()
+                .setProductList(ids.map {
+                    QueryProductDetailsParams.Product.newBuilder()
+                        .setProductId(it)
+                        .setProductType(BillingClient.ProductType.INAPP)
+                        .build()
+                })
+                .build()
+            client.queryProductDetailsAsync(params) { result, queryResult ->
+                val out = org.json.JSONObject()
+                if (result.responseCode == BillingClient.BillingResponseCode.OK) {
+                    for (p in queryResult.productDetailsList) {
+                        val price = p.oneTimePurchaseOfferDetails?.formattedPrice
+                        if (!price.isNullOrBlank()) out.put(p.productId, price)
+                    }
+                }
+                val js = "window.onPlayPrices && window.onPlayPrices(" + org.json.JSONObject.quote(out.toString()) + ")"
+                activity.runOnUiThread { activity.evalJs(js) }
+            }
+        }
+    }
+
     /** Acknowledge a purchase the SERVER already credited (see the class comment). */
     @JavascriptInterface
     fun acknowledgeIfServerCredited(purchaseToken: String) {
