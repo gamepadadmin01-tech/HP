@@ -2,7 +2,7 @@ import React, { useEffect, useState, useSyncExternalStore } from "react";
 import { Clock, ArrowLeft, CloudOff } from "lucide-react";
 import { motion, useReducedMotion } from "framer-motion";
 import { getPlans, type Catalogue, type PlanCode } from "../api/billing";
-import { getAppInfo } from "../platform/native";
+import { getAppInfo, playSellsNothing } from "../platform/native";
 import { getSession, onSessionChange } from "../store/account";
 import { guestTrial } from "../store/guestTrial";
 import { formatDuration } from "../store/billing";
@@ -24,7 +24,7 @@ export function GuestPlans() {
   // Re-render when an ad lands: the phone's clock (guestTrial) just grew.
   useSyncExternalStore(onAdChange, getAdState, getAdState);
   useSyncExternalStore(onAppConfigChange, getAppConfig, getAppConfig);   // ads on/off and the time rules
-  const playComingSoon = getAppInfo().channel === "playstore";
+  const playComingSoon = playSellsNothing();   // only a Play build WITHOUT billing hides the plans
   useEffect(() => {
     if (playComingSoon) { setLoading(false); return; }
     let cancelled = false;

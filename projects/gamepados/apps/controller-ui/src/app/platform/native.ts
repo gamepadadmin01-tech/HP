@@ -269,6 +269,12 @@ export function canBuyWithPlay(): boolean {
   return !!b && typeof b.startPlayPurchase === "function";
 }
 
+/** The Play build WITHOUT billing (an older one, or any build where Play Billing is missing): it sells
+ *  nothing and time comes only from ads. A Play build that has billing sells Lifetime through Google Play. */
+export function playSellsNothing(): boolean {
+  return getAppInfo().channel === "playstore" && !canBuyWithPlay();
+}
+
 /** Open Google Play's purchase sheet for `productId`. `userId` is hashed on the phone and stamped on the
  *  purchase so the server can tell whose it is. False = this build cannot (no sheet was opened). */
 export function startPlayPurchase(productId: string, userId: string): boolean {

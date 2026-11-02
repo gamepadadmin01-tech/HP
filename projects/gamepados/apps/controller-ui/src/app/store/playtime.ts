@@ -43,13 +43,13 @@ import * as api from "../api/billing";
 import { ApiError } from "../api/account";
 import { getSession } from "./account";
 import { getBillingState, refresh as refreshBilling } from "./billing";
-import { getAppInfo, sendPlaytimeTicket } from "../platform/native";
+import { getAppInfo, playSellsNothing, sendPlaytimeTicket } from "../platform/native";
 import { readJson, writeJson, KEYS } from "./storage";
 import { guestTrial } from "./guestTrial";
 import { outOfTimeText } from "./appConfig";
 
 /** The signed-in out-of-time line, built from the current rules (appConfig). */
-const outOfTime = () => outOfTimeText({ guest: false, playstore: getAppInfo().channel === "playstore" });
+const outOfTime = () => outOfTimeText({ guest: false, playstore: playSellsNothing() });
 
 export type PlaytimeStatus =
   /** Controller closed. */
@@ -583,7 +583,7 @@ function publishGuest() {
     resetsAt: period,
     // Play sells nothing (2026-09-30): an ad is the only way to more time there.
     message: blocked
-      ? outOfTimeText({ guest: true, playstore: getAppInfo().channel === "playstore" })
+      ? outOfTimeText({ guest: true, playstore: playSellsNothing() })
       : "",
   });
 }

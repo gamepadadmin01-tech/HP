@@ -18,7 +18,7 @@ import { requestDashboardTab, requestSignIn } from "../store/navIntent";
 import { beginPlay, clearBlock } from "../store/playtime";
 import { ruleWords } from "../store/appConfig";
 import { AdRewardButton } from "./AdRewardButton";
-import { getAppInfo } from "../platform/native";
+import { playSellsNothing } from "../platform/native";
 import { useShellAppearance } from "./CalmShell";
 
 // The app's theme tokens (styles/calm-shell.css); the wrapper below carries .gp-shell and the
@@ -83,7 +83,7 @@ export function PlaytimeLockout({
         }}
       >
         {/* The Play build sells nothing -- "plans" would point at nothing there. */}
-        {getAppInfo().channel === "playstore" ? "More time in Account" : "See plans in Account"}
+        {playSellsNothing() ? "More time in Account" : "See plans in Account"}
       </button>
     </motion.div>
   );
