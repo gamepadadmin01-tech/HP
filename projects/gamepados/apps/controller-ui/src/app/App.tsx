@@ -14,6 +14,7 @@ import { LaunchNotice } from "./components/LaunchNotice";
 import { CalmConnect } from "./components/CalmConnect";
 import { CalmSettings as TabSystem } from "./components/CalmSettings";
 import { useOverlayFocus, closeTopOverlay } from "./components/useOverlayFocus";
+import { LayoutDialog, openLayoutDialog, closeLayoutDialog, isLayoutDialogOpen, PAD_COLORS } from "./components/LayoutDialog";
 import { CalmBrand, AppearanceButton, ConnectionSummary, DashboardAllowance, useShellAppearance } from "./components/CalmShell";
 
 import { ShellMotion } from "./components/ShellMotion";
@@ -63,7 +64,7 @@ const GAMEPAD_PRESETS: GamepadPreset[] = [
 ];
 
 // ─── Custom pad helpers ──────────────────────────────────────────────────────────────────────────────────
-const CUSTOM_COLORS = ["#6366f1", "#e11d48", "#d97706", "#22c55e", "#64748B", "#3b82f6"];
+const CUSTOM_COLORS = PAD_COLORS;
 
 export const BTN_PALETTE_COLORS = [
   { norm: "rgba(180, 10, 10, 0.85)", held: "rgba(220, 0, 0, 1.0)" },
@@ -3442,105 +3443,26 @@ function DashboardScreen({
     return () => window.removeEventListener('keydown', onKey);
   }, [authOpen]);
 
-  // ── Blueprint dialog state (hoisted here so dialog renders outside scrollable area) ──
-  const [showBlueprintDialog, setShowBlueprintDialog] = useState(false);
-  const blueprintRef=useRef<HTMLDivElement>(null);
-  useOverlayFocus(showBlueprintDialog,blueprintRef,()=>closeBlueprintDialog());
-  const [createStep, setCreateStep] = useState<"type" | "template" | "name" | "import">("type");
-  const [selectedTemplate, setSelectedTemplate] = useState("");
-  const [newPadName, setNewPadName] = useState("");
-  const [newPadColor, setNewPadColor] = useState(CUSTOM_COLORS[0]);
-  // Import-by-code state.
-  const [importCode, setImportCode] = useState("");
-  const [importBusy, setImportBusy] = useState(false);
-  const [importError, setImportError] = useState("");
+  // ── "Make it your own" pop-up: all of its own state lives in components/LayoutDialog.tsx, so opening it
+  //    and typing in it never re-render this component. We only supply what it needs to create/import.
   // Track the pad being edited after creation (needed for handing off to TabHome)
   const [pendingEditPad, setPendingEditPad] = useState<CustomPad | null>(null);
 
-  const TEMPLATE_DEFAULT_NAMES: Record<string, string> = {
-    standard: "My Custom Pad", blank: "Blank Canvas", fps: "FPS Pro Layout", fighter: "Fighter Arcade", racing: "Racing Layout", rpg: "RPG Adventure", touchpad: "Touchpad Camera"
-  };
-  const BLUEPRINTS = [
-    { key: "standard", name: "Standard",   desc: "Full-size wireless controller layout.",       icon: "🟢", color: "from-[#5D90CB]/30 to-[#5D90CB]/10" },
-    { key: "touchpad", name: "Touchpad Camera", desc: "Slide a finger like a laptop trackpad to turn the camera.", icon: "🖐️", color: "from-[#2CAABA]/30 to-[#2CAABA]/10" },
-  ];
-
-  const nameInputRef = useRef<HTMLInputElement>(null);
-
-  // Track the visible viewport exactly — works for ALL Android keyboard modes:
-  // adjustPan: vv.offsetTop tracks native pan offset
-  // adjustNothing/edge-to-edge: vv.height shrinks to area above keyboard
-  // adjustResize: both change together
-  const [vpTop, setVpTop] = useState(0);
-  const [vpHeight, setVpHeight] = useState(() => window.innerHeight);
-  useEffect(() => {
-    if (!showBlueprintDialog) {
-      setVpTop(0);
-      setVpHeight(window.innerHeight);
-      return;
-    }
-    const vv = window.visualViewport;
-    const update = () => {
-      const top = vv ? Math.round(vv.offsetTop) : 0;
-      const h   = vv ? Math.round(vv.height)    : window.innerHeight;
-      setVpTop(top);
-      setVpHeight(h);
-    };
-    if (vv) {
-      vv.addEventListener('resize', update);
-      vv.addEventListener('scroll', update);
-    }
-    window.addEventListener('resize', update);
-    update();
-    return () => {
-      if (vv) {
-        vv.removeEventListener('resize', update);
-        vv.removeEventListener('scroll', update);
-      }
-      window.removeEventListener('resize', update);
-    };
-  }, [showBlueprintDialog]);
-
-  function openBlueprintDialog() {
-    setShowBlueprintDialog(true);
-    setCreateStep("type");
-    setSelectedTemplate("");
-    setNewPadName("");
-    setNewPadColor(CUSTOM_COLORS[0]);
-  }
-
-  function closeBlueprintDialog() {
-    setShowBlueprintDialog(false);
-    setCreateStep("template");
-  }
-
-  function commitNewPad() {
-    const newId = `cb${Date.now()}`;
-    const newPad = makeDefaultPad(newId, selectedTemplate, newPadName.trim() || undefined);
-    newPad.color = newPadColor;
+  function createPad(template: string, name: string, color: string) {
+    const newPad = makeDefaultPad(`cb${Date.now()}`, template, name.trim() || undefined);
+    newPad.color = color;
     onSaveCustomPad(newPad);
     setPendingEditPad(newPad);
-    setShowBlueprintDialog(false);
-    setCreateStep("template");
-    setSelectedTemplate("");
-    setNewPadName("");
-    setNewPadColor(CUSTOM_COLORS[0]);
   }
 
   // Import a shared layout by its code: fetch from the backend, add it as a fresh
   // custom pad (new padId + name suffix), then open it in the editor.
-  async function importByCode() {
-    const code = importCode.toUpperCase().replace(/[^A-Z0-9]/g, "");
-    if (code.length < 4) { setImportError("Enter the code from the person who shared the pad."); return; }
-    setImportBusy(true); setImportError("");
+  // Resolves with an error message for the pop-up to show, or null when it worked.
+  async function importPadByCode(code: string): Promise<string | null> {
     try {
       const res = await fetch(`${PADS_API_BASE}/${encodeURIComponent(code)}`, { cache: "no-store" });
       const body = await res.json().catch(() => ({}));
-      if (!res.ok || !body?.success || !body?.pad) {
-        setImportError(body?.error || "No layout found for that code.");
-        setImportBusy(false);
-        return;
-      }
+      if (!res.ok || !body?.success || !body?.pad) return body?.error || "No layout found for that code.";
       const p = body.pad;
       const newPad: CustomPad = {
         padId: `cb${Date.now()}`,
@@ -3551,13 +3473,10 @@ function DashboardScreen({
       };
       onSaveCustomPad(newPad);
       setPendingEditPad(newPad);
-      setShowBlueprintDialog(false);
-      setCreateStep("type");
-      setImportCode("");
-    } catch (e) {
-      setImportError("Couldn't reach the server. Check your connection and try again.");
+      return null;
+    } catch {
+      return "Couldn't reach the server. Check your connection and try again.";
     }
-    setImportBusy(false);
   }
 
   function changeTab(newTab: DashTab) {
@@ -3591,8 +3510,8 @@ function DashboardScreen({
   // instead of navigating to scanner when the Android back gesture fires during keyboard use.
   useEffect(() => {
     (window as any).__dashboardCloseDialog = () => {
-      if (showBlueprintDialog) {
-        closeBlueprintDialog();
+      if (isLayoutDialogOpen()) {
+        closeLayoutDialog();
         return true; // handled
       }
       if (authOpen) { closeSignIn(); return true; }
@@ -3606,7 +3525,7 @@ function DashboardScreen({
     return () => {
       delete (window as any).__dashboardCloseDialog;
     };
-  }, [showBlueprintDialog, authOpen, tab]);
+  }, [authOpen, tab]);
 
 
   return (
@@ -3636,7 +3555,7 @@ function DashboardScreen({
               onDuplicateCustomPad={onDuplicateCustomPad}
               presetOverrides={presetOverrides} onSavePresetOverride={onSavePresetOverride} onResetPreset={onResetPreset}
               posOverrides={posOverrides} onSavePosOverride={onSavePosOverride} onResetPosOverride={onResetPosOverride}
-              onNewLayout={openBlueprintDialog}
+              onNewLayout={openLayoutDialog}
               pendingEditPad={pendingEditPad}
               onClearPendingEditPad={() => setPendingEditPad(null)} />}
             {tab === "system" && <TabSystem gyroOn={gyroOn} setGyroOn={setGyroOn} gyroMaxAngle={gyroMaxAngle} setGyroMaxAngle={setGyroMaxAngle} gyroWheel={gyroWheel} setGyroWheel={setGyroWheel} gyroWheelRange={gyroWheelRange} setGyroWheelRange={setGyroWheelRange} gyroMode={gyroMode} setGyroMode={setGyroMode} gyroDeadzone={gyroDeadzone} setGyroDeadzone={setGyroDeadzone} gyroHaptic={gyroHaptic} setGyroHaptic={setGyroHaptic} gyroThrottle={gyroThrottle} setGyroThrottle={setGyroThrottle} gyroIdleDetect={gyroIdleDetect} setGyroIdleDetect={setGyroIdleDetect} rumbleOn={rumbleOn} setRumbleOn={setRumbleOn} />}
@@ -3664,274 +3583,7 @@ function DashboardScreen({
         </motion.button>)}
       </nav>}
 
-      {/* Blueprint dialog — Portal into document.body so it's completely immune to
-          parent transforms, stacking contexts, and keyboard-triggered event bugs */}
-      {createPortal(
-        <AnimatePresence>
-          {showBlueprintDialog && (
-            <motion.div
-              className="gp-shell calm-dialog" data-calm-theme={appearance}
-              {...backdropIn}
-              transition={FADE}
-              style={{
-                position: "fixed",
-                // Use exact visual viewport coordinates — counteracts adjustPan native pan
-                // AND handles adjustResize/adjustNothing/edge-to-edge mandatory overlay
-                top: vpTop,
-                left: 0,
-                right: 0,
-                height: vpHeight,
-                zIndex: 9999,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                padding: "16px",
-                background: "rgba(0,0,0,0.88)",
-              }}
-            >
-              {/* Scale + fade from the centre only. The old version also drifted
-                  up on a y offset while the step content slid in from the left,
-                  so the dialog looked like it was flying in from somewhere. */}
-              <motion.div
-                {...cardIn}
-                role="dialog" aria-modal="true" aria-label="Create or import a layout"
-                ref={blueprintRef}
-                transition={SPRING}
-                style={{
-                  width: "100%", maxWidth: "384px", borderRadius: "24px",
-                  background: "var(--calm-surface, #202527)", border: "1px solid var(--calm-line, #343c3f)",
-                  maxHeight: "85vh", overflow: "hidden",
-                  boxShadow: "none",
-                }}
-                onClick={e => e.stopPropagation()}
-                onPointerDown={e => e.stopPropagation()}
-                onTouchStart={e => e.stopPropagation()}
-                onTouchEnd={e => e.stopPropagation()}
-              >
-            {/* initial={false} — the first step is already inside a card that is
-                animating in, so it must not animate as well. Only step CHANGES
-                move, and they move forward: out to the left, in from the right. */}
-            <AnimatePresence mode="wait" initial={false}>
-              {createStep === "type" ? (
-                <motion.div
-                  key="type"
-                  initial={{ opacity: 0, x: 10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -10 }}
-                  transition={STEP}
-                  className="p-5 pb-8 overflow-y-auto" style={{ maxHeight: "85vh" }}
-                >
-                  <div className="flex items-start justify-between mb-5">
-                    <div>
-                      <h3 className="text-lg font-black calm-ink tracking-tight">Choose Type</h3>
-                      <p className="text-xs text-muted-foreground mt-0.5">How would you like to start?</p>
-                    </div>
-                    <button
-                      onClick={closeBlueprintDialog}
-                      className="w-8 h-8 flex items-center justify-center rounded-full text-muted-foreground active:scale-90 transition-all mt-0.5"
-                      style={{ background: "var(--calm-soft, #292f31)", border: "1px solid var(--calm-line, #343c3f)" }}>
-                      <X size={14} />
-                    </button>
-                  </div>
-                  <div className="flex flex-col gap-3">
-                    <button
-                      onClick={() => {
-                        setSelectedTemplate("blank");
-                        setNewPadName(TEMPLATE_DEFAULT_NAMES["blank"]);
-                        setNewPadColor(CUSTOM_COLORS[0]);
-                        setCreateStep("name");
-                      }}
-                      className="text-left p-4 rounded-2xl flex items-center gap-4 active:scale-95 transition-transform duration-100"
-                      style={{ background: "var(--calm-soft, #292f31)", border: "1px solid var(--calm-line, #343c3f)" }}
-                    >
-                      <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-zinc-800/30 to-zinc-700/30 border border-white/10 flex items-center justify-center text-2xl flex-shrink-0">
-                        ✦
-                      </div>
-                      <div>
-                        <p className="text-sm font-bold calm-ink leading-tight">Blank Canvas</p>
-                        <p className="text-xs text-muted-foreground mt-0.5 leading-snug">Start completely empty and build widget by widget.</p>
-                      </div>
-                    </button>
-                    <button
-                      onClick={() => {
-                        setCreateStep("template");
-                      }}
-                      className="text-left p-4 rounded-2xl flex items-center gap-4 active:scale-95 transition-transform duration-100"
-                      style={{ background: "var(--calm-soft, #292f31)", border: "1px solid var(--calm-line, #343c3f)" }}
-                    >
-                      <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-600/30 to-indigo-600/30 border border-white/10 flex items-center justify-center text-2xl flex-shrink-0">
-                        🎮
-                      </div>
-                      <div>
-                        <p className="text-sm font-bold calm-ink leading-tight">Standard Layouts</p>
-                        <p className="text-xs text-muted-foreground mt-0.5 leading-snug">Choose from a variety of pre-configured gamepads.</p>
-                      </div>
-                    </button>
-                    <button
-                      onClick={() => { setImportError(""); setImportCode(""); setCreateStep("import"); }}
-                      className="text-left p-4 rounded-2xl flex items-center gap-4 active:scale-95 transition-transform duration-100"
-                      style={{ background: "var(--calm-soft, #292f31)", border: "1px solid var(--calm-line, #343c3f)" }}
-                    >
-                      <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-600/30 to-teal-600/30 border border-white/10 flex items-center justify-center text-2xl flex-shrink-0">
-                        ⤓
-                      </div>
-                      <div>
-                        <p className="text-sm font-bold calm-ink leading-tight">Import from Code</p>
-                        <p className="text-xs text-muted-foreground mt-0.5 leading-snug">Got a share code? Paste it to load someone's controller.</p>
-                      </div>
-                    </button>
-                  </div>
-                </motion.div>
-              ) : createStep === "import" ? (
-                <motion.div
-                  key="import"
-                  initial={{ opacity: 0, x: 10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -10 }}
-                  transition={STEP}
-                  className="p-5 pb-8 overflow-y-auto" style={{ maxHeight: "85vh" }}
-                >
-                  <div className="flex items-center gap-3 mb-6">
-                    <button onClick={() => setCreateStep("type")}
-                      className="w-8 h-8 flex items-center justify-center rounded-full calm-muted active:scale-90 transition-all text-sm font-bold flex-shrink-0"
-                      style={{ background: "var(--calm-soft, #292f31)", border: "1px solid var(--calm-line, #343c3f)" }}>
-                      ←
-                    </button>
-                    <div>
-                      <h3 className="text-lg font-black calm-ink tracking-tight">Import from Code</h3>
-                      <p className="text-xs text-muted-foreground mt-0.5">Paste the code someone shared with you</p>
-                    </div>
-                  </div>
-                  <label className="text-xs font-bold text-muted-foreground mb-2 block">Share Code</label>
-                  <input
-                    value={importCode}
-                    onChange={e => { setImportCode(e.target.value.toUpperCase()); setImportError(""); }}
-                    onKeyDown={e => { if (e.key === "Enter") importByCode(); }}
-                    placeholder="e.g. K7M2QP"
-                    maxLength={12}
-                    autoCapitalize="characters"
-                    className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 calm-ink text-center text-lg font-mono tracking-[0.3em] outline-none focus:border-primary/60"
-                  />
-                  {importError && (
-                    <p className="text-xs text-red-400 mt-2 leading-snug">{importError}</p>
-                  )}
-                  <button
-                    onClick={importByCode}
-                    disabled={importBusy}
-                    className="w-full mt-5 py-3 rounded-xl bg-primary text-black font-bold text-sm active:scale-95 transition-all disabled:opacity-50"
-                  >
-                    {importBusy ? "Importing…" : "Import Controller"}
-                  </button>
-                </motion.div>
-              ) : createStep === "template" ? (
-                <motion.div
-                  key="template"
-                  initial={{ opacity: 0, x: 10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -10 }}
-                  transition={STEP}
-                  className="p-5 pb-8 overflow-y-auto" style={{ maxHeight: "85vh" }}
-                >
-                  <div className="flex items-center gap-3 mb-6">
-                    <button onClick={() => setCreateStep("type")}
-                      className="w-8 h-8 flex items-center justify-center rounded-full calm-muted active:scale-90 transition-all text-sm font-bold flex-shrink-0"
-                      style={{ background: "var(--calm-soft, #292f31)", border: "1px solid var(--calm-line, #343c3f)" }}>
-                      ←
-                    </button>
-                    <div>
-                      <h3 className="text-lg font-black calm-ink tracking-tight">Choose Template</h3>
-                      <p className="text-xs text-muted-foreground mt-0.5">Pick a starting point for your layout</p>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    {BLUEPRINTS.map((bp, i) => (
-                      <button
-                        key={bp.key}
-                        onClick={() => {
-                          setSelectedTemplate(bp.key);
-                          setNewPadName(TEMPLATE_DEFAULT_NAMES[bp.key] || bp.name);
-                          setNewPadColor(CUSTOM_COLORS[i % CUSTOM_COLORS.length]);
-                          setCreateStep("name");
-                        }}
-                        className="text-left p-3.5 rounded-2xl flex flex-col gap-2.5 active:scale-95 transition-transform duration-100"
-                        style={{ background: "var(--calm-soft, #292f31)", border: "1px solid var(--calm-line, #343c3f)" }}
-                      >
-                        <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${bp.color} border border-white/10 flex items-center justify-center text-2xl flex-shrink-0`}>
-                          {bp.icon}
-                        </div>
-                        <div>
-                          <p className="text-xs font-bold calm-ink leading-tight">{bp.name}</p>
-                          <p className="text-xs text-muted-foreground mt-0.5 leading-snug">{bp.desc}</p>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                </motion.div>
-              ) : (
-                <motion.div
-                  key="name"
-                  initial={{ opacity: 0, x: 10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -10 }}
-                  transition={STEP}
-                  className="p-5 pb-8 overflow-y-auto" style={{ maxHeight: "85vh" }}
-                >
-                  <div className="flex items-center gap-3 mb-6">
-                    <button onClick={() => setCreateStep(selectedTemplate === "blank" ? "type" : "template")}
-                      className="w-8 h-8 flex items-center justify-center rounded-full calm-muted active:scale-90 transition-all text-sm font-bold flex-shrink-0"
-                      style={{ background: "var(--calm-soft, #292f31)", border: "1px solid var(--calm-line, #343c3f)" }}>
-                      ←
-                    </button>
-                    <div>
-                      <h3 className="text-base font-black calm-ink tracking-tight">Name Your Pad</h3>
-                      <p className="text-xs text-muted-foreground mt-0.5">Customize before building</p>
-                    </div>
-                  </div>
-
-                  <div className="mb-5">
-                    <label className="text-xs font-bold text-muted-foreground mb-2 block">Layout Name</label>
-                    <input
-                      ref={nameInputRef}
-                      value={newPadName}
-                      onChange={e => setNewPadName(e.target.value)}
-                      maxLength={24}
-                      onKeyDown={e => { if (e.key === "Enter") commitNewPad(); }}
-                      className="w-full rounded-xl px-4 py-3 text-sm font-semibold calm-ink outline-none transition-colors"
-                      style={{ background: "var(--calm-soft, #292f31)", border: `1.5px solid ${newPadName ? newPadColor + "80" : "rgba(255,255,255,0.1)"}`, caretColor: newPadColor }}
-                      placeholder="My Custom Layout"
-                    />
-                  </div>
-
-
-                  <div className="mb-7">
-                    <label className="text-xs font-bold text-muted-foreground mb-3 block">Accent Color</label>
-                    <div className="flex gap-3">
-                      {CUSTOM_COLORS.map(c => (
-                        <button key={c} onClick={() => setNewPadColor(c)}
-                          className="w-9 h-9 rounded-full transition-all active:scale-90 duration-150 flex items-center justify-center"
-                          style={{ background: c, boxShadow: newPadColor === c ? `0 0 0 2.5px white, 0 0 0 4px ${c}` : `0 0 0 1.5px ${c}40` }}>
-                          {newPadColor === c && <span className="text-black font-black text-sm">✓</span>}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <button
-                    onClick={commitNewPad}
-                    className="w-full py-3.5 rounded-2xl text-sm font-black transition-all duration-150 active:scale-95"
-                    style={{ background: newPadColor, color: "#000001" }}
-                  >
-                    CREATE &amp; OPEN EDITOR
-                  </button>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </motion.div>
-        </motion.div>
-        )}
-        </AnimatePresence>,
-        document.body
-      )}
+      <LayoutDialog appearance={appearance} onCreate={createPad} onImport={importPadByCode} />
     </div>
   );
 }
