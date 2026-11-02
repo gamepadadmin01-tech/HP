@@ -1358,40 +1358,6 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback, android.hardwa
                 }
 
                 @android.webkit.JavascriptInterface
-                fun isBatteryOptimized(): Boolean {
-                    return try {
-                        if (android.os.Build.VERSION.SDK_INT >= 23) {
-                            val pm = getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
-                            pm.isIgnoringBatteryOptimizations(packageName).not()
-                        } else {
-                            false
-                        }
-                    } catch (e: Exception) {
-                        false
-                    }
-                }
-
-                // Open the system prompt to exempt us from battery optimization —
-                // the biggest fix for MIUI/HyperOS Wi-Fi radio throttling (latency).
-                @android.webkit.JavascriptInterface
-                fun requestBatteryExemption() {
-                    runOnUiThread {
-                        try {
-                            if (android.os.Build.VERSION.SDK_INT >= 23) {
-                                startActivity(android.content.Intent(
-                                    android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
-                                    android.net.Uri.parse("package:$packageName")))
-                            }
-                        } catch (e: Exception) {
-                            try {
-                                startActivity(android.content.Intent(
-                                    android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
-                            } catch (e2: Exception) { e2.printStackTrace() }
-                        }
-                    }
-                }
-
-                @android.webkit.JavascriptInterface
                 fun showTextInput(currentValue: String, hint: String) {
                     runOnUiThread {
                         // Native EditText inside a dialog — keyboard opens in NATIVE layer,

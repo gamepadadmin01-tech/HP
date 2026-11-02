@@ -8,7 +8,6 @@
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
-    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <!-- REQUEST_INSTALL_PACKAGES lives ONLY in src/direct/AndroidManifest.xml —
          Google Play forbids an app from updating its own APK by any method other
          than Play's own mechanism, so store flavors must never declare this. -->

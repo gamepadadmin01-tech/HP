@@ -1,7 +1,5 @@
 /* The design boundary is intentional. NEVER target :root, body, the pad or Widgets. */
-@font-face { font-family: 'GP Text'; src: url('../assets/plex-regular.woff2') format('woff2'); font-weight: 400; font-display: swap; }
-@font-face { font-family: 'GP Text'; src: url('../assets/plex-semibold.woff2') format('woff2'); font-weight: 500 800; font-display: swap; }
-@font-face { font-family: 'GP Display'; src: url('../assets/space-semibold.woff2') format('woff2'); font-weight: 400 800; font-display: swap; }
+/* Fonts are declared once, in fonts.css (Inter = body, Space Grotesk = display). */
 .gp-shell {
   --calm-paper: #09090b; --calm-surface: #18181b; --calm-soft: #27272a;
   --calm-ink: #fafafa; --calm-muted: #a1a1aa; --calm-line: #27272a;
@@ -12,7 +10,7 @@
   --console-connect-fill: #2463eb; --console-connect-on: #ffffff; --console-connect-edge: #5385ef; --console-connect-hover: #1d54cf;
   --calm-good: #00e676; --calm-good-bg: #10271b; --calm-warning: #ffc400;
   --calm-warning-bg: #2d2510; --calm-error: #ff5975;
-  --calm-display: 'GP Display', sans-serif; --calm-body: 'GP Text', sans-serif;
+  --calm-display: 'Space Grotesk', sans-serif; --calm-body: 'Inter', sans-serif;
   --calm-art: #101012; --calm-art-ink: #f5f5f5;
   --foreground: var(--calm-ink); --muted-foreground: var(--calm-muted);
   --primary: var(--calm-accent); --primary-foreground: var(--calm-on-accent);
