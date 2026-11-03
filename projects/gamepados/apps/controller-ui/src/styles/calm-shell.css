@@ -138,7 +138,7 @@
 .gp-shell .console-connect-chrome { flex-shrink: 0; width: 100%; max-width: 564px; margin: 0 auto; padding: 0 22px 12px; background: var(--calm-paper); }
 .gp-shell .console-connect-chrome .calm-intro h1 { font-size: 30px; }
 .gp-shell .calm-back { display: flex; align-items: center; gap: 7px; min-height: 48px; margin: 9px 0 18px; color: var(--calm-muted); font-size: 12px; }
-.gp-shell .calm-segment { display: flex; flex-wrap: nowrap; gap: 4px; padding: 4px; height: 46px; border: 1px solid var(--calm-line); border-radius: 12px; background: var(--calm-surface); overflow-x: auto; scrollbar-width: none; }
+.gp-shell .calm-segment { display: flex; flex-wrap: nowrap; gap: 4px; padding: 3px; height: 40px; border: 1px solid var(--calm-line); border-radius: 12px; background: var(--calm-surface); overflow-x: auto; scrollbar-width: none; }
 .gp-shell .calm-segment button { display: flex; flex: 1 0 auto; align-items: center; justify-content: center; gap: 7px; padding: 7px 12px; border-radius: 7px; font-size: 12px; font-weight: 600; white-space: nowrap; color: var(--calm-muted); }
 .gp-shell .calm-segment button[aria-pressed='true'] { background: var(--calm-accent); color: var(--calm-on-accent); }
 .gp-shell .calm-pairing { position: relative; display: flex; justify-content: center; align-items: center; gap: 9px; padding: 35px 0; margin: 20px 0 25px; border: 1px solid var(--calm-line); border-radius: 12px; background-image: radial-gradient(var(--calm-line) .7px, transparent .7px); background-size: 12px 12px; }
@@ -165,25 +165,25 @@
 .gp-shell .calm-live-link { margin-top: 22px; }
 .gp-shell .calm-live-link .calm-connection { margin-bottom: 12px; }
 /* Settings: the values, defaults and persistence still belong to the original store. */
-.gp-shell .calm-settings-section { margin-top: 21px; }
+.gp-shell .calm-settings-section { margin-top: 12px; }
 .gp-shell .calm-settings > .calm-settings-section:first-of-type { margin-top: 0; }
-.gp-shell .calm-settings-section > h2,.gp-shell .calm-account-section-title { font: 600 10px var(--calm-body); letter-spacing: 1.6px; text-transform: uppercase; color: var(--calm-muted); margin-bottom: 9px; }
+.gp-shell .calm-settings-section > h2,.gp-shell .calm-account-section-title { font: 600 10px var(--calm-body); letter-spacing: 1.6px; text-transform: uppercase; color: var(--calm-muted); margin-bottom: 6px; }
 .gp-shell .calm-settings-panel { background: var(--calm-surface); border: 1px solid var(--calm-line); border-radius: 12px; overflow: hidden; }
-.gp-shell .calm-setting-row { display: flex; align-items: center; gap: 12px; padding: 14px 16px; }
+.gp-shell .calm-setting-row { display: flex; align-items: center; gap: 10px; padding: 3px 14px; }
 .gp-shell .calm-setting-row + .calm-setting-row { border-top: 1px solid var(--calm-line); }
 .gp-shell .calm-setting-label { display: block; font-size: 14px; font-weight: 600; line-height: 1.4; }
 .gp-shell .calm-setting-row p,.gp-shell .calm-setting-detail p,.gp-shell .calm-range p,.gp-shell .calm-inline-note { font-size: 12px; line-height: 1.45; color: var(--calm-muted); margin-top: 4px; }
-.gp-shell .calm-switch { display: grid; place-items: center; width: 48px; height: 44px; flex-shrink: 0; }
+.gp-shell .calm-switch { display: grid; place-items: center; width: 48px; height: 40px; flex-shrink: 0; }
 .gp-shell .calm-switch > span { display: block; width: 44px; height: 26px; padding: 3px; border-radius: 7px; background: var(--calm-soft); border: 1px solid var(--calm-line); }
 .gp-shell .calm-switch i { display: block; width: 18px; height: 18px; border-radius: 4px; background: var(--calm-muted); }
 .gp-shell .calm-switch[aria-checked='true'] > span { background: var(--calm-accent); border-color: var(--calm-accent); }
 .gp-shell .calm-switch[aria-checked='true'] i { background: var(--calm-on-accent); }
 .gp-shell .calm-setting-options { border-top: 1px solid var(--calm-line); }
-.gp-shell .calm-setting-detail,.gp-shell .calm-range { margin: 0 16px; padding: 14px 0; border-top: 1px solid var(--calm-line); }
-.gp-shell .calm-setting-detail h3,.gp-shell .calm-range label { font-size: 12px; font-weight: 600; margin-bottom: 9px; }
+.gp-shell .calm-setting-detail,.gp-shell .calm-range { margin: 0 14px; padding: 8px 0; border-top: 1px solid var(--calm-line); }
+.gp-shell .calm-setting-detail h3,.gp-shell .calm-range label { font-size: 12px; font-weight: 600; margin-bottom: 2px; }
 .gp-shell .calm-range > div { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; }
 .gp-shell .calm-range output { font-family: var(--calm-display); font-size: 16px; color: var(--calm-accent); font-variant-numeric: tabular-nums; }
-.gp-shell .calm-range input { display: block; width: 100%; height: 36px; accent-color: var(--calm-accent); }
+.gp-shell .calm-range input { display: block; width: 100%; height: 30px; accent-color: var(--calm-accent); }
 .gp-shell .calm-inline-note { padding: 13px; margin: 16px 0; border-left: 2px solid var(--calm-accent); background: var(--calm-surface); }
 .gp-shell .calm-temperature { font-size: 12px; color: var(--calm-accent); white-space: nowrap; }
 /* Account, real catalogue cards, checkout and all authentication states. */
