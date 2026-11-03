@@ -1,6 +1,6 @@
 import React, { useState, useRef } from "react";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
-import { Plus, ArrowLeft, Settings, Trash2, Pencil, TriangleAlert } from "lucide-react";
+import { Plus, ArrowLeft, Settings, Trash2, Pencil, TriangleAlert, GripHorizontal } from "lucide-react";
 import { useShellAppearance } from "./CalmShell";
 import { ShellMotion } from "./ShellMotion";
 import { CustomPad, CustomBtnDef, WidgetType } from "../types";
@@ -99,6 +99,13 @@ const DEFAULT_HELD = "rgba(79, 134, 198, 0.85)";
 // The toolbar, collapsed (nothing selected): back, then +. The "+" popup grows out of the "+", so its origin is derived from these.
 const TOOLBAR_W = 120;                                   // collapsed width, px
 const PLUS_OFFSET = TOOLBAR_W / 2 - 6 - 40 / 2;          // the "+" centre: half the toolbar, minus its 6px padding, minus half a 40px button
+
+// The widget-settings panel is drawn at 75% of its design size (so it hides less of the canvas) and can be dragged
+// anywhere by its header. Positions are in the editor layer's own pixels; the layer may be CSS-rotated on desktop.
+const PANEL_SCALE = 0.75;
+const PANEL_W = 300;      // design width, before the scale
+const PANEL_GAP = 8;      // gap between the toolbar and the panel when it first opens
+const PANEL_EDGE = 4;     // the panel never goes closer than this to a screen edge
 
 // Per-type default radius (single source for both "Add" and resize bounds).
 const DEFAULT_R: Record<WidgetType, number> = {
@@ -491,6 +498,54 @@ export function CustomPadEditor({
     setShowSettings(false);
   };
 
+  // ── Settings panel position ──
+  // Drag is done with raw pointer events on the header and written straight to the element's style, so a drag
+  // re-renders nothing; the position is committed to state on release (and re-clamped if the screen is resized).
+  const toolbarRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const panelBodyRef = useRef<HTMLDivElement>(null);
+  const panelDrag = useRef<{ sx: number; sy: number; x: number; y: number; cur?: { x: number; y: number } } | null>(null);
+  const [panelPos, setPanelPos] = useState<{ x: number; y: number } | null>(null);
+  const rotated = !hasBridge && isPortrait;
+  const layerW = rotated ? winSize.h : winSize.w;
+  const layerH = rotated ? winSize.w : winSize.h;
+  const clampPanel = (x: number, y: number) => {
+    const h = (panelBodyRef.current?.offsetHeight ?? 0) * PANEL_SCALE;
+    return {
+      x: Math.max(PANEL_EDGE, Math.min(layerW - PANEL_W * PANEL_SCALE - PANEL_EDGE, x)),
+      y: Math.max(PANEL_EDGE, Math.min(layerH - h - PANEL_EDGE, y)),
+    };
+  };
+  // First opening: centred just under the toolbar, with a real gap so the two never touch.
+  const defaultPanelPos = () => {
+    const tb = toolbarRef.current;
+    return { x: (layerW - PANEL_W * PANEL_SCALE) / 2, y: (tb ? tb.offsetTop + tb.offsetHeight : 64) + PANEL_GAP };
+  };
+  const pos = panelPos ?? defaultPanelPos();
+  // A screen-space drag, expressed in the layer's own axes (they differ only in the rotated desktop fallback).
+  const toLayerDelta = (dx: number, dy: number) => (rotated ? { x: dy, y: -dx } : { x: dx, y: dy });
+  const onPanelDown = (e: React.PointerEvent) => {
+    e.stopPropagation();
+    panelDrag.current = { sx: e.clientX, sy: e.clientY, x: pos.x, y: pos.y };
+    try { (e.currentTarget as Element).setPointerCapture(e.pointerId); } catch {}
+  };
+  const onPanelMove = (e: React.PointerEvent) => {
+    const d = panelDrag.current;
+    if (!d || !panelRef.current) return;
+    const l = toLayerDelta(e.clientX - d.sx, e.clientY - d.sy);
+    const next = clampPanel(d.x + l.x, d.y + l.y);
+    d.cur = next;
+    panelRef.current.style.left = next.x + "px";
+    panelRef.current.style.top = next.y + "px";
+  };
+  const onPanelUp = (e: React.PointerEvent) => {
+    const d = panelDrag.current;
+    panelDrag.current = null;
+    try { (e.currentTarget as Element).releasePointerCapture(e.pointerId); } catch {}
+    if (d?.cur) setPanelPos(d.cur);
+  };
+  React.useEffect(() => { setPanelPos((p) => (p ? clampPanel(p.x, p.y) : p)); }, [layerW, layerH]);   // eslint-disable-line react-hooks/exhaustive-deps
+
   const handleSaveAndClose = () => {
     onSave({ ...pad, name: padName.trim() || pad.name, buttons });
     close();
@@ -641,7 +696,7 @@ export function CustomPadEditor({
       </div>
 
       {/* Fluid toolbar — pinned to the very top edge of the canvas */}
-      <div className="absolute top-1 left-0 right-0 flex justify-center pointer-events-none">
+      <div ref={toolbarRef} className="absolute top-1 left-0 right-0 flex justify-center pointer-events-none">
         <motion.div
           layout
           data-calm-theme={appearance} className="gp-shell console-editor-toolbar border flex items-center p-1.5 pointer-events-auto overflow-hidden"
@@ -700,19 +755,28 @@ export function CustomPadEditor({
       <AnimatePresence>
         {selectedBtn && showSettings && (
           <motion.div
-            initial={{ opacity: 0, y: -16 }}
+            ref={panelRef}
+            initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -8, transition: EXIT }}
+            exit={{ opacity: 0, y: -6, pointerEvents: "none" as const, transition: EXIT }}
             transition={SPRING}
-            className="absolute top-16 left-0 right-0 bottom-4 flex justify-center pointer-events-none"
+            className="absolute z-10"
+            style={{ left: pos.x, top: pos.y, width: 0, height: 0 }}
           >
-          <div data-calm-theme={appearance} className="gp-shell console-editor-panel w-[300px] max-h-full self-start border p-5 pointer-events-auto overflow-y-auto overscroll-contain touch-pan-y">
-            <div className="flex items-center justify-between mb-4">
+          <div ref={panelBodyRef} data-testid="widget-settings-panel" data-calm-theme={appearance}
+            className="gp-shell console-editor-panel absolute left-0 top-0 border p-5 flex flex-col overflow-hidden"
+            style={{ width: PANEL_W, maxHeight: (layerH - pos.y - PANEL_EDGE) / PANEL_SCALE, transform: `scale(${PANEL_SCALE})`, transformOrigin: "top left" }}>
+            {/* The header is the drag handle: hold it and move the panel anywhere on the screen. */}
+            <div data-testid="widget-settings-handle" className="flex items-center justify-between gap-2 mb-4 cursor-grab active:cursor-grabbing"
+              style={{ touchAction: "none" }}
+              onPointerDown={onPanelDown} onPointerMove={onPanelMove} onPointerUp={onPanelUp} onPointerCancel={onPanelUp}>
               <span className="text-white font-bold text-sm capitalize">{selectedBtn.type} settings</span>
-              <button onClick={handleDelete} className="w-8 h-8 rounded-full bg-red-500/20 text-red-400 flex items-center justify-center hover:bg-red-500/30 active:scale-90 transition-all">
+              <GripHorizontal size={18} className="text-zinc-500 flex-1" aria-hidden="true" />
+              <button onPointerDown={(e) => e.stopPropagation()} onClick={handleDelete} aria-label="Delete button" className="w-8 h-8 rounded-full bg-red-500/20 text-red-400 flex items-center justify-center hover:bg-red-500/30 active:scale-90 transition-all">
                 <Trash2 size={16} />
               </button>
             </div>
+            <div className="min-h-0 overflow-y-auto overscroll-contain touch-pan-y">
 
             {/* Warn if this widget's label won't map to any real gamepad input —
                 e.g. a legacy custom button with a free-text label. Such a button
@@ -804,6 +868,7 @@ export function CustomPadEditor({
                 </div>
               </div>
             )}
+            </div>
           </div>
           </motion.div>
         )}
