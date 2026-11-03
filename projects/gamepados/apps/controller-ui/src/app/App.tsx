@@ -996,11 +996,6 @@ function useGyro(maxAngle: number = 45, deadzone: number = 0, onGyroChange?: () 
   return { tiltRef, leftBarRef, rightBarRef, calibrate, idleRef, idle };
 }
 
-// How big the controller (the pad) is drawn on the play screen, as a fraction of the space it could fill. 1 = edge to
-// edge; 0.9 leaves a calm margin all round so buttons are not jammed against the screen edges. Applied through the SVG's
-// own size, so the native touch engine (which reads the SVG's position from getScreenCTM) and the page always agree.
-const PAD_SCALE = 0.9;
-
 // ─── Controller Screen ────────────────────────────────────────────────────────
 function ControllerScreen({ onBack, isActive: screenActive, activeMapping, customPad, controllerLayout, gyroOn, setGyroOn, gyroMaxAngle, gyroWheel, gyroMode, gyroDeadzone, gyroHaptic, gyroThrottle, gyroIdleDetect, rumbleOn }: {
   onBack: () => void; isActive: boolean;
@@ -1801,8 +1796,8 @@ function ControllerScreen({ onBack, isActive: screenActive, activeMapping, custo
           occlude the indicator; the HUD toggle stays above both at z-10. */}
       <div className="absolute inset-0 z-[5] flex items-center justify-center"
            style={svgTransform}>
-        <svg ref={svgRef} viewBox={`0 0 ${W} 570`} className="max-h-full"
-          style={{ touchAction: "none", userSelect: "none", width: `${PAD_SCALE * 100}%`, height: `${PAD_SCALE * 100}%` }}>
+        <svg ref={svgRef} viewBox={`0 0 ${W} 570`} className="w-full h-full max-h-full"
+          style={{ touchAction: "none", userSelect: "none" }}>
         <defs>
           <clipPath id="clip-LT"><rect x={LT.x} y={LT.y} width={LT.w} height={LT.h} rx={LT.rx} /></clipPath>
           <clipPath id="clip-RT"><rect x={RT.x} y={RT.y} width={RT.w} height={RT.h} rx={RT.rx} /></clipPath>

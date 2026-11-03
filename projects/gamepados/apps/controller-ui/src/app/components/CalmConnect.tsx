@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { ArrowLeft, ArrowRight, Download, Monitor, ScanLine, Smartphone, Usb, Wifi } from "lucide-react";
+import { ArrowLeft, ArrowRight, Download, ScanLine, Usb, Wifi } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { ShellMotion } from "./ShellMotion";
 import { getWiredPref, setWiredPref, type WiredPref } from "../store/prefs";
@@ -41,7 +41,7 @@ export function CalmConnect({ telemetry, appearance, onAppearance, onBack, onSca
     <header className="calm-header"><CalmBrand /><AppearanceButton appearance={appearance} onClick={onAppearance} /></header>
       <div className="console-connect-chrome">
         <button data-testid="connect-back-button" className="calm-back" onClick={onBack}><ArrowLeft size={18} aria-hidden="true" />Back to Play</button>
-        <div className="calm-intro"><span className="console-eyebrow">TWO DEVICES. ONE GREAT SESSION.</span><h1 data-testid="connect-heading">Make the connection.</h1><p>Your PC meets its new controller.</p></div>
+        <h1 className="sr-only" data-testid="connect-heading">Make the connection.</h1>
         <div className="calm-segment" aria-label="Connection method">
           <button data-testid="connection-wireless-button" aria-pressed={tab === "wireless"} onClick={() => { setTab("wireless"); setError(""); }}><Wifi size={18} aria-hidden="true" />Wi-Fi</button>
           <button data-testid="connection-usb-button" aria-pressed={tab === "wired"} onClick={() => { setTab("wired"); chooseWired(wired); setManual(false); setError(""); }}><Usb size={18} aria-hidden="true" />USB</button>
@@ -50,7 +50,6 @@ export function CalmConnect({ telemetry, appearance, onAppearance, onBack, onSca
     <main className="calm-connect-scroll">
       <div className="calm-connect-content">
         <AnimatePresence mode="wait" initial={false}><motion.div key={tab} initial={{ opacity: reduced ? 1 : 0, x: 0 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 0 }} transition={{ duration: reduced ? 0 : .16 }}>
-          <div className="calm-pairing" aria-hidden="true"><motion.span initial={{ scale: .9 }} animate={{ scale: 1 }}><Smartphone size={32} /></motion.span>{[0,1,2].map(n => <motion.i key={n} animate={reduced ? {} : { opacity: [.25, 1, .25] }} transition={{ duration: 1.6, repeat: Infinity, delay: n * .2 }} />)}<motion.span initial={{ scale: .9 }} animate={{ scale: 1 }}><Monitor size={32} /></motion.span></div>
           {tab === "wireless" ? <>
             <ol className="calm-steps">
               {step(1, "Open GamepadServer", <>Keep your phone and PC on the same Wi-Fi network.<button className="calm-text-button" onClick={() => openUrl("https://gamepad.space/#download")}><Download size={16} aria-hidden="true" />Get the PC server</button></>)}
