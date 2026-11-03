@@ -273,6 +273,7 @@
 .gp-shell.console-scanner { background: transparent; font-family: var(--calm-body) !important; }
 .gp-shell.console-scanner .corner2 { border-color: var(--calm-accent) !important; }
 .gp-shell.console-scanner .laser2 { display: block; height: 1px; background: var(--calm-accent); box-shadow: 0 0 18px var(--calm-accent); }
+.gp-shell.console-scanner .scan-window, .gp-shell.console-scanner .scan-window *:not(.laser2) { background: transparent; border-color: transparent; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; } /* the frame is a window onto the camera: the glass layer (liquid-glass-trial.css) must not paint it */
 .gp-shell.console-scanner .console-scanner-top { padding-top: calc(var(--android-safe-top, env(safe-area-inset-top, 0px)) + 16px) !important; border-bottom: 1px solid var(--calm-line); }
 .gp-shell.console-scanner .console-scanner-top p { font: 600 20px var(--calm-display) !important; }
 .gp-shell.console-scanner .console-scanner-top button { width: 44px; height: 44px; border-radius: 10px; }

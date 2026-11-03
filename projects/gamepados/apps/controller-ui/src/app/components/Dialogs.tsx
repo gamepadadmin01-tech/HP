@@ -258,7 +258,7 @@ export function QRScanOverlay({ onClose, onConnect }: { onClose: () => void; onC
       </div>
 
       {/* Target Reticle box */}
-      <div className="relative z-10 rounded-xl" style={{ width: "min(72vw,52vh)", height: "min(72vw,52vh)" }}>
+      <div className="scan-window relative z-10 rounded-xl" style={{ width: "min(72vw,52vh)", height: "min(72vw,52vh)" }}>
         <div className="absolute inset-0 rounded-xl" style={{ background: "rgba(79,134,198,0.01)", border: "1px solid rgba(79,134,198,0.2)" }} />
         {[
           { pos:"top-0 left-0", cls:"c-tl2", style:{borderTop:"3px solid #5D90CB",borderLeft:"3px solid #5D90CB",borderRadius:"3px 0 0 0"} },
