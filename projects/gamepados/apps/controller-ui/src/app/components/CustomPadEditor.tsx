@@ -1,5 +1,5 @@
 import React, { useState, useRef } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { Plus, ArrowLeft, Settings, Trash2, Pencil, TriangleAlert } from "lucide-react";
 import { useShellAppearance } from "./CalmShell";
 import { ShellMotion } from "./ShellMotion";
@@ -7,9 +7,9 @@ import { CustomPad, CustomBtnDef, WidgetType } from "../types";
 import { RED_NORM, ACCENT_RGB, buttonText } from "./Widgets";
 import { TouchpadArt } from "./Touchpad";
 import { TouchpadSettings } from "./TouchpadSettings";
-import { ADD_MAP, AddItem } from "../addMap";
+import { ADD_ITEMS, ADD_CELL, AddItem } from "../addItems";
 import { touchpadSize, isRoundPad } from "../touchpad";
-import { SPRING, SPRING_SNAP, FADE, EXIT, cardIn, backdropIn } from "../motion";
+import { SPRING, SPRING_SNAP, FADE, EXIT, cardIn, backdropIn, popupIn, tileIn } from "../motion";
 
 // ── Custom pointer-driven slider ──────────────────────────────────────────────
 // Native <input type="range"> does NOT drag reliably inside this editor: the
@@ -95,6 +95,10 @@ const CY = CANVAS_H / 2;
 
 const DEFAULT_NORM = "rgba(79, 134, 198, 0.12)";
 const DEFAULT_HELD = "rgba(79, 134, 198, 0.85)";
+
+// The toolbar, collapsed (nothing selected): back, then +. The "+" popup grows out of the "+", so its origin is derived from these.
+const TOOLBAR_W = 120;                                   // collapsed width, px
+const PLUS_OFFSET = TOOLBAR_W / 2 - 6 - 40 / 2;          // the "+" centre: half the toolbar, minus its 6px padding, minus half a 40px button
 
 // Per-type default radius (single source for both "Add" and resize bounds).
 const DEFAULT_R: Record<WidgetType, number> = {
@@ -298,12 +302,14 @@ const WidgetPreview = React.memo(function WidgetPreview({ b }: { b: CustomBtnDef
   );
 });
 
-// One projected button of the "+" map (addMap.ts), as the widget it would be: same drawing as on the pad.
-const ghostOf = (it: AddItem): CustomBtnDef => ({
-  uid: `ghost-${it.tag}`, type: it.type, shape: it.type === "trigger" || it.type === "touchpad" ? "rect" : "circle",
-  opacity: 1, haptic: 0, macroBits: [], label: it.label, x: it.x, y: it.y, r: it.gr ?? 40, w: it.gw, h: it.gh,
+// One tile of the "+" popup (addItems.ts) as the widget it would be: the same drawing as on the pad, centred in its tile.
+const tilePreview = (it: AddItem): CustomBtnDef => ({
+  uid: `tile-${it.tag}`, type: it.type, shape: it.type === "trigger" || it.type === "touchpad" ? "rect" : "circle",
+  opacity: 1, haptic: 0, macroBits: [], label: it.label, x: it.vw / 2, y: it.vh / 2, r: it.pr, w: it.pw, h: it.ph,
   normColor: DEFAULT_NORM, heldColor: DEFAULT_HELD,
 });
+// Built once: the same objects every render, so each tile's memoised preview never redraws while the popup is open.
+const ADD_TILES = ADD_ITEMS.map((it) => ({ it, b: tilePreview(it) }));
 
 export function CustomPadEditor({
   pad,
@@ -328,6 +334,7 @@ export function CustomPadEditor({
   // gear button in the toolbar.
   const [showSettings, setShowSettings] = useState(false);
   const [showAddMenu, setShowAddMenu] = useState(false);
+  const reduceMotion = useReducedMotion();   // the "+" popup then only fades: no growth, no stagger
   const [showExitConfirm, setShowExitConfirm] = useState(false);
   React.useEffect(() => {
     (window as any).__editorBack = () => {
@@ -567,37 +574,43 @@ export function CustomPadEditor({
             </svg>
           </div>
 
-      {/* "+" projection: every addable button drawn where it belongs on a controller, straight over the
-          canvas. No panel and no cards. Tap one to add it; tap the empty canvas to close. It sits below the
-          toolbar (later in the tree) so the toolbar stays usable. */}
+      {/* "+" popup: a container that grows out of the "+" button, one big tile per button drawn as it looks on the
+          pad. Tap a tile to add it; tap outside, the "+" again, or Back to close. The dim is a plain scrim (no blur:
+          a blur re-renders every frame while it fades). It sits below the toolbar (later in the tree), so the "+"
+          stays tappable. Motion tokens live in motion.ts (popupIn, tileIn). With reduced motion it only fades. */}
       <AnimatePresence>
         {showAddMenu && (
+          <motion.div key="add-scrim" {...backdropIn} exit={{ opacity: 0, pointerEvents: "none", transition: EXIT }} transition={FADE} className="absolute inset-0 bg-black/55"
+            onPointerDown={() => setShowAddMenu(false)} />
+        )}
+        {showAddMenu && (
           <motion.div
-            key="add-projection"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0, transition: EXIT }}
-            transition={FADE}
-            className="absolute inset-0 flex items-center justify-center"
+            key="add-popup"
+            {...popupIn}
+            exit={reduceMotion ? { opacity: 0, pointerEvents: "none" as const, transition: EXIT } : popupIn.exit}
+            transition={SPRING}
+            data-calm-theme={appearance}
+            role="dialog" aria-label="Add a button"
+            className="gp-shell console-editor-panel absolute top-16 left-0 right-0 mx-auto w-[62%] min-w-[300px] max-w-[620px] max-h-[calc(100%-4.75rem)] border p-3 flex flex-col"
+            style={{ transformOrigin: `calc(50% + ${PLUS_OFFSET}px) 0px` }}   /* grows out of the "+" (see PLUS_OFFSET) */
           >
-            <svg viewBox={`0 0 ${CANVAS_W} ${CANVAS_H}`} className="w-full h-full max-h-full" style={{ touchAction: "none" }}>
-              <rect width={CANVAS_W} height={CANVAS_H} fill="rgba(7,9,16,0.84)" onClick={() => setShowAddMenu(false)} />
-              {ADD_MAP.map((it) => {
-                const g = ghostOf(it);
-                const bx = widgetBox(g);
-                return (
-                  <g key={it.tag} role="button" tabIndex={0} aria-label={`Add ${it.tag}`}
-                    data-testid={`add-${it.tag.toLowerCase().replace(/\s/g, '-')}-widget-button`}
-                    className="cursor-pointer transition-opacity duration-150 hover:opacity-100 active:opacity-60"
-                    style={{ opacity: 0.92 }}
-                    onClick={() => addWidget(it.type, it.label, it.r)}
-                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") addWidget(it.type, it.label, it.r); }}>
-                    <g style={{ pointerEvents: "none" }}><WidgetPreview b={g} /></g>
-                    <rect x={bx.x - 6} y={bx.y - 6} width={bx.w + 12} height={bx.h + 12} fill="transparent" />
-                  </g>
-                );
-              })}
-            </svg>
+            <div className="grid gap-2 overflow-y-auto overscroll-contain touch-pan-y min-h-0 justify-center"
+              style={{ gridTemplateColumns: `repeat(auto-fill, ${ADD_CELL}px)`, gridAutoRows: `${ADD_CELL}px`, gridAutoFlow: "dense" }}>
+              {ADD_TILES.map(({ it, b }, i) => (
+                <motion.button
+                  key={it.tag}
+                  data-testid={`add-${it.tag.toLowerCase().replace(/\s/g, '-')}-widget-button`}
+                  aria-label={`Add ${it.tag}`}
+                  variants={tileIn} initial="initial" animate="animate" custom={reduceMotion ? 0 : i}
+                  whileTap={{ scale: 0.94 }}
+                  onClick={() => addWidget(it.type, it.label, it.r)}
+                  className="rounded-2xl bg-white/[0.07] hover:bg-white/10 p-1.5"
+                  style={{ gridColumn: `span ${it.cols}`, gridRow: `span ${it.rows}` }}
+                >
+                  <svg viewBox={`0 0 ${it.vw} ${it.vh}`} className="w-full h-full pointer-events-none"><WidgetPreview b={b} /></svg>
+                </motion.button>
+              ))}
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
@@ -632,7 +645,7 @@ export function CustomPadEditor({
         <motion.div
           layout
           data-calm-theme={appearance} className="gp-shell console-editor-toolbar border flex items-center p-1.5 pointer-events-auto overflow-hidden"
-          style={{ width: selectedId ? "280px" : "120px" }}
+          style={{ width: selectedId ? "280px" : `${TOOLBAR_W}px` }}
           transition={SPRING}
         >
           <div className="w-full flex justify-between items-center relative">
@@ -673,8 +686,8 @@ export function CustomPadEditor({
                 </motion.div>
               )}
             </AnimatePresence>
-            <button data-testid="add-widget-button" aria-label="Add widget" onClick={() => { setShowAddMenu(true); setSelectedId(null); }} className="w-10 h-10 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center text-white active:scale-95 transition-all z-10">
-              <Plus size={20} />
+            <button data-testid="add-widget-button" aria-label={showAddMenu ? "Close" : "Add widget"} aria-expanded={showAddMenu} onClick={() => { setShowAddMenu((v) => !v); setSelectedId(null); }} className="w-10 h-10 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center text-white active:scale-95 transition-all z-10">
+              <motion.span animate={{ rotate: showAddMenu ? 45 : 0 }} transition={SPRING_SNAP} className="flex"><Plus size={20} /></motion.span>
             </button>
           </div>
         </motion.div>

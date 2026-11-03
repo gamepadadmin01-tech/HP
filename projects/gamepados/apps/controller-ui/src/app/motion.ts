@@ -89,3 +89,35 @@ export const stepIn = (dir: 1 | -1 = 1) => ({
   animate: { opacity: 1, x: 0 },
   exit: { opacity: 0, x: -10 * dir },
 });
+
+// ─── The editor "+" popup ─────────────────────────────────────────────────────
+//
+// A panel that GROWS OUT OF the button that opened it, then its tiles arrive one after another.
+// Same two rules as above: it never travels (it scales from the "+"), and it never bounces
+// (SPRING is critically damped). Closing is the same move backwards, quicker (EXIT).
+// Only transform and opacity move, so it stays on the GPU. Reduced motion is global (main.tsx).
+
+/** Where the popup starts: a little smaller than its final size, anchored at the "+" button. */
+export const POPUP_FROM = 0.88;
+
+/** Seconds between one tile and the next. Only the first POPUP_STAGGER_COUNT tiles are delayed: the
+ *  rest arrive with the last of them, so a long list never makes the player wait. */
+export const POPUP_STAGGER = 0.014;
+export const POPUP_STAGGER_COUNT = 12;
+
+/** The panel itself. Pair with SPRING on the way in; the exit already carries EXIT and stops taking taps, so a quick second tap cannot add a second button. */
+export const popupIn = {
+  initial: { opacity: 0, scale: POPUP_FROM },
+  animate: { opacity: 1, scale: 1 },
+  exit: { opacity: 0, scale: 0.94, pointerEvents: "none" as const, transition: EXIT },
+};
+
+/** One tile inside the panel. `custom` is the tile's number. They only appear: leaving is done by
+ *  the panel fading away, so there is no stagger on the way out. */
+export const tileIn = {
+  initial: { opacity: 0, scale: 0.9 },
+  animate: (i: number) => ({
+    opacity: 1, scale: 1,
+    transition: { ...SPRING_SNAP, delay: 0.02 + Math.min(i, POPUP_STAGGER_COUNT) * POPUP_STAGGER },
+  }),
+};
