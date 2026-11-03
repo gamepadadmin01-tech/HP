@@ -55,10 +55,6 @@
 .gp-shell .calm-main { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior-y: contain; scrollbar-width: none; }
 .gp-shell .calm-main::-webkit-scrollbar,.gp-shell .calm-connect-scroll::-webkit-scrollbar { display: none; }
 .gp-shell .calm-home-content,.gp-shell .calm-legacy-content { max-width: 620px; margin: auto; padding: 26px 22px 30px; }
-.gp-shell .calm-intro { margin-bottom: 26px; }
-.gp-shell .calm-account .calm-intro { margin-bottom: 18px; }
-.gp-shell .calm-intro h1 { color: var(--calm-ink); font: 600 33px/1.16 var(--calm-display); letter-spacing: -1.5px; margin: 8px 0 8px; }
-.gp-shell .calm-intro p { font-size: 14px; line-height: 1.55; color: var(--calm-muted); margin: 0; }
 .gp-shell .console-home-intro { margin-bottom: 23px; }
 .gp-shell .console-home-intro .console-eyebrow { color: var(--calm-accent); font-size: 9px; }
 .gp-shell .console-home-intro h1 { font-size: 31px; }
@@ -136,15 +132,10 @@
 .gp-shell .calm-connect-scroll { min-height: 0; flex: 1; overflow-y: auto; padding: 0 22px calc(var(--android-safe-bottom, env(safe-area-inset-bottom, 0px)) + 30px); scrollbar-width: none; }
 .gp-shell .calm-connect-content { max-width: 520px; margin: auto; }
 .gp-shell .console-connect-chrome { flex-shrink: 0; width: 100%; max-width: 564px; margin: 0 auto; padding: 0 22px 12px; background: var(--calm-paper); }
-.gp-shell .console-connect-chrome .calm-intro h1 { font-size: 30px; }
 .gp-shell .calm-back { display: flex; align-items: center; gap: 7px; min-height: 48px; margin: 9px 0 18px; color: var(--calm-muted); font-size: 12px; }
 .gp-shell .calm-segment { display: flex; flex-wrap: nowrap; gap: 4px; padding: 3px; height: 40px; border: 1px solid var(--calm-line); border-radius: 12px; background: var(--calm-surface); overflow-x: auto; scrollbar-width: none; }
 .gp-shell .calm-segment button { display: flex; flex: 1 0 auto; align-items: center; justify-content: center; gap: 7px; padding: 7px 12px; border-radius: 7px; font-size: 12px; font-weight: 600; white-space: nowrap; color: var(--calm-muted); }
 .gp-shell .calm-segment button[aria-pressed='true'] { background: var(--calm-accent); color: var(--calm-on-accent); }
-.gp-shell .calm-pairing { position: relative; display: flex; justify-content: center; align-items: center; gap: 9px; padding: 35px 0; margin: 20px 0 25px; border: 1px solid var(--calm-line); border-radius: 12px; background-image: radial-gradient(var(--calm-line) .7px, transparent .7px); background-size: 12px 12px; }
-.gp-shell .calm-pairing > span { display: grid; place-items: center; width: 78px; height: 80px; margin: 0 9px; border-radius: 14px; background: var(--calm-surface); border: 1px solid var(--calm-line); color: var(--calm-ink); }
-.gp-shell .calm-pairing > span:last-child { color: var(--calm-accent); border-color: var(--calm-accent); }
-.gp-shell .calm-pairing i { width: 4px; height: 4px; background: var(--calm-accent); border-radius: 50%; }
 .gp-shell .calm-steps { list-style: none; padding: 0; margin: 0; }
 .gp-shell .calm-step { display: flex; align-items: flex-start; gap: 14px; margin: 0 0 23px; }
 .gp-shell .calm-step-number { width: 25px; height: 26px; flex-shrink: 0; display: grid; place-items: center; border-radius: 6px; background: var(--calm-soft); color: var(--calm-accent); font: 600 11px var(--calm-display); }
@@ -162,7 +153,7 @@
 .gp-shell .calm-help { border-top: 1px solid var(--calm-line); margin-bottom: 20px; }
 .gp-shell .calm-help summary { padding: 15px 0; min-height: 48px; font-size: 12px; color: var(--calm-accent); cursor: pointer; }
 .gp-shell .calm-help p { padding-bottom: 16px; }
-.gp-shell .calm-live-link { margin-top: 22px; }
+.gp-shell .calm-live-link { margin-top: 16px; }
 .gp-shell .calm-live-link .calm-connection { margin-bottom: 12px; }
 /* Settings: the values, defaults and persistence still belong to the original store. */
 .gp-shell .calm-settings-section { margin-top: 12px; }
@@ -193,10 +184,6 @@
 .gp-shell .calm-account :is(button,input) { min-height: 48px; }
 .gp-shell .calm-account button { border-radius: 9px; }
 .gp-shell .calm-account input { min-width: 0; font-size: 16px; }
-.gp-shell .guest-trial-summary { background: var(--calm-tint); border: 1px solid var(--calm-line); border-radius: 12px; padding: 14px 16px; align-items: center; }
-.gp-shell .guest-trial-summary > svg { color: var(--calm-accent); flex-shrink: 0; }
-.gp-shell .guest-trial-summary h2 { font-size: 18px; }
-.gp-shell .guest-trial-summary p { font-size: 12px; }
 /* Plans page order (2026-10-26): status line → Lifetime → "or keep playing free" → free card → sign-in → Support. */
 .gp-shell .guest-status { display: flex; align-items: center; gap: 8px; padding: 11px 14px; border-radius: 12px; background: var(--calm-surface); border: 1px solid var(--calm-line); font-size: 13px; line-height: 1.45; color: var(--calm-muted); }
 .gp-shell .guest-status b { color: var(--calm-ink); font-weight: 600; }
@@ -222,10 +209,8 @@
 .gp-shell .calm-incard-panel > * + * { border-top: 1px solid var(--calm-line); }
 .gp-shell .calm-promo-fold { align-self: flex-start; display: inline-flex; align-items: center; gap: 7px; min-height: 40px !important; padding: 0 4px; font-size: 13px; font-weight: 600; color: var(--calm-accent); background: transparent; border: 0; }
 .gp-shell .console-plan-price-note { margin: 0; text-align: right; font-size: 11px; line-height: 1.35; color: var(--calm-muted); }
-.gp-shell .console-plan-card { position: relative; padding: 20px; border-radius: 12px; border: 1px solid var(--calm-line); background: var(--calm-surface); }
+.gp-shell .console-plan-card { position: relative; padding: 16px; border-radius: 12px; border: 1px solid var(--calm-line); background: var(--calm-surface); }
 .gp-shell .console-plan-card[data-plan='LIFETIME'] { border-color: var(--calm-accent); }
-.gp-shell .console-plan-topline { display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; color: var(--calm-accent); }
-.gp-shell .console-plan-topline .console-eyebrow { color: var(--calm-accent); }
 .gp-shell .console-plan-card .console-plan-buy { background: var(--calm-soft) !important; border: 1px solid var(--calm-line) !important; color: var(--calm-ink) !important; }
 .gp-shell .console-plan-card[data-plan='LIFETIME'] .console-plan-buy { background: var(--calm-accent) !important; color: var(--calm-on-accent) !important; border-color: var(--calm-accent) !important; }
 .gp-shell .console-plan-card li { display: flex; align-items: center; gap: 7px; }
@@ -328,16 +313,11 @@
 .gp-shell .calm-settings-section[data-tone='violet'] .calm-switch[aria-checked='true'] > span { background: var(--console-violet); border-color: var(--console-violet); }
 .gp-shell .calm-range output { color: var(--console-blue); }
 .gp-shell .calm-range input { accent-color: var(--console-blue); }
-.gp-shell .calm-pairing > span:first-child { color: var(--console-blue); border-color: var(--console-blue-line); }
-.gp-shell .calm-pairing > span:last-child { color: var(--console-violet); border-color: var(--console-violet-line); }
-.gp-shell .calm-pairing i { background: var(--console-blue); }
 .gp-shell .calm-step-number { background: var(--console-blue-tint); color: var(--console-blue); }
 .gp-shell .calm-manual { border-color: var(--console-blue-line); }
 .gp-shell .calm-profile { border-top: 2px solid var(--console-violet); }
 .gp-shell .console-plan-card[data-plan='THREE_DAY'] { border-top: 2px solid var(--console-blue-line); }
-.gp-shell .console-plan-card[data-plan='THREE_DAY'] .console-plan-topline,.gp-shell .console-plan-card[data-plan='THREE_DAY'] .console-eyebrow { color: var(--console-blue); }
 .gp-shell .console-plan-card[data-plan='MONTHLY'] { border-top: 2px solid var(--console-violet-line); }
-.gp-shell .console-plan-card[data-plan='MONTHLY'] .console-plan-topline,.gp-shell .console-plan-card[data-plan='MONTHLY'] .console-eyebrow { color: var(--console-violet); }
 .gp-shell .calm-fields input:focus,.gp-shell .calm-form-field input:focus { border-color: var(--console-blue); outline: 1px solid var(--console-blue); outline-offset: 0; }
 .gp-shell .console-auth-content { max-width: 480px; margin: auto; padding: 12px 24px calc(var(--android-safe-bottom, env(safe-area-inset-bottom, 0px)) + 28px); }
 .gp-shell .console-signin:focus { outline: none; }

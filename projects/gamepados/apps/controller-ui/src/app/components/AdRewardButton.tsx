@@ -56,7 +56,7 @@ export function AdRewardButton({ onCredited, onSignIn }: { onCredited?: () => vo
     const done = ad.phase === "done" ? ad.message : "";
     return <p role="status" className="w-full max-w-xs text-xs text-center"
       style={{ color: done ? GOOD : MUTED }}>
-      {done || `You have ${words.cap} or more saved. Ads come back when it drops below ${words.cap}.`}
+      {done || `Ads come back under ${words.cap}.`}
     </p>;
   }
 

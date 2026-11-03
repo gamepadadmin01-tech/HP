@@ -80,7 +80,6 @@ export function GuestPlans() {
       : catalogue?.purchasable && offers.length
         ? <div className="space-y-2">
           {offers.map(plan => <PlanCard key={plan.code} plan={plan} onChoose={p => setSelected(p.code)} />)}
-          <p className="text-xs calm-muted">Compare first. Sign in only when you choose to buy.</p>
         </div>
         : null;
 
@@ -91,6 +90,3 @@ export function GuestPlans() {
     <FreeCard />
   </section>;
 }
-
-// (GuestTrialPill was removed on 2026-09-30: PlaytimeChip replaced it on the
-// controller. Its CSS class, .guest-trial-pill, is still used by the chip.)

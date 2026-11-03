@@ -22,7 +22,7 @@
 
 import React, { useEffect, useState, useSyncExternalStore } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Infinity as InfinityIcon, Clock, Ticket, RefreshCw, Check, Zap } from "lucide-react";
+import { Infinity as InfinityIcon, Clock, Ticket, RefreshCw, Check } from "lucide-react";
 import type { CataloguePlan, PlanCode } from "../api/billing";
 import {
   getBillingState, onBillingChange, refresh, redeemPromo,
@@ -78,11 +78,9 @@ function planBullets(p: CataloguePlan): string[] {
   return out;
 }
 
-/** `embedded`: drawn INSIDE the Account card (signed in), so its blocks have no outer frame of their own
- *  and the code box starts folded away. */
-export function PlanPanel({ embedded = false }: { embedded?: boolean } = {}) {
-  const Section = embedded ? InCardSection : FramedSection;
-  const Panel = embedded ? InCardPanel : FramedPanel;
+/** Drawn INSIDE the Account card (signed in), so its blocks have no outer frame of their own and the code box
+ *  starts folded away. */
+export function PlanPanel() {
   const state = useSyncExternalStore(onBillingChange, getBillingState, getBillingState);
   useSyncExternalStore(onAppConfigChange, getAppConfig, getAppConfig);   // the time rules can change
   const words = ruleWords();
@@ -95,21 +93,21 @@ export function PlanPanel({ embedded = false }: { embedded?: boolean } = {}) {
 
   if (state.status === "loading" && !ent) {
     return (
-      <Section title="Your plan">
-        <Panel>
+      <InCardSection title="Your plan">
+        <InCardPanel>
           <div className="p-4 flex items-center gap-3">
             <RefreshCw size={16} className="animate-spin" style={{ color: MUTED }} />
             <span className="text-sm" style={{ color: MUTED }}>Checking your plan…</span>
           </div>
-        </Panel>
-      </Section>
+        </InCardPanel>
+      </InCardSection>
     );
   }
 
   if (state.status === "error" && !ent) {
     return (
-      <Section title="Your plan">
-        <Panel>
+      <InCardSection title="Your plan">
+        <InCardPanel>
           <div className="p-4">
             <p className="text-sm font-medium" style={{ color: DANGER }}>{state.message}</p>
             <button onClick={() => void refresh()}
@@ -118,8 +116,8 @@ export function PlanPanel({ embedded = false }: { embedded?: boolean } = {}) {
               Try again
             </button>
           </div>
-        </Panel>
-      </Section>
+        </InCardPanel>
+      </InCardSection>
     );
   }
 
@@ -192,8 +190,8 @@ export function PlanPanel({ embedded = false }: { embedded?: boolean } = {}) {
 
   return (
     <>
-      <Section title="Your plan">
-        <Panel>
+      <InCardSection title="Your plan">
+        <InCardPanel>
           {/* ── What you have ── */}
           <div className="flex items-center gap-3 p-4">
             <div className="p-2.5 rounded-xl"
@@ -249,8 +247,8 @@ export function PlanPanel({ embedded = false }: { embedded?: boolean } = {}) {
               </p>
             </div>
           )}
-        </Panel>
-      </Section>
+        </InCardPanel>
+      </InCardSection>
 
       {/* ── The plans: the one big choice, shown open (owner, 2026-10-26: plans are the point of
           this page; they used to sit behind a collapsed row). Absent where the channel forbids it
@@ -259,7 +257,6 @@ export function PlanPanel({ embedded = false }: { embedded?: boolean } = {}) {
         <PlansHero
           title={ent.plan === "FREE" ? "Play without the limit" : "Change plan"}
           offers={offers}
-          embedded={embedded}
         />
       )}
 
@@ -269,11 +266,7 @@ export function PlanPanel({ embedded = false }: { embedded?: boolean } = {}) {
         <FreeCard />
       </>}
 
-      {ent.plan !== "LIFETIME" && (embedded
-        ? <PromoFold />
-        : <Section title="Have a code?">
-            <Panel><PromoRow /></Panel>
-          </Section>)}
+      {ent.plan !== "LIFETIME" && <PromoFold />}
 
     </>
   );
@@ -282,13 +275,12 @@ export function PlanPanel({ embedded = false }: { embedded?: boolean } = {}) {
 // ─── Pieces ───────────────────────────────────────────────────────────────────
 
 /** The plans, open: the biggest thing on the page after the player's own status. */
-function PlansHero({ title, offers, embedded }: { title: string; offers: CataloguePlan[]; embedded?: boolean }) {
+function PlansHero({ title, offers }: { title: string; offers: CataloguePlan[] }) {
   const words = ruleWords();
-  const Section = embedded ? InCardSection : FramedSection;
   // Google bills a Play purchase (and handles tax and refunds), so the website's GST / refund line is wrong there.
   const viaPlay = offers.some((p) => p.priceFromStore);
   return (
-    <Section title={title}>
+    <InCardSection title={title}>
       <div className="space-y-2.5">
         {offers.map((p) => <PlanCard key={p.code} plan={p} />)}
         <p className="text-xs leading-relaxed px-1" style={{ color: MUTED }}>
@@ -298,7 +290,7 @@ function PlansHero({ title, offers, embedded }: { title: string; offers: Catalog
               and non-refundable — try your free {words.welcome} first.</>}
         </p>
       </div>
-    </Section>
+    </InCardSection>
   );
 }
 
@@ -354,7 +346,6 @@ export function PlanCard({ plan, onChoose }: { plan: CataloguePlan; onChoose?: (
   return (
     <motion.div className="console-plan-card" data-plan={plan.code} data-testid={`plan-${plan.code.toLowerCase()}-card`}
       initial={{ opacity: 0, y: 12 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: .1 }} transition={{ type: 'spring', stiffness: 320, damping: 28 }}>
-      <div className="console-plan-topline">{plan.code === 'LIFETIME' ? <InfinityIcon size={23} /> : <Zap size={20} />}<span className="console-eyebrow">{plan.code === 'LIFETIME' ? 'ONE TIME. ALL YOURS.' : plan.code === 'THREE_DAY' ? 'MAKE A WEEKEND OF IT' : 'YOUR EVERYDAY COMPANION'}</span></div>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-sm font-bold calm-ink">{plan.displayName}</p>
@@ -464,9 +455,7 @@ function PromoRow() {
   );
 }
 
-// ─── Shared shells ────────────────────────────────────────────────────────────
-// Same shapes TabAccount uses. Duplicated rather than exported across files so
-// this panel can be moved without dragging the account tab's layout with it.
+// ─── Shells ───────────────────────────────────────────────────────────────────
 
 /** "Have a code?" inside the Account card: one quiet line that opens the code box, so a rarely used field
  *  does not take a whole block of the page. */
@@ -501,26 +490,6 @@ function InCardSection({ title, children }: { title: string; children: React.Rea
 
 function InCardPanel({ children }: { children: React.ReactNode }) {
   return <div className="calm-incard-panel">{children}</div>;
-}
-
-function FramedSection({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <section>
-      <h3 className="text-xs font-bold mb-2 px-1" style={{ color: MUTED }}>
-        {title}
-      </h3>
-      {children}
-    </section>
-  );
-}
-
-function FramedPanel({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="rounded-xl overflow-hidden divide-y divide-white/5"
-      style={{ background: "var(--calm-surface, #202527)", border: "1px solid var(--calm-line, #343c3f)" }}>
-      {children}
-    </div>
-  );
 }
 
 function formatDate(iso: string): string {

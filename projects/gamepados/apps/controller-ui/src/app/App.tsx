@@ -2975,8 +2975,7 @@ function FeedbackCard() {
   return (
     <>
       {/* Bare block: the Account page owns the panel and the heading. */}
-      <div className="p-4 space-y-3">
-        <p className="text-xs text-muted-foreground leading-relaxed">Found a bug or have an idea? Send us a message — we read every one and reply by email.</p>
+      <div className="p-3">
         <div className="flex gap-2">
           <button onClick={openTray}
             className="flex-1 py-2.5 rounded-lg text-[13px] font-semibold active:scale-95 transition-transform"
@@ -3497,11 +3496,7 @@ function DashboardScreen({
             {tab === "account" && (
               <TabAccount
                 customPadsCount={customPads.length}
-                gyroHaptic={gyroHaptic}
-                gyroMode={gyroMode}
-                gyroThrottle={gyroThrottle}
                 rumbleOn={rumbleOn}
-                onOpenSystem={() => changeTab("system")}
                 onSignIn={openProfile}
                 support={<AppSupport privacyUrl={PRIVACY_URL} feedback={<FeedbackCard />} />}
               />

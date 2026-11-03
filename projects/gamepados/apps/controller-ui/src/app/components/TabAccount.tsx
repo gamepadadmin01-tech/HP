@@ -20,20 +20,12 @@ import { CalmSwitch } from "./CalmSettings";
 
 export function TabAccount({
   customPadsCount,
-  gyroHaptic,
-  gyroMode,
-  gyroThrottle,
   rumbleOn,
-  onOpenSystem,
   onSignIn,
   support,
 }: {
   customPadsCount: number;
-  gyroHaptic: boolean;
-  gyroMode: string;
-  gyroThrottle: boolean;
   rumbleOn: boolean;
-  onOpenSystem: () => void;
   onSignIn: () => void;
   /** Feedback, contact and the privacy policy (AppSupport), last on the page. */
   support?: React.ReactNode;
@@ -43,7 +35,7 @@ export function TabAccount({
   // Plans remain a separate destination; the header goes directly to sign-in.
   if (!session) {
     return (
-      <div className="calm-account space-y-4 pb-8">
+      <div className="calm-account space-y-3 pb-6">
         {/* The big intro was removed (owner, 2026-10-26): the plans come first. Kept for screen readers and tests. */}
         <h1 className="sr-only" data-testid="account-heading">Plans</h1>
         <GuestPlans key="guest-plans" />
@@ -58,7 +50,7 @@ export function TabAccount({
   const { user } = session;
 
   return (
-    <div data-testid="profile-screen" className="calm-account space-y-4 pb-8">
+    <div data-testid="profile-screen" className="calm-account space-y-3 pb-6">
       <h1 className="sr-only" data-testid="account-heading">Your plan and profile</h1>
       {/* ── The Account card: who you are first, and your plan INSIDE it (owner, 2026-11-02: the plan used
           to sit above the profile as separate blocks and pushed the account down the page). ── */}
@@ -70,9 +62,8 @@ export function TabAccount({
             <p className="calm-acc-mail"><Mail size={11} aria-hidden="true" /> <span>{user.email}</span></p>
           </div>
         </div>
-        <PlanPanel embedded />
+        <PlanPanel />
       </section>
-
 
       {/* ── The user's own layouts ── */}
       <Section title="Controller Library">
@@ -98,19 +89,8 @@ export function TabAccount({
         <Panel><SyncPanel /></Panel>
       </Section>
 
-      {/* ── Preferences ── */}
-      <Section title="Preferences">
-        <Panel>
-          <Setting label="Haptics" value={gyroHaptic ? "On" : "Off"} />
-          <Setting label="Motion mode" value={gyroMode === "3d" ? "3D aim" : "Racing"} />
-          <Setting label="Tilt throttle" value={gyroThrottle ? "On" : "Off"} />
-          <RumbleTest on={rumbleOn} />
-          <button onClick={onOpenSystem}
-            className="w-full flex items-center justify-between p-4 hover:bg-white/[0.03] transition-colors text-left">
-            <span className="text-sm font-medium calm-ink">Change these in Settings</span>
-            <ChevronRight size={16} style={{ color: "var(--calm-muted, #a6b0b3)" }} />
-          </button>
-        </Panel>
+      <Section title="Rumble">
+        <Panel><RumbleTest on={rumbleOn} /></Panel>
       </Section>
 
 
@@ -150,15 +130,6 @@ function Panel({ children }: { children: React.ReactNode }) {
     <div className="rounded-xl overflow-hidden divide-y divide-white/5"
       style={{ background: "var(--calm-surface, #202527)", border: "1px solid var(--calm-line, #343c3f)" }}>
       {children}
-    </div>
-  );
-}
-
-function Setting({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-center justify-between p-4">
-      <span className="text-sm font-medium calm-ink">{label}</span>
-      <span className="text-xs font-semibold" style={{ color: "var(--calm-accent, #abc8db)" }}>{value}</span>
     </div>
   );
 }
@@ -207,7 +178,7 @@ function SyncPanel() {
       </div>
 
       {/* Auto */}
-      <CalmSwitch label="Auto backup" detail="Save layouts to your account whenever you change one." on={auto} onChange={toggleAuto} />
+      <CalmSwitch label="Auto backup" on={auto} onChange={toggleAuto} />
 
       {/* Manual — always available, even with auto off */}
       <button
