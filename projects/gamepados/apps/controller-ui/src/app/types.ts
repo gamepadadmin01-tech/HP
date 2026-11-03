@@ -12,7 +12,7 @@ export type PollingHz = 60 | 120 | 500 | 1000;
 export type GamepadPreset = {
   id: string; name: string; genre: string; color: string; icon: string;
   displayName?: Partial<Record<BtnId, string>>;
-  layout?: "standard" | "mobile" | "xbox2" | "xbox2tp";
+  layout?: "standard" | "mobile";
   mapping: Partial<Record<BtnId, string>>;
 };
 
@@ -26,7 +26,7 @@ export type PosOverrideMap = Partial<Record<string, BtnPosOverride>>;
 //    abxy  → emits  uid_a / uid_b / uid_x / uid_y
 //  LT/RT are always two independent "trigger" widgets — the legacy "ltrt"
 //  compound was removed; splitLegacyLtrt() in App.tsx migrates saved pads.
-//  touchpad → a rectangle where a sliding finger pushes a stick (the RIGHT one unless tpStick is "L") like a laptop trackpad
+//  touchpad → a rectangle where a sliding finger pushes the RIGHT stick like a laptop trackpad
 //             (rules: touchpad.ts, mirrored natively by TouchpadMath.kt). Pads saved before it
 //             existed have none, and an older app that imports one shows it as a dead button.
 export type WidgetType = "button" | "thumbstick" | "trigger" | "macro" | "dpad" | "abxy" | "stickmode" | "touchpad";
@@ -64,8 +64,6 @@ export type CustomBtnDef = {
   tpSens?: number;
   /** The pad's outline: a rounded rectangle (default) or a circle / ellipse. */
   tpShape?: "rect" | "circle";
-  /** Which stick the pad pushes: "L" = left stick, anything else (or missing) = right stick, as before. */
-  tpStick?: "L" | "R";
   normColor: string;
   heldColor: string;
   groupId?: string;

@@ -1,12 +1,13 @@
 import React, { useState, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Plus, ArrowLeft, Settings, Trash2, X as XIcon, Pencil, TriangleAlert } from "lucide-react";
+import { Plus, ArrowLeft, Settings, Trash2, Pencil, TriangleAlert } from "lucide-react";
 import { useShellAppearance } from "./CalmShell";
 import { ShellMotion } from "./ShellMotion";
 import { CustomPad, CustomBtnDef, WidgetType } from "../types";
 import { RED_NORM, ACCENT_RGB, buttonText } from "./Widgets";
 import { TouchpadArt } from "./Touchpad";
 import { TouchpadSettings } from "./TouchpadSettings";
+import { ADD_MAP, AddItem } from "../addMap";
 import { touchpadSize, isRoundPad } from "../touchpad";
 import { SPRING, SPRING_SNAP, FADE, EXIT, cardIn, backdropIn } from "../motion";
 
@@ -297,46 +298,12 @@ const WidgetPreview = React.memo(function WidgetPreview({ b }: { b: CustomBtnDef
   );
 });
 
-// Full palette — every input you can drop on a pad. `label` is what the engine
-// maps to a gamepad bit (see CUSTOM_LABEL_MAP in App.tsx); `tag` is the menu
-// caption. `r` overrides the default add radius when a smaller default reads
-// better for that widget.
-const ADD_ITEMS: { type: WidgetType; label: string; tag: string; r?: number }[] = [
-  // Compound modular units
-  { type: "dpad", label: "DPAD", tag: "D-Pad" },
-  { type: "abxy", label: "ABXY", tag: "ABXY" },
-  // Analog sticks
-  { type: "thumbstick", label: "LS", tag: "L Stick" },
-  { type: "thumbstick", label: "RS", tag: "R Stick" },
-  { type: "thumbstick", label: "Hybrid", tag: "Hybrid" },
-  // Slide a finger to push the right stick, like a laptop trackpad
-  { type: "touchpad", label: "Touchpad", tag: "Touchpad", r: 100 },
-  // Hybrid-stick mode selectors (switch which axis the Hybrid stick drives)
-  { type: "stickmode", label: "L-Mod", tag: "L-Mode", r: 40 },
-  { type: "stickmode", label: "R-Mod", tag: "R-Mode", r: 40 },
-  // Face buttons
-  { type: "button", label: "A", tag: "A", r: 56 },
-  { type: "button", label: "B", tag: "B", r: 56 },
-  { type: "button", label: "X", tag: "X", r: 56 },
-  { type: "button", label: "Y", tag: "Y", r: 56 },
-  // Bumpers
-  { type: "button", label: "LB", tag: "LB", r: 52 },
-  { type: "button", label: "RB", tag: "RB", r: 52 },
-  // Individual triggers
-  { type: "trigger", label: "LT", tag: "LT" },
-  { type: "trigger", label: "RT", tag: "RT" },
-  // Stick clicks (L3 / R3)
-  { type: "button", label: "Left stick", tag: "L3", r: 40 },
-  { type: "button", label: "Right stick", tag: "R3", r: 40 },
-  // System buttons
-  { type: "button", label: "view", tag: "View", r: 40 },
-  { type: "button", label: "home", tag: "Home", r: 40 },
-  { type: "button", label: "menu", tag: "Menu", r: 40 },
-];
-
-// Per-type preview radius inside the 140×140 swatch viewBox.
-const previewR = (type: WidgetType) =>
-  type === "trigger" ? 22 : type === "abxy" ? 60 : type === "touchpad" ? 30 : 52;
+// One projected button of the "+" map (addMap.ts), as the widget it would be: same drawing as on the pad.
+const ghostOf = (it: AddItem): CustomBtnDef => ({
+  uid: `ghost-${it.tag}`, type: it.type, shape: it.type === "trigger" || it.type === "touchpad" ? "rect" : "circle",
+  opacity: 1, haptic: 0, macroBits: [], label: it.label, x: it.x, y: it.y, r: it.gr ?? 40, w: it.gw, h: it.gh,
+  normColor: DEFAULT_NORM, heldColor: DEFAULT_HELD,
+});
 
 export function CustomPadEditor({
   pad,
@@ -600,6 +567,41 @@ export function CustomPadEditor({
             </svg>
           </div>
 
+      {/* "+" projection: every addable button drawn where it belongs on a controller, straight over the
+          canvas. No panel and no cards. Tap one to add it; tap the empty canvas to close. It sits below the
+          toolbar (later in the tree) so the toolbar stays usable. */}
+      <AnimatePresence>
+        {showAddMenu && (
+          <motion.div
+            key="add-projection"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0, transition: EXIT }}
+            transition={FADE}
+            className="absolute inset-0 flex items-center justify-center"
+          >
+            <svg viewBox={`0 0 ${CANVAS_W} ${CANVAS_H}`} className="w-full h-full max-h-full" style={{ touchAction: "none" }}>
+              <rect width={CANVAS_W} height={CANVAS_H} fill="rgba(7,9,16,0.84)" onClick={() => setShowAddMenu(false)} />
+              {ADD_MAP.map((it) => {
+                const g = ghostOf(it);
+                const bx = widgetBox(g);
+                return (
+                  <g key={it.tag} role="button" tabIndex={0} aria-label={`Add ${it.tag}`}
+                    data-testid={`add-${it.tag.toLowerCase().replace(/\s/g, '-')}-widget-button`}
+                    className="cursor-pointer transition-opacity duration-150 hover:opacity-100 active:opacity-60"
+                    style={{ opacity: 0.92 }}
+                    onClick={() => addWidget(it.type, it.label, it.r)}
+                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") addWidget(it.type, it.label, it.r); }}>
+                    <g style={{ pointerEvents: "none" }}><WidgetPreview b={g} /></g>
+                    <rect x={bx.x - 6} y={bx.y - 6} width={bx.w + 12} height={bx.h + 12} fill="transparent" />
+                  </g>
+                );
+              })}
+            </svg>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Rename pill — top-left. Tap to edit the pad's name inline. */}
       <div data-calm-theme={appearance} className="gp-shell console-editor-rename absolute top-2 left-3 z-20 pointer-events-auto">
         {renaming ? (
@@ -706,8 +708,7 @@ export function CustomPadEditor({
               <div className="mb-4 px-3 py-2 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-start gap-2">
                 <TriangleAlert size={16} className="text-amber-400 flex-shrink-0 mt-0.5" />
                 <span className="text-[11px] text-amber-200 leading-snug">
-                  “{selectedBtn.label}” isn’t a recognized gamepad input — this button
-                  won’t register in games. Use a known label (A, B, X, Y, LB, RB, LT, RT, etc.).
+                  “{selectedBtn.label}” isn’t a gamepad input. Use A, B, X, Y, LB, RB, LT or RT.
                 </span>
               </div>
             )}
@@ -725,7 +726,7 @@ export function CustomPadEditor({
                       : updateSelectedBtn({ w: undefined, h: undefined })
                   }
                 />
-                Rectangular (length &amp; width)
+                Rectangular
               </label>
             )}
 
@@ -788,61 +789,9 @@ export function CustomPadEditor({
                     Normal
                   </button>
                 </div>
-                <span className="text-[10px] text-zinc-500 mt-1 leading-snug">
-                  {(selectedBtn.analogTrigger ?? true)
-                    ? "Throttle: drag finger position sets the pull, 0-100% analog."
-                    : "Normal: tap = instant full 100%, like a regular button."}
-                </span>
               </div>
             )}
           </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Add widget menu — centred by a flex wrapper, NOT translate-x: framer-motion
-          overwrites the inline transform while animating, so a Tailwind
-          -translate-x-1/2 makes the whole panel slide sideways during the spring.
-          Header stays pinned; the GRID is the single scroll container (nested
-          scrollers fight over the gesture and feel laggy). No backdrop-blur —
-          repainting a blur every scroll frame is what made it stutter on device. */}
-      <AnimatePresence>
-        {showAddMenu && (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.96, y: -10 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.97, y: -6, transition: EXIT }}
-            transition={SPRING}
-            className="absolute top-16 left-0 right-0 bottom-4 flex justify-center pointer-events-none"
-          >
-            <div data-calm-theme={appearance} className="gp-shell console-editor-panel w-[360px] max-h-full self-start border p-5 pointer-events-auto flex flex-col">
-              <div className="flex items-center justify-between mb-4 flex-shrink-0">
-                <span className="text-white font-bold text-sm">Add Widget</span>
-                <button data-testid="close-widgets-button" aria-label="Close widget palette" onClick={() => setShowAddMenu(false)} className="text-zinc-400 hover:text-white p-1">
-                  <XIcon size={16} />
-                </button>
-              </div>
-              <div className="grid grid-cols-4 gap-2.5 overflow-y-auto overscroll-contain touch-pan-y pr-1 min-h-0">
-                {ADD_ITEMS.map((it) => (
-                  <button
-                    key={it.tag}
-                    data-testid={`add-${it.tag.toLowerCase().replace(/\s/g, '-')}-widget-button`}
-                    onClick={() => addWidget(it.type, it.label, it.r)}
-                    className="bg-white/5 hover:bg-white/10 p-2 rounded-xl border border-white/5 transition-colors flex flex-col items-center justify-center gap-1"
-                  >
-                    <svg viewBox="0 0 140 140" className="w-10 h-10 pointer-events-none">
-                      <WidgetPreview b={{
-                        uid: "preview", type: it.type, shape: it.type === "trigger" ? "rect" : "circle",
-                        opacity: 1, haptic: 0, macroBits: [], label: it.label, x: 70, y: 70,
-                        r: previewR(it.type),
-                        normColor: DEFAULT_NORM, heldColor: DEFAULT_HELD,
-                      }} />
-                    </svg>
-                    <div className="text-[9px] font-bold text-white leading-tight">{it.tag}</div>
-                  </button>
-                ))}
-              </div>
-            </div>
           </motion.div>
         )}
       </AnimatePresence>

@@ -43,9 +43,11 @@ export function touchpadSize(b: { r: number; w?: number; h?: number }): { w: num
   return { w: b.w ?? b.r * 3.6, h: b.h ?? b.r * 2.2 };
 }
 
-/** Is this pad a circle (an ellipse inside its w x h box; a true circle when w == h)? */
-export function isRoundPad(b: { tpShape?: unknown }): boolean {
-  return b.tpShape === "circle";
+/** Touchpads are always rectangles now. A pad saved as a circle by an older version is drawn and
+ *  touched as a rectangle too. The one place that decides: the editor, the page and the native
+ *  geometry export all ask here. */
+export function isRoundPad(_b: { tpShape?: unknown }): boolean {
+  return false;
 }
 
 /** Is the point (px, py) on a pad centred at (cx, cy)? The rectangle, or the ellipse inside it when
@@ -55,28 +57,6 @@ export function padContains(round: boolean, cx: number, cy: number, w: number, h
   if (!round) return Math.abs(dx) <= w / 2 && Math.abs(dy) <= h / 2;
   const a = w / 2, b = h / 2;
   return a > 0 && b > 0 && (dx * dx) / (a * a) + (dy * dy) / (b * b) <= 1;
-}
-
-/** Which stick does this pad push? Left only when the pad says so: every pad saved before the option
- *  existed has none, and keeps pushing the right stick. Mirrored by NativeInputEngine ("stick":"L"). */
-export function padPushesLeft(b: { tpStick?: unknown }): boolean {
-  return b.tpStick === "L";
-}
-
-/** Add every active touchpad's push to the stick it drives, then hold each stick inside its circle
- *  (radius STICK_R). `pads` is uid -> current push; `leftUids` are the pads that drive the left stick.
- *  Mirror of NativeInputEngine.buildAndInjectLocked: change both together. Returns the two sticks. */
-export function mergePadSticks(
-  pads: Iterable<[string, { x: number; y: number }]>, leftUids: ReadonlySet<string>,
-  l: { x: number; y: number }, r: { x: number; y: number },
-): { l: { x: number; y: number }; r: { x: number; y: number } } {
-  let lx = l.x, ly = l.y, rx = r.x, ry = r.y, anyL = false, anyR = false;
-  for (const [uid, p] of pads) {
-    if (leftUids.has(uid)) { lx += p.x; ly += p.y; anyL = true; } else { rx += p.x; ry += p.y; anyR = true; }
-  }
-  if (anyL) { const m = Math.hypot(lx, ly); if (m > STICK_R) { lx = (lx / m) * STICK_R; ly = (ly / m) * STICK_R; } }
-  if (anyR) { const m = Math.hypot(rx, ry); if (m > STICK_R) { rx = (rx / m) * STICK_R; ry = (ry / m) * STICK_R; } }
-  return { l: { x: lx, y: ly }, r: { x: rx, y: ry } };
 }
 
 /** Clamp whatever a saved pad says into the range the pad understands. */

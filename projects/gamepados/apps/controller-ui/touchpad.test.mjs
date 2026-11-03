@@ -119,10 +119,10 @@ assert.equal(cleanTouchpadOptions({ feel: "distance", release: "glide" }).feel, 
   near(p.x, STICK_R * 0.5, 1e-6, "and measures from its own first touch");
 }
 
-// Shape: a pad is a rectangle unless it says "circle"; a circle takes touches only inside its ellipse.
+// Shape: a pad is always a rectangle. (padContains still knows the ellipse maths; nothing asks for it any more.)
 assert.equal(isRoundPad({}), false);
 assert.equal(isRoundPad({ tpShape: "rect" }), false);
-assert.equal(isRoundPad({ tpShape: "circle" }), true);
+assert.equal(isRoundPad({ tpShape: "circle" }), false, "touchpads are rectangles only: a pad saved as a circle is still a rectangle");
 assert.equal(isRoundPad({ tpShape: "oval" }), false, "anything unknown is a rectangle");
 assert.equal(padContains(false, 100, 100, 200, 100, 195, 145), true, "rectangle: the corner is on the pad");
 assert.equal(padContains(false, 100, 100, 200, 100, 201, 100), false, "rectangle: just outside the edge");

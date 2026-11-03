@@ -11,13 +11,14 @@ import React from "react";
 import { createRoot } from "react-dom/client";
 import { Touchpad } from "./src/app/components/Touchpad";
 import { applyNativePadVisuals } from "./src/app/touchpadVisual";
-const log = []; window.__log = log; window.__apply = applyNativePadVisuals;
+import { isRoundPad } from "./src/app/touchpad";
+const log = []; window.__log = log; window.__apply = applyNativePadVisuals; window.__isRound = isRoundPad;
 const q = new URLSearchParams(location.search);
 function App() {
   const ref = React.useRef(null);
   return (
     <svg ref={ref} id="s" viewBox="0 0 1280 570" width="1280" height="570" style={{ background: "#111", display: "block" }}>
-      <Touchpad id="tp1" x={640} y={285} w={400} h={240} svgRef={ref} round={q.get("round") === "1"} label={q.get("label") || undefined}
+      <Touchpad id="tp1" x={640} y={285} w={400} h={240} svgRef={ref} label={q.get("label") || undefined}
         feel={q.get("feel") || undefined} release={q.get("release") || undefined} sens={q.get("sens") ? +q.get("sens") : undefined}
         onStick={(id, x, y) => log.push([x, y])} onPress={() => log.push("press")}
         onRelease={() => log.push("release")} onEdge={() => log.push("edge")} />
@@ -134,31 +135,26 @@ try {
     await p.close();
   }
 
-  // ── a name the player typed is shown, quietly
+  // ── nothing is drawn inside the glass: not a typed name, not a ring, not a number
   {
     const p = await fresh("label=CAMERA");
     const s = await state(p);
-    assert.equal(s.text, "CAMERA", "a typed name is shown");
+    assert.equal(s.text, "", "no words inside the pad, even when a name is given");
+    const inside = await p.evaluate(() => {
+      const svg = document.getElementById("s");
+      const live = [...svg.querySelectorAll("g")].find((g) => g.style.pointerEvents === "none" && g.querySelector("circle[r='46']"));
+      // everything outside the live (finger) layer: the pane itself
+      return [...svg.querySelectorAll("text, ellipse")].filter((e) => !live || !live.contains(e)).length;
+    });
+    assert.equal(inside, 0, "the idle pad is just glass: no text, no ring, no marks");
     await p.close();
   }
 
-  // ── a circle pad: round outline, and touches in the corners of its box do nothing
+  // ── a touchpad is always a rectangle, whatever an older pad was saved as
   {
-    const p = await fresh("round=1");
-    const s0 = await state(p);
-    assert.equal(s0.surfaceTag, "ellipse", "the touch surface is an ellipse");
-    assert.equal(s0.hasJoystickDrawing, false);
-    // the top-left corner of the pad's box is outside the circle
-    await swipe(p, 452, 177, 22, 0, 12);
-    let s = await state(p);
-    assert.equal(s.count, 0, "touching the corner of a circle pad pushes nothing");
-    await p.mouse.up();
-    await sleep(60);
-    // the middle works like any pad
-    await swipe(p, 560, 285, 22, 0, 12);
-    s = await state(p);
-    assert.ok(s.last && s.last[0] > 30, `a swipe inside the circle pushes the stick (got ${s.last && s.last[0]})`);
-    await p.mouse.up();
+    const p = await fresh();
+    assert.equal(await p.evaluate(() => window.__isRound({ tpShape: "circle" })), false, "a pad saved as a circle is still a rectangle");
+    assert.equal(await p.evaluate(() => window.__isRound({})), false);
     await p.close();
   }
 

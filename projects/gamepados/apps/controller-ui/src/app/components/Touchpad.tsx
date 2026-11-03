@@ -23,7 +23,7 @@
 import React, { useCallback, useEffect, useMemo, useRef } from "react";
 import { TouchpadState, cleanTouchpadOptions, STICK_R } from "../touchpad";
 import { registerPadVisual, PadFrame } from "../touchpadVisual";
-import { ACCENT_RGB, RED_NORM, PadGlassDefs } from "./Widgets";
+import { ACCENT_RGB } from "./Widgets";
 
 const accent = (a: number) => `rgba(${ACCENT_RGB}, ${a})`;
 const safeId = (s: string) => s.replace(/[^a-zA-Z0-9_-]/g, "");
@@ -59,48 +59,37 @@ const Shp = React.forwardRef<SVGElement, ShpProps>(({ round, x, y, w, h, rx = 0,
   ? <ellipse ref={ref as React.Ref<SVGEllipseElement>} cx={x} cy={y} rx={w / 2} ry={h / 2} {...(p as React.SVGProps<SVGEllipseElement>)} />
   : <rect ref={ref as React.Ref<SVGRectElement>} x={x - w / 2} y={y - h / 2} width={w} height={h} rx={rx} {...(p as React.SVGProps<SVGRectElement>)} />);
 
-export function TouchpadArt({ id, x, y, w, h, label, round }: {
+// A touchpad is a plain pane of frosted glass: translucent, a crisp edge, a soft sheen along the top, and
+// NOTHING drawn inside it (no text, no numbers, no marks). `label` is accepted for old callers and ignored.
+export function TouchpadArt({ id, x, y, w, h, round }: {
   id: string; x: number; y: number; w: number; h: number; label?: string; round?: boolean;
 }) {
   const k = safeId(id);
   const rx = Math.min(w, h) * 0.14;
   const left = x - w / 2, top = y - h / 2;
-  const fs = Math.max(13, Math.min(w, h) * 0.06);
   return (
     <g style={{ pointerEvents: "none" }}>
-      <PadGlassDefs />
       <defs>
         <clipPath id={`tpc-${k}`}><Shp round={round} x={x} y={y} w={w} h={h} rx={rx} /></clipPath>
-        <radialGradient id={`tpv-${k}`} cx="0.5" cy="0.5" r="0.75">
-          <stop offset="55%" stopColor="#000" stopOpacity="0" />
-          <stop offset="100%" stopColor="#000" stopOpacity="0.42" />
-        </radialGradient>
+        {/* light falls from the top edge and is gone by the middle; a faint catch of light on the bottom edge */}
+        <linearGradient id={`tpg-${k}`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#fff" stopOpacity="0.24" />
+          <stop offset="30%" stopColor="#fff" stopOpacity="0.07" />
+          <stop offset="75%" stopColor="#fff" stopOpacity="0" />
+          <stop offset="100%" stopColor="#fff" stopOpacity="0.09" />
+        </linearGradient>
       </defs>
-      {/* black silhouette: hides the gyro bar that sits behind the canvas (same as every widget) */}
-      <Shp round={round} x={x} y={y} w={w} h={h} rx={rx} fill="#000" />
-      {/* contact shadow */}
-      <ellipse cx={x} cy={y + h * 0.46} rx={w * 0.46} ry={h * 0.12} fill="url(#padUnder)" />
-      {/* glass body */}
-      <Shp round={round} x={x} y={y} w={w} h={h} rx={rx} fill={RED_NORM} stroke="rgba(255,255,255,0.07)" strokeWidth={0.75} />
+      {/* a half-dark underlay: it keeps the glass from looking empty and mostly hides the gyro bar that sits
+          behind the canvas, but the canvas still shows through, so the pane reads as transparent */}
+      <Shp round={round} x={x} y={y} w={w} h={h} rx={rx} fill="#000" fillOpacity={0.4} />
+      {/* the glass: a faint white body */}
+      <Shp round={round} x={x} y={y} w={w} h={h} rx={rx} fill="rgba(255,255,255,0.05)" />
       <g clipPath={`url(#tpc-${k})`}>
-        <rect x={left} y={top} width={w} height={h} fill={`url(#tpv-${k})`} />
-        <rect x={left} y={top} width={w} height={h * 0.46} fill="url(#padSpec)" opacity={0.4} />
+        <rect x={left} y={top} width={w} height={h} fill={`url(#tpg-${k})`} />
       </g>
-      <Shp round={round} x={x} y={y} w={w} h={h} rx={rx} fill="none" stroke="url(#padRim)" strokeWidth={0.75} opacity={0.55} />
-      {/* A round pad is a stick well: one faint ring and a centre dot say "stick" without drawing a joystick.
-          Rectangles stay a clean surface. Static, so it costs nothing while playing. */}
-      {round ? (
-        <g>
-          <ellipse cx={x} cy={y} rx={w * 0.3} ry={h * 0.3} fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth={1.5} />
-          <ellipse cx={x} cy={y} rx={w * 0.47} ry={h * 0.47} fill="none" stroke={accent(0.1)} strokeWidth={1} strokeDasharray="2 9" strokeLinecap="round" />
-          <circle cx={x} cy={y} r={3} fill="rgba(255,255,255,0.16)" />
-        </g>
-      ) : null}
-      {/* No joystick drawing and no default text: a clean surface. Only a name the player typed shows. */}
-      {label ? (
-        <text x={x} y={top + h - fs * 1.1} textAnchor="middle" fontSize={fs} fontWeight={700} letterSpacing={fs * 0.16}
-          fill="rgba(255,255,255,0.30)" style={{ fontFamily: "'Inter',sans-serif", userSelect: "none" }}>{label.toUpperCase()}</text>
-      ) : null}
+      {/* crisp edge, and a hairline just inside it for thickness */}
+      <Shp round={round} x={x} y={y} w={w} h={h} rx={rx} fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth={1.25} />
+      <Shp round={round} x={x} y={y} w={w - 8} h={h - 8} rx={Math.max(0, rx - 4)} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth={1} />
     </g>
   );
 }

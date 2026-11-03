@@ -23,8 +23,6 @@ export const PAD_COLORS = ["#6366f1", "#e11d48", "#d97706", "#22c55e", "#64748B"
 
 const TEMPLATES = [
   { key: "standard", name: "Standard", desc: "Full-size wireless controller layout.", Icon: Gamepad2, padName: "My Custom Pad" },
-  { key: "xbox2", name: "Standard Layout 2", desc: "The Xbox controller's own arrangement: offset sticks, D-pad and ABXY.", Icon: Gamepad2, padName: "Standard Layout 2" },
-  { key: "xbox2tp", name: "Standard Layout 2 Touchpads", desc: "Xbox arrangement with both sticks as touchpads: slide to move and to look.", Icon: Hand, padName: "Standard Layout 2 Touchpads" },
   { key: "touchpad", name: "Touchpad Camera", desc: "Slide a finger like a laptop trackpad to turn the camera.", Icon: Hand, padName: "Touchpad Camera" },
 ];
 

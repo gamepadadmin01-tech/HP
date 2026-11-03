@@ -44,7 +44,6 @@ import {
 import { TabAccount, AppSupport } from "./components/TabAccount";
 import { getSession, onSessionChange, revalidate } from "./store/account";
 import { SPRING, SPRING_SNAP, FADE, cardIn, backdropIn, sheetIn, toastIn } from "./motion";
-import { getXboxLayout2 } from "./xboxLayout";
 
 const GAMEPAD_PRESETS: GamepadPreset[] = [
   // color drives THREE things on the Home card: the selected ring, the status
@@ -56,12 +55,6 @@ const GAMEPAD_PRESETS: GamepadPreset[] = [
   // identity swatches the user picks, and they are meant to differ.)
   { id:"xbox", name:"Standard Controller", genre:"Full-size wireless controller layout", color:"#5D90CB", icon:"🟢",
     // Display real controller button names, not game-action nicknames.
-    mapping:{ A:"A",B:"B",X:"X",Y:"Y",LT:"LT",RT:"RT",LB:"LB",RB:"RB",up:"↑",down:"↓",left:"←",right:"→",lstick:"L3",rstick:"R3" } },
-  // Standard Layout 2: the Xbox controller's own arrangement (getXboxLayout2). Same button names as the standard layout.
-  { id:"xbox2", name:"Standard Layout 2", genre:"Xbox controller arrangement", color:"#5D90CB", icon:"🟢", layout:"xbox2",
-    mapping:{ A:"A",B:"B",X:"X",Y:"Y",LT:"LT",RT:"RT",LB:"LB",RB:"RB",up:"↑",down:"↓",left:"←",right:"→",lstick:"L3",rstick:"R3" } },
-  // The same layout with both sticks as touchpads: slide a finger to move (left) and to look (right).
-  { id:"xbox2tp", name:"Standard Layout 2 Touchpads", genre:"Xbox arrangement, sticks as touchpads", color:"#5D90CB", icon:"🟢", layout:"xbox2tp",
     mapping:{ A:"A",B:"B",X:"X",Y:"Y",LT:"LT",RT:"RT",LB:"LB",RB:"RB",up:"↑",down:"↓",left:"←",right:"→",lstick:"L3",rstick:"R3" } },
 ];
 
@@ -206,8 +199,6 @@ function makeDefaultPad(padId: string, templateKey: string = "standard", name?: 
       btn("menu", 800, 60, 32),
       sized(btn("Touchpad", 880, 400, 100, "touchpad", "rect"), 440, 260),
     ];
-  } else if (templateKey === "xbox2" || templateKey === "xbox2tp") {
-    buttonsList = getXboxLayout2(templateKey === "xbox2tp");
   } else if (templateKey === "blank") {
     buttonsList = [];
   } else {
@@ -216,7 +207,7 @@ function makeDefaultPad(padId: string, templateKey: string = "standard", name?: 
   
   return {
     padId,
-    name: name || (templateKey === "fps" ? "FPS Pro Layout" : templateKey === "fighter" ? "Fighter Arcade" : templateKey === "racing" ? "Racing Layout" : templateKey === "rpg" ? "RPG Adventure" : templateKey === "touchpad" ? "Touchpad Camera" : templateKey === "xbox2" ? "Standard Layout 2" : templateKey === "xbox2tp" ? "Standard Layout 2 Touchpads" : templateKey === "blank" ? "Blank Canvas" : "My Custom Pad"),
+    name: name || (templateKey === "fps" ? "FPS Pro Layout" : templateKey === "fighter" ? "Fighter Arcade" : templateKey === "racing" ? "Racing Layout" : templateKey === "rpg" ? "RPG Adventure" : templateKey === "touchpad" ? "Touchpad Camera" : templateKey === "blank" ? "Blank Canvas" : "My Custom Pad"),
     color: CUSTOM_COLORS[Math.floor(Math.random() * CUSTOM_COLORS.length)],
     buttons: buttonsList
   };
@@ -435,7 +426,7 @@ function useStick(maxR: number, svgRef: React.RefObject<SVGSVGElement | null>, o
 
 import { Btn, Dpad, RightStick, TriggerPill, RED_NORM, RED_HELD, ACCENT_RGB, buttonText } from "./components/Widgets";
 import { Touchpad } from "./components/Touchpad";
-import { touchpadSize, cleanTouchpadOptions, isRoundPad, padPushesLeft, mergePadSticks } from "./touchpad";
+import { touchpadSize, cleanTouchpadOptions, isRoundPad } from "./touchpad";
 import { applyNativePadVisuals } from "./touchpadVisual";
 
 // ─── Gyro indicator material ─────────────────────────────────────────────────
@@ -558,7 +549,7 @@ function buildNativeGeometry(pad: CustomPad): any[] {
       // runs the same maths; the three settings travel with the geometry so the two cannot drift.
       const { w, h } = touchpadSize(btn);
       const o = cleanTouchpadOptions({ feel: btn.tpFeel, release: btn.tpRelease, sens: btn.tpSens });
-      widgets.push({ k: "pad", x: btn.x, y: btn.y, w, h, round: isRoundPad(btn), vis: btn.uid, feel: o.feel, release: o.release, sens: o.sens, stick: padPushesLeft(btn) ? "L" : "R", hap });
+      widgets.push({ k: "pad", x: btn.x, y: btn.y, w, h, round: isRoundPad(btn), vis: btn.uid, feel: o.feel, release: o.release, sens: o.sens, hap });
     } else if (btn.type === "stickmode") {
       widgets.push({ k: "mode", x: btn.x, y: btn.y, r: btn.r, mode: btn.label === "R-Mod" ? "R" : "L", hap });
     } else if (btn.type === "trigger") {
@@ -1010,7 +1001,7 @@ function ControllerScreen({ onBack, isActive: screenActive, activeMapping, custo
   onBack: () => void; isActive: boolean;
   activeMapping: Partial<Record<BtnId, string>>;
   customPad?: CustomPad;
-  controllerLayout?: GamepadPreset["layout"];
+  controllerLayout?: "standard" | "mobile";
   gyroOn: boolean;
   setGyroOn: (v: boolean) => void;
   gyroMaxAngle: number;
@@ -1130,7 +1121,7 @@ function ControllerScreen({ onBack, isActive: screenActive, activeMapping, custo
   }, []);
   const rstick = useStick(60, svgRef, () => sendTelemetryRef.current());
   const lstick = useStick(60, svgRef, () => sendTelemetryRef.current());
-  // What each touchpad widget is pushing on its stick (left or right) right now (page-side touch only; with
+  // What each touchpad widget is pushing on the RIGHT stick right now (page-side touch only; with
   // native input on, the Android engine adds the same thing itself). Added to the real stick in the
   // packet builder below, so a thumbstick and a touchpad can be used together.
   const padSticksRef = useRef(new Map<string, { x: number; y: number }>());
@@ -1187,19 +1178,17 @@ function ControllerScreen({ onBack, isActive: screenActive, activeMapping, custo
   const isCustom = true;
   const activePad = useMemo(() => {
     if (customPad) return customPad;
-    return makeDefaultPad(`builtin-${controllerLayout ?? "standard"}`, controllerLayout ?? "standard");
+    return makeDefaultPad(controllerLayout === "mobile" ? "mobile" : "standard");
   }, [customPad, controllerLayout]);
 
   // uid → canonical BtnId lookup + macro list, rebuilt only when the pad layout
   // changes — NOT on every packet (this used to be reconstructed per send).
   // "button"/"macro" pass btn.uid as id; compound widgets use "${uid}_subkey";
   // face_cluster/dpad_grid use hardcoded canonical ids directly (no lookup).
-  const { uidBitMap, macroDefs, leftPadUids } = useMemo(() => {
+  const { uidBitMap, macroDefs } = useMemo(() => {
     const map: Record<string, string> = {};
     const macros: { uid: string; bits: string[] }[] = [];
-    const left = new Set<string>();   // touchpads that push the LEFT stick
     activePad.buttons.forEach((btn: CustomBtnDef) => {
-      if (btn.type === "touchpad" && padPushesLeft(btn)) left.add(btn.uid);
       if (btn.type === "button" || btn.type === "macro") {
         map[btn.uid] = CUSTOM_LABEL_MAP[btn.label] ?? btn.label;
         if (btn.type === "macro") macros.push({ uid: btn.uid, bits: btn.macroBits });
@@ -1215,7 +1204,7 @@ function ControllerScreen({ onBack, isActive: screenActive, activeMapping, custo
         map[`${btn.uid}_y`] = "Y";
       }
     });
-    return { uidBitMap: map, macroDefs: macros, leftPadUids: left };
+    return { uidBitMap: map, macroDefs: macros };
   }, [activePad]);
 
   // Reuse one 20-byte packet across all sends instead of allocating per call.
@@ -1284,15 +1273,17 @@ function ControllerScreen({ onBack, isActive: screenActive, activeMapping, custo
     // Right Stick X/Y with Circular Deadzone outer mapping
     let rx = rstick.posRef.current.x;
     let ry = rstick.posRef.current.y;
+    // Touchpad widgets push the right stick too. Summed, then held inside the stick's circle.
+    // Mirror of NativeInputEngine.buildAndInjectLocked.
+    if (padSticksRef.current.size) {
+      padSticksRef.current.forEach((p) => { rx += p.x; ry += p.y; });
+      const rm = Math.hypot(rx, ry);
+      if (rm > 60) { rx = (rx / rm) * 60; ry = (ry / rm) * 60; }
+    }
+    
     // Left Stick X/Y from the left thumbstick touch (movement).
     let lx = lstick.posRef.current.x;
     let ly = lstick.posRef.current.y;
-    // Touchpad widgets push a stick too: the right one, or the left one for a pad set to "L". Added to the
-    // real stick, then each stick is held inside its circle. Mirror of NativeInputEngine.buildAndInjectLocked.
-    if (padSticksRef.current.size) {
-      const m = mergePadSticks(padSticksRef.current, leftPadUids, { x: lx, y: ly }, { x: rx, y: ry });
-      lx = m.l.x; ly = m.l.y; rx = m.r.x; ry = m.r.y;
-    }
 
     // ── Gyro idle gate ────────────────────────────────────────────────────────
     // Suppress gyro while the phone is resting flat on a surface. The flag is the
@@ -1371,7 +1362,7 @@ function ControllerScreen({ onBack, isActive: screenActive, activeMapping, custo
         console.error("Native sendGamepadPacket failed:", err);
       }
     }
-  }, [uidBitMap, macroDefs, leftPadUids, gyroOn]);
+  }, [uidBitMap, macroDefs, gyroOn]);
 
   useEffect(() => {
     sendTelemetryRef.current = sendGamepadTelemetry;
@@ -2183,8 +2174,8 @@ function ScannerScreen({ onDashboard }: { onDashboard: () => void }) {
 }
 
 // ─── Gamepad preset card ──────────────────────────────────────────────────────
-// Built-in layouts, each rendered ONCE for the thumbnail (same shapes/names as gameplay).
-const LAYOUT_THUMBS: Record<string, CustomBtnDef[]> = { standard: getTrueStandardLayout(), xbox2: getXboxLayout2(false), xbox2tp: getXboxLayout2(true) };
+// Standard layout, rendered ONCE for the thumbnail (same shapes/names as gameplay).
+const STANDARD_LAYOUT_THUMB: CustomBtnDef[] = getTrueStandardLayout();
 
 function GamepadCard({ preset, active, onPlay, onEdit, onSelect, isModified }: {
   preset: GamepadPreset; active: boolean; onPlay: () => void;
@@ -2197,7 +2188,7 @@ function GamepadCard({ preset, active, onPlay, onEdit, onSelect, isModified }: {
     </button>
     <button className="calm-pad-preview" onClick={onSelect} aria-label={`Select ${preset.name}`} aria-pressed={active}>
       <svg viewBox="0 0 1280 570" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
-        {(LAYOUT_THUMBS[preset.layout ?? "standard"] ?? LAYOUT_THUMBS.standard).map(b => <PadThumbWidget key={b.uid} b={b} accent={preset.color} />)}
+        {STANDARD_LAYOUT_THUMB.map(b => <PadThumbWidget key={b.uid} b={b} accent={preset.color} />)}
       </svg>
     </button>
     <div className="calm-card-actions">
@@ -2651,10 +2642,7 @@ function PadThumbWidget({ b, accent }: { b: CustomBtnDef; accent: string }) {
     const { w, h } = touchpadSize(b);
     return (
       <g>
-        {isRoundPad(b)
-          ? <ellipse cx={x} cy={y} rx={w / 2} ry={h / 2} fill={fill} stroke={stroke} strokeWidth={2} />
-          : <rect x={x - w / 2} y={y - h / 2} width={w} height={h} rx={Math.min(w, h) * 0.14} fill={fill} stroke={stroke} strokeWidth={2} />}
-        {txt(x, y, b.tpStick === "L" ? "LEFT STICK" : b.tpStick === "R" ? "RIGHT STICK" : "TOUCHPAD", Math.min(w, h) * 0.13)}
+        <rect x={x - w / 2} y={y - h / 2} width={w} height={h} rx={Math.min(w, h) * 0.14} fill="rgba(255,255,255,0.06)" stroke="rgba(255,255,255,0.3)" strokeWidth={2} />
       </g>
     );
   }
