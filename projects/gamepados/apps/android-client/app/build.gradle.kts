@@ -274,8 +274,11 @@ android {
         //      Billing in the Play build, ad-failure reporting with 20 free minutes, a clean touchpad
         //      (rectangle or circle) with the right-stick sensitivity setting, the Watch-an-ad button on
         //      the Play tab, a lighter "Make it your own" pop-up, and refresh rate capped at 120 Hz.
-        versionCode = 68
-        versionName = "1.4.14"
+        // 69 = 1.4.15 (2026-11-04): the 1.4.14 code, rebuilt and signed with the original release key (recovered
+        //      from a pendrive), plus the Settings / Connect / Plans clean-up, the editor settings panel
+        //      (75% size, draggable) and the clear QR-scanner window. Play had already seen 68, so the code moved.
+        versionCode = 69
+        versionName = "1.4.15"
 
         // AdMob test IDs by default; the release build type swaps in the live ones (see top of file).
         buildConfigField("String", "ADMOB_REWARDED_ID", "\"$admobTestRewardedId\"")

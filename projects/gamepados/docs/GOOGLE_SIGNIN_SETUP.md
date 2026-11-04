@@ -46,7 +46,10 @@ amazonstore, indusstore and apkpure builds have no Google libraries and always u
 **One extra Google Cloud step for this** (the Railway variables stay exactly as they are):
 1. Credentials → Create credentials → OAuth client ID → Application type **Android**.
 2. Package name `com.gamepad.client`, SHA-1 of the release key:
-   `70:88:DC:FE:59:6A:9D:EA:15:5C:22:FE:C7:D3:C7:D2:5B:20:61:EC` (used by the direct and Uptodown builds).
+   `70:88:DC:FE:59:6A:9D:EA:15:5C:22:FE:C7:D3:C7:D2:5B:20:61:EC` (used by the direct and Uptodown builds). This is the
+   ORIGINAL release key; it was thought lost on 2026-11-04 and recovered the same day from a pendrive (E:\GamepadOS,
+   E:\android-client.zip). A spare key made that day (SHA-1 B9:54:18:E2:…) is NOT used for any build.
+   A wrong or missing SHA-1 makes Google report a "cancelled" sign-in right away.
 3. Repeat once more with the **Play App Signing** SHA-1 (Play Console → App integrity → App signing →
    "SHA-1 certificate fingerprint") for installs from Google Play, because Google re-signs those.
 Without the right SHA-1 the native chooser fails and the app quietly uses the browser instead.
