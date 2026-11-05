@@ -137,5 +137,24 @@ assert.equal(globalThis.__t.restored, 0, "not when signed out");
 reset(); globalThis.__channel = "direct"; mod.syncPlayPurchases();
 assert.equal(globalThis.__t.restored, 0, "not in the website build");
 
+// ── FRESH APP START: opening the plan screen must hand an already-owned purchase to the server ──
+// The page used to install its "purchase finished" listener only when a purchase STARTED. After a restart the listener did
+// not exist, so the restore's answer (a purchase the phone already owned) was silently dropped and never reached the server.
+reset(); delete globalThis.onPurchaseResult;
+mod.syncPlayPurchases();
+assert.equal(typeof globalThis.onPurchaseResult, "function", "opening the plan screen installs the listener itself");
+globalThis.onPurchaseResult(JSON.stringify({ status: "ok", provider: "play", purchaseToken: "PT-6" }));
+await new Promise((x) => setTimeout(x, 20));
+assert.deepEqual(globalThis.__t.verified, [["tok", "PT-6"]], "a purchase restored on a fresh start reaches the server");
+
+// ── "You already own this": the page asks Play to hand the purchase back, instead of leaving the player stuck ──
+reset(); answer({ status: "error", message: "You already own this. Open your plan to bring it back." });
+r = await mod.purchase(LIFETIME);
+assert.equal(globalThis.__t.restored, 1, "buying something already owned asks Play to hand it back");
+assert.equal(r.ok, false);
+assert.match(r.message, /already own/i, "and the player is told why the sheet did not open");
+reset(); answer({ status: "error", message: "Google Play billing is unavailable on this device." });
+r = await mod.purchase(LIFETIME);
+assert.equal(globalThis.__t.restored, 0, "any other error does not trigger a restore");
 console.log("purchase-play.test.mjs — all assertions passed");
 process.exit(0);

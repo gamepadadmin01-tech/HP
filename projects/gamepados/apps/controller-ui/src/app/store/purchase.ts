@@ -197,7 +197,12 @@ async function buyWithPlay(plan: api.CataloguePlan): Promise<PurchaseOutcome> {
   }
   const r = await awaitResult();
   if (r.status === "cancelled") return CANCELLED;
-  if (r.status === "error") return failed(r.message || "The payment was not completed.");
+  if (r.status === "error") {
+    // Play says this account already owns Lifetime (a purchase the server never confirmed, e.g. it was down or refused):
+    // have Play hand it back so the server can confirm it now, instead of leaving the player stuck on "Buy".
+    if (/already own/i.test(r.message || "")) restorePlayPurchases();
+    return failed(r.message || "The payment was not completed.");
+  }
   if (r.provider !== "play") return failed("The payment app answered unexpectedly.");
   return creditPlayPurchase(r.purchaseToken);
 }
@@ -206,6 +211,7 @@ async function buyWithPlay(plan: api.CataloguePlan): Promise<PurchaseOutcome> {
  *  Lifetime always arrives. Does nothing outside a Play build with billing, or when signed out. */
 export function syncPlayPurchases(): void {
   if (getAppInfo().channel !== "playstore" || !canBuyWithPlay() || !getSession()) return;
+  installCallback();   // the answer must have somewhere to land: without this a fresh start drops the restored purchase
   restorePlayPurchases();
 }
 
