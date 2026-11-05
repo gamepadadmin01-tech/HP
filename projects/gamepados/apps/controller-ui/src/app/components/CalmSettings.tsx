@@ -23,14 +23,14 @@ export function CalmSwitch({label, detail, on, onChange}: {label:string; detail?
   const reduced = useReducedMotion();
   return <div className="calm-setting-row"><div className="calm-grow"><span id={id} className="calm-setting-label">{label}</span>
     {detail && <p id={`${id}-detail`}>{detail}</p>}</div>
-    <button data-testid={`${label.toLowerCase().replace(/\s+/g, '-')}-switch`} className="calm-switch" role="switch" aria-checked={on} aria-labelledby={id} aria-describedby={detail ? `${id}-detail` : undefined} onClick={()=>onChange(!on)}><span><motion.i animate={{ x: on ? 18 : 0 }} transition={reduced ? { duration: 0 } : { type: 'spring', stiffness: 500, damping: 28 }} /></span></button>
+    <button data-testid={`${label.toLowerCase().replace(/\s+/g, '-')}-switch`} className="calm-switch" role="switch" aria-checked={on} aria-labelledby={id} aria-describedby={detail ? `${id}-detail` : undefined} onClick={()=>onChange(!on)}><span><motion.i animate={{ x: on ? 20 : 0 }} transition={reduced ? { duration: 0 } : { type: 'spring', stiffness: 500, damping: 28 }} /></span></button>
   </div>;
 }
 
 function Range({label, detail, min, max, value, onChange, step = 1, unit = "°"}: {label:string;detail?:string;min:number;max:number;value:number;onChange:(n:number)=>void;step?:number;unit?:string}) {
   const id=useId();
   return <div className="calm-range"><div><label htmlFor={id}>{label}</label><output htmlFor={id}>{value}{unit}</output></div>
-    <input data-testid={`${label.toLowerCase().replace(/\s+/g, '-')}-slider`} id={id} type="range" min={min} max={max} step={step} value={value} aria-describedby={detail ? `${id}-detail` : undefined} aria-valuetext={unit === "°" ? `${value} degrees` : `${value}${unit}`} onChange={e=>onChange(Number(e.target.value))} />
+    <input data-testid={`${label.toLowerCase().replace(/\s+/g, '-')}-slider`} id={id} type="range" min={min} max={max} step={step} value={value} aria-describedby={detail ? `${id}-detail` : undefined} aria-valuetext={unit === "°" ? `${value} degrees` : `${value}${unit}`} style={{ "--pct": `${((value - min) / (max - min)) * 100}%` } as React.CSSProperties} onChange={e=>onChange(Number(e.target.value))} />
     {detail && <p id={`${id}-detail`}>{detail}</p>}</div>;
 }
 

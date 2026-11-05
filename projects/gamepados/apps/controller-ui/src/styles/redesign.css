@@ -1,0 +1,97 @@
+/* ═══ Flat redesign (next update, started 2026-11-06) ═══════════════════════════════════════════════════════════════
+   Loaded LAST (index.css), so it wins over calm-shell.css without editing it; delete this file and its import to undo.
+   Target sizes come from measuring Remote Gamepad on the same phone (427 dp wide): main text 16, second line 14, section
+   headings 14 in the accent colour, 16 dp side margins, no boxes or lines around settings, pill buttons and chips, a
+   chunky slider, a solid pill behind the active tab, one warm accent on a warm dark background.
+   NEVER restyle the controller screen (owner, 2026-11-06): nothing here targets the pad or its widgets. */
+
+/* ── 1. Colours: one accent on a warm background ─────────────────────────────────────────────────────────────────
+   The old blue and violet tokens point at the same accent, so a screen that still uses them turns orange/neutral
+   instead of cyan or purple. Green stays for "connected" (calm-good). */
+.gp-shell {
+  --calm-paper: #1a1210; --calm-surface: #251a17; --calm-soft: #36261f; --calm-line: #3f2e28;
+  --calm-ink: #f6ede9; --calm-muted: #b8a59d; --calm-tint: #3d1e10; --calm-art: #140d0b;
+  --console-blue: var(--calm-accent); --console-blue-tint: var(--calm-tint); --console-blue-line: var(--calm-line);
+  --console-violet: var(--calm-accent); --console-violet-tint: var(--calm-tint); --console-violet-line: var(--calm-line);
+  --console-violet-fill: var(--calm-accent); --console-field: var(--calm-surface);
+  --console-connect-fill: var(--calm-accent); --console-connect-on: var(--calm-on-accent);
+  --console-connect-edge: var(--calm-accent); --console-connect-hover: var(--calm-accent);
+}
+.gp-shell[data-calm-theme='light'] {
+  --calm-paper: #fbf6f2; --calm-surface: #ffffff; --calm-soft: #f2e8e2; --calm-line: #e8dad2;
+  --calm-ink: #241815; --calm-muted: #6f5f58; --calm-tint: #ffe5d9;
+  --console-blue: var(--calm-accent); --console-blue-tint: var(--calm-tint); --console-blue-line: var(--calm-line);
+  --console-violet: var(--calm-accent); --console-violet-tint: var(--calm-tint); --console-violet-line: var(--calm-line);
+  --console-violet-fill: var(--calm-accent); --console-field: var(--calm-surface);
+}
+
+/* ── 2. Page margins: 16 dp, like Remote Gamepad ───────────────────────────────────────────────────────────────── */
+.gp-shell .calm-home-content,.gp-shell .calm-legacy-content { padding: 18px 16px 28px; }
+.gp-shell .calm-connect-scroll,.gp-shell .console-connect-chrome { padding-left: 16px; padding-right: 16px; }
+
+/* ── 3. Settings: headings + rows straight on the page, no panels, no lines ───────────────────────────────────── */
+.gp-shell .calm-settings-section { margin-top: 30px; }
+.gp-shell .calm-settings > .calm-settings-section:first-of-type { margin-top: 2px; }
+.gp-shell .calm-settings-section > h2,
+.gp-shell .calm-settings-section[data-tone] > h2 { font: 600 14px var(--calm-body); letter-spacing: 0; text-transform: none; color: var(--calm-accent); margin: 0 0 2px; gap: 8px; }
+.gp-shell .calm-settings-panel,
+.gp-shell .calm-settings-section[data-tone] .calm-settings-panel { background: transparent; border: 0; border-radius: 0; overflow: visible; }
+.gp-shell .calm-setting-row { min-height: 56px; padding: 6px 0; gap: 16px; }
+.gp-shell .calm-setting-row + .calm-setting-row,.gp-shell .calm-setting-options { border-top: 0; }
+.gp-shell .calm-setting-label { font-size: 16px; font-weight: 500; line-height: 1.35; }
+.gp-shell .calm-setting-detail,.gp-shell .calm-range { margin: 0; padding: 10px 0 12px; border-top: 0; }
+.gp-shell .calm-setting-detail h3,.gp-shell .calm-range label { font-size: 16px; font-weight: 500; margin-bottom: 8px; }
+.gp-shell .calm-range output { font: 600 16px var(--calm-body); color: var(--calm-accent); }
+.gp-shell .calm-temperature { font-size: 16px; }
+
+/* Chunky slider: a 16 dp track filled up to the value (--pct, set by the component) and a tall bar thumb. */
+.gp-shell .calm-range input[type='range'] { -webkit-appearance: none; appearance: none; display: block; width: 100%; height: 40px; margin: 0; background: transparent; }
+.gp-shell .calm-range input[type='range']::-webkit-slider-runnable-track {
+  height: 16px; border-radius: 8px;
+  background: linear-gradient(to right, var(--calm-accent) 0 var(--pct, 50%), var(--calm-soft) var(--pct, 50%) 100%);
+}
+.gp-shell .calm-range input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none; width: 8px; height: 36px; margin-top: -10px; border-radius: 4px;
+  background: var(--calm-accent); box-shadow: 0 0 0 3px var(--calm-paper);
+}
+
+/* Round switch (M3 shape): 52 x 32 track, 22 dp round thumb. The component moves the thumb 20 dp. */
+.gp-shell .calm-switch { width: 56px; height: 48px; }
+.gp-shell .calm-switch > span { width: 52px; height: 32px; padding: 4px; border-radius: 16px; background: var(--calm-soft); border: 1px solid var(--calm-line); }
+.gp-shell .calm-switch i { width: 22px; height: 22px; border-radius: 50%; background: var(--calm-muted); }
+.gp-shell .calm-switch[aria-checked='true'] > span,
+.gp-shell .calm-settings-section[data-tone] .calm-switch[aria-checked='true'] > span { background: var(--calm-accent); border-color: var(--calm-accent); }
+.gp-shell .calm-switch[aria-checked='true'] i { background: var(--calm-on-accent); }
+
+/* Choices as separate pill chips, not one boxed bar. */
+.gp-shell .calm-segment { height: auto; padding: 0; gap: 8px; border: 0; border-radius: 0; background: transparent; flex-wrap: wrap; overflow: visible; }
+.gp-shell .calm-segment button { flex: 0 0 auto; min-height: 40px; padding: 0 18px; gap: 8px; border: 1px solid var(--calm-line); border-radius: 999px; font-size: 14px; font-weight: 500; color: var(--calm-ink); background: transparent; }
+.gp-shell .calm-segment button[aria-pressed='true'] { background: var(--calm-accent); border-color: var(--calm-accent); color: var(--calm-on-accent); }
+
+/* ── 4. Buttons: pills ────────────────────────────────────────────────────────────────────────────────────────── */
+.gp-shell .calm-primary,.gp-shell .calm-secondary { border-radius: 999px; min-height: 48px; font-size: 15px; }
+
+/* ── 5. Connect to PC: plain accent numbers, readable step text, outlined pill links, a pill scan button ───────── */
+.gp-shell .calm-back { font-size: 14px; }
+.gp-shell .console-connect-chrome { padding-bottom: 24px; }
+.gp-shell .calm-step { gap: 14px; margin: 0 0 26px; }
+.gp-shell .calm-step-number { width: 16px; height: auto; display: block; margin-top: 1px; border-radius: 0; background: transparent; color: var(--calm-accent); font: 500 16px var(--calm-body); }
+.gp-shell .calm-step h2 { font-size: 16px; font-weight: 500; margin: 0 0 4px; }
+.gp-shell .calm-step p { font-size: 14px; line-height: 1.5; }
+.gp-shell .calm-step .calm-text-button { display: inline-flex; min-height: 40px; margin-top: 10px; padding: 0 16px; border: 1px solid var(--calm-line); border-radius: 999px; color: var(--calm-ink); font-size: 14px; font-weight: 500; }
+.gp-shell .calm-step .calm-text-button svg { color: var(--calm-accent); }
+.gp-shell .calm-primary[data-testid='scan-qr-button'] { width: auto; padding: 0 28px; }
+.gp-shell .calm-mode-help { font-size: 14px; line-height: 1.5; margin: 12px 0 24px; }
+.gp-shell .calm-help summary,.gp-shell .calm-manual-toggle { font-size: 14px; }
+.gp-shell .calm-connection strong { font-size: 15px; }
+.gp-shell .calm-connection small { font-size: 13px; }
+
+/* ── 6. Tab bar: shorter, a solid accent pill behind the active icon ─────────────────────────────────────────── */
+.gp-shell .calm-nav { padding: 6px 8px calc(var(--android-safe-bottom, env(safe-area-inset-bottom, 0px)) + 6px); background: var(--calm-surface); border-top: 0; }
+.gp-shell .calm-nav button { min-height: 60px; gap: 4px; font-size: 12px; font-weight: 500; color: var(--calm-muted); }
+.gp-shell .calm-nav button[aria-current='page'],
+.gp-shell .calm-nav button[data-testid][aria-current='page'] { color: var(--calm-ink); }
+.gp-shell .console-nav-icon { width: 64px; height: 32px; }
+.gp-shell .console-nav-active,
+.gp-shell .calm-nav button[data-testid] .console-nav-active { background: var(--calm-accent); border-radius: 16px; }
+.gp-shell .calm-nav button[aria-current='page'] .console-nav-icon > svg { color: var(--calm-on-accent); }
