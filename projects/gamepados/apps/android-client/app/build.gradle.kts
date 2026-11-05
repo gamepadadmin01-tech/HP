@@ -277,8 +277,11 @@ android {
         // 69 = 1.4.15 (2026-11-04): the 1.4.14 code, rebuilt and signed with the original release key (recovered
         //      from a pendrive), plus the Settings / Connect / Plans clean-up, the editor settings panel
         //      (75% size, draggable) and the clear QR-scanner window. Play had already seen 68, so the code moved.
-        versionCode = 69
-        versionName = "1.4.15"
+        // 70 = 1.4.16 (2026-11-05): Google Play purchases that were paid but not yet confirmed by the server are now
+        //      handed over when the Plans tab opens, even after the app was restarted (the page used to drop them),
+        //      and "You already own this" triggers the same hand-over. Nothing else changed from 1.4.15.
+        versionCode = 70
+        versionName = "1.4.16"
 
         // AdMob test IDs by default; the release build type swaps in the live ones (see top of file).
         buildConfigField("String", "ADMOB_REWARDED_ID", "\"$admobTestRewardedId\"")
