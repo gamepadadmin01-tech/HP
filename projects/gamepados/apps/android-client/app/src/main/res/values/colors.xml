@@ -3,8 +3,9 @@
     <!-- Brand orange (2026-10-01), the accent of the dark theme. Was #0C0C0C behind the old
          blue controller picture. -->
     <color name="icon_bg">#FF5500</color>
-    <!-- Launch splash background. Matches the JS splash overlay (App.tsx #070910)
-         exactly so the native SplashScreen dissolves seamlessly into the React
-         splash with no color jump and no black flash on cold start. -->
-    <color name="splash_bg">#070910</color>
+    <!-- Launch splash background = the app's own page colour (warm dark brown since the 2026-11 redesign),
+         and the same colour as the window behind the web page and the page's own background. If the logo
+         fades a moment before the page has painted, nothing changes colour, so the launch cannot look like
+         it "opens twice" (it was a cool #070910 here, pure black in the page, warm brown in the app). -->
+    <color name="splash_bg">#1A1210</color>
 </resources>

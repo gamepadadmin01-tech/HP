@@ -488,7 +488,7 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback, android.hardwa
         // first frame — this is what removes the ~1s black window on cold start.
         // Keep it up until the WebView/React UI has actually painted (uiReady), then
         // cross-fade it out so it dissolves into the identical JS splash beneath it
-        // (same #070910 bg + centered logo) = one continuous, smooth opening.
+        // (same #1A1210 bg as the page) = one continuous, smooth opening.
         val splashScreen = installSplashScreen()
         splashScreen.setKeepOnScreenCondition { !uiReady }
         splashScreen.setOnExitAnimationListener { provider ->
@@ -504,7 +504,7 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback, android.hardwa
         }
         // Failsafe: if the JS side never signals (load failure), lift the splash
         // anyway so the app can never hang on the logo.
-        mainHandler.postDelayed({ uiReady = true }, 3000)
+        mainHandler.postDelayed({ uiReady = true }, 4000)   // 3 s lifted the logo onto an unpainted page on slow cold starts
 
         super.onCreate(savedInstanceState)
 
@@ -527,7 +527,7 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback, android.hardwa
         updateScreenAwake()
         // Brand-colored decor (matches the splash + JS splash) instead of pure black,
         // so any handoff frame between the native splash and the React UI is invisible.
-        window.decorView.setBackgroundColor(Color.parseColor("#070910"))
+        window.decorView.setBackgroundColor(Color.parseColor("#1A1210"))   // = splash_bg = the app's page colour
         WindowCompat.setDecorFitsSystemWindows(window, false)
 
         // Render at the display's highest refresh rate UP TO 120Hz instead of the default 60Hz, so the
@@ -545,8 +545,14 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback, android.hardwa
             // destroyed and recreated it right after launch -- the random "opens, closes, opens" flash on
             // start (random because it only happened when the phone was not already in that mode).
             val current = disp?.mode
+            // And on Android 12+ ONLY rates the panel can switch to SEAMLESSLY (Display.Mode.alternativeRefreshRates):
+            // some phones blank the screen for a moment on a non-seamless 60<->120 Hz switch, which also looked
+            // like the app opening twice. Android 11 keeps the same-resolution rule only (it has no such list).
+            val seamless: List<Float>? = if (android.os.Build.VERSION.SDK_INT >= 31 && current != null)
+                current.alternativeRefreshRates.toList() + current.refreshRate else null
             val modes = disp?.supportedModes?.filter {
-                current == null || (it.physicalWidth == current.physicalWidth && it.physicalHeight == current.physicalHeight)
+                (current == null || (it.physicalWidth == current.physicalWidth && it.physicalHeight == current.physicalHeight)) &&
+                (seamless == null || seamless.any { r -> kotlin.math.abs(r - it.refreshRate) < 0.5f })
             }
             (modes?.filter { it.refreshRate <= 121f }?.maxByOrNull { it.refreshRate }
                 ?: modes?.minByOrNull { it.refreshRate })?.let { best ->
@@ -1884,7 +1890,7 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback, android.hardwa
                     lp.height = targetH
                     lp.gravity = android.view.Gravity.CENTER
                     gameContainer.layoutParams = lp
-                    parent.setBackgroundColor(Color.parseColor("#070910"))
+                    parent.setBackgroundColor(Color.parseColor("#1A1210"))
                 } else {
                     lp.width = ViewGroup.LayoutParams.MATCH_PARENT
                     lp.height = ViewGroup.LayoutParams.MATCH_PARENT
