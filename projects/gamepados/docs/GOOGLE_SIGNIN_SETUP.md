@@ -67,6 +67,11 @@ billing service account, and not gamepadservices@). That project had ONE OAuth c
   (Play App Signing key, read from Play Console → App integrity on 2026-11-08; installs from Google Play)
 No app or server change is needed after that: the in-app chooser starts working and the browser stops appearing.
 
+**Done 2026-11-08:** both Android clients created by Akhil (checked: package and SHA-1s exact), and the
+consent screen was moved from **Testing (0 test users — nobody could sign in with Google)** to **In production**
+after filling in Branding (no logo, so no Google review). Works in app 1.4.11 (65) and newer; builds without the
+Google libraries (aptoide, amazonstore, indusstore, apkpure) still use the browser.
+
 ## One-time setup (about 10 minutes, in your Google account)
 
 1. Open **https://console.cloud.google.com** and pick (or create) a project, e.g. *GamepadOS*.
