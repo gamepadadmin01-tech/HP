@@ -31,7 +31,6 @@ import { X, Star, Send, Instagram } from "lucide-react";
 import { submitRating } from "./feedback";
 import { openUrl } from "./platform/native";
 import { INSTAGRAM_URL } from "./social";
-import { useShellAppearance } from "./components/CalmShell";
 import { useOverlayFocus } from "./components/useOverlayFocus";
 
 const RATED_KEY = "feature_rated_v2"; // bump the suffix to re-introduce in a future version
@@ -163,7 +162,6 @@ export function FeatureIntroOverlay({
   /** Injected clock (ms). Kept out of the module so render stays deterministic. */
   now: () => number;
 }) {
-  const { appearance } = useShellAppearance();
   const [picked, setPicked] = useState(0);
   const [step, setStep] = useState<Step>("rate");
   const [note, setNote] = useState("");
@@ -202,7 +200,7 @@ export function FeatureIntroOverlay({
       {open && (
         <motion.div
           key="rating-overlay"
-          className="gp-shell calm-rating" data-calm-theme={appearance}
+          className="gp-shell calm-rating"
           role="dialog" aria-modal="true" aria-label="Rate your GamepadOS experience"
           ref={dialogRef}
           initial={{ opacity: 0 }}

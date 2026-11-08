@@ -20,16 +20,6 @@
   color-scheme: dark; background: var(--calm-paper); color: var(--calm-ink);
   font-family: var(--calm-body); -webkit-tap-highlight-color: transparent;
 }
-.gp-shell[data-calm-theme='light'] {
-  --calm-paper: #f2f1ed; --calm-surface: #ffffff; --calm-soft: #e8e6e1;
-  --calm-ink: #18181a; --calm-muted: #68666b; --calm-line: #d7d5cf;
-  --calm-accent: #d93600; --calm-on-accent: #ffffff; --calm-tint: #ffe7dd;
-  --calm-good: #167344; --calm-good-bg: #e2f1e7; --calm-warning: #875b00;
-  --calm-warning-bg: #fff1cb; --calm-error: #b81a36; color-scheme: light;
-  --console-blue: #006e90; --console-blue-tint: #e7f6fa; --console-blue-line: #b4dce8;
-  --console-violet: #6931a6; --console-violet-tint: #f0e9fa; --console-violet-line: #d7c5ec;
-  --console-violet-fill: #8a2be2; --console-field: #f9f8fc;
-}
 .gp-shell .calm-ink { color: var(--calm-ink); }
 .gp-shell .calm-muted { color: var(--calm-muted); }
 .gp-shell .calm-surface { background: var(--calm-surface); }
@@ -396,9 +386,9 @@
 .gp-shell .console-player-kicker, .gp-shell .console-emblem-caption { font-size: 11px; letter-spacing: .7px; }
 @media(min-width:700px) { .gp-shell .calm-controller-card { padding: 16px; } }
 
-/* Camera must win over both theme selectors, including light appearance. */
+/* Camera must win over the page background (dark only since 2026-11-08). */
 .gp-shell.gp-connect.gp-camera-active,
-.gp-shell.console-scanner[data-calm-theme] { background: transparent !important; }
+.gp-shell.console-scanner { background: transparent !important; }
 /* Compact square library tiles, with readable names and 44px actions. */
 .gp-shell .calm-controller-card { aspect-ratio: 1; border-radius: 18px; padding: 10px; position: relative; gap: 6px; box-shadow: inset 0 3px transparent; transition: border-color 200ms ease, box-shadow 200ms ease; }
 .gp-shell .calm-card-check { opacity: 0; transform: scale(.9); transition: opacity 180ms ease, transform 220ms cubic-bezier(.22,1,.36,1); }

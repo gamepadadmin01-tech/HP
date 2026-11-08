@@ -17,13 +17,6 @@
   --console-connect-fill: var(--calm-accent); --console-connect-on: var(--calm-on-accent);
   --console-connect-edge: var(--calm-accent); --console-connect-hover: var(--calm-accent);
 }
-.gp-shell[data-calm-theme='light'] {
-  --calm-paper: #fbf6f2; --calm-surface: #ffffff; --calm-soft: #f2e8e2; --calm-line: #e8dad2;
-  --calm-ink: #241815; --calm-muted: #6f5f58; --calm-tint: #ffe5d9;
-  --console-blue: var(--calm-accent); --console-blue-tint: var(--calm-tint); --console-blue-line: var(--calm-line);
-  --console-violet: var(--calm-accent); --console-violet-tint: var(--calm-tint); --console-violet-line: var(--calm-line);
-  --console-violet-fill: var(--calm-accent); --console-field: var(--calm-surface);
-}
 
 /* ── 2. Page margins: 16 dp ───────────────────────────────────────────────────────────────── */
 .gp-shell .calm-home-content,.gp-shell .calm-legacy-content { padding: 18px 16px 28px; }
@@ -341,19 +334,12 @@
 /* ── 15. Colour test "cool": the app takes the controller's colours (owner, 2026-11-08) ────────────────────────
    Only in a test build made with VITE_THEME_VARIANT=cool (themeVariant.ts marks <html data-variant="cool">).
    Teal accent from the controller (#2CAABA) on a cool, very dark teal-grey page, not pure black (dark-theme
-   guidance: dark grey surfaces read better and keep depth; accents must keep 4.5:1 for text). Light mode uses a
-   deeper teal so text on white stays readable. */
+   guidance: dark grey surfaces read better and keep depth; accents must keep 4.5:1 for text). */
 :root[data-variant='cool'] .gp-shell {
   --calm-accent: #2caaba; --calm-on-accent: #031114; --calm-tint: #0f3439;
   --calm-paper: #0b1214; --calm-surface: #132024; --calm-soft: #1b2c31; --calm-line: #24383d;
   --calm-ink: #e8f3f4; --calm-muted: #9cb2b6; --calm-art: #050b0d;
 }
-:root[data-variant='cool'] .gp-shell[data-calm-theme='light'] {
-  --calm-accent: #0e7f8c; --calm-on-accent: #ffffff; --calm-tint: #d4f0f3;
-  --calm-paper: #f3f8f8; --calm-surface: #ffffff; --calm-soft: #e3eef0; --calm-line: #d2e2e5;
-  --calm-ink: #0f1d20; --calm-muted: #52676b;
-}
-
 /* Google sign-in as one round button, centred under the main button, with a quiet "or" above it (2026-11-08).
    White circle with Google's own coloured "G" (their branding allows a logo-only button). */
 .gp-shell .calm-auth-alt { display: flex; flex-direction: column; align-items: center; gap: 10px; margin-top: 18px; }

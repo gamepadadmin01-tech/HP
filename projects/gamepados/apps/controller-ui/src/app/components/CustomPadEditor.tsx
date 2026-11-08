@@ -1,7 +1,6 @@
 import React, { useState, useRef } from "react";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { Plus, ArrowLeft, Settings, Trash2, Pencil, TriangleAlert, GripHorizontal } from "lucide-react";
-import { useShellAppearance } from "./CalmShell";
 import { ShellMotion } from "./ShellMotion";
 import { CustomPad, CustomBtnDef, WidgetType } from "../types";
 import { RED_NORM, ACCENT_RGB, buttonText } from "./Widgets";
@@ -330,7 +329,6 @@ export function CustomPadEditor({
   onCancel?: () => void;
 }) {
   const close = onClose || onCancel || (() => {});
-  const { appearance } = useShellAppearance();
   const [buttons, setButtons] = useState<CustomBtnDef[]>(pad.buttons || []);
   // Editable pad name (rename from inside the canvas).
   const [padName, setPadName] = useState<string>(pad.name || "My Custom Pad");
@@ -644,7 +642,6 @@ export function CustomPadEditor({
             {...popupIn}
             exit={reduceMotion ? { opacity: 0, pointerEvents: "none" as const, transition: EXIT } : popupIn.exit}
             transition={SPRING}
-            data-calm-theme={appearance}
             role="dialog" aria-label="Add a button"
             className="gp-shell console-editor-panel absolute top-16 left-0 right-0 mx-auto w-[62%] min-w-[300px] max-w-[620px] max-h-[calc(100%-4.75rem)] border p-3 flex flex-col"
             style={{ transformOrigin: `calc(50% + ${PLUS_OFFSET}px) 0px` }}   /* grows out of the "+" (see PLUS_OFFSET) */
@@ -671,7 +668,7 @@ export function CustomPadEditor({
       </AnimatePresence>
 
       {/* Rename pill — top-left. Tap to edit the pad's name inline. */}
-      <div data-calm-theme={appearance} className="gp-shell console-editor-rename absolute top-2 left-3 z-20 pointer-events-auto">
+      <div className="gp-shell console-editor-rename absolute top-2 left-3 z-20 pointer-events-auto">
         {renaming ? (
           <input
             autoFocus
@@ -699,7 +696,7 @@ export function CustomPadEditor({
       <div ref={toolbarRef} className="absolute top-1 left-0 right-0 flex justify-center pointer-events-none">
         <motion.div
           layout
-          data-calm-theme={appearance} className="gp-shell console-editor-toolbar border flex items-center p-1.5 pointer-events-auto overflow-hidden"
+          className="gp-shell console-editor-toolbar border flex items-center p-1.5 pointer-events-auto overflow-hidden"
           style={{ width: selectedId ? "280px" : `${TOOLBAR_W}px` }}
           transition={SPRING}
         >
@@ -763,7 +760,7 @@ export function CustomPadEditor({
             className="absolute z-10"
             style={{ left: pos.x, top: pos.y, width: 0, height: 0 }}
           >
-          <div ref={panelBodyRef} data-testid="widget-settings-panel" data-calm-theme={appearance}
+          <div ref={panelBodyRef} data-testid="widget-settings-panel"
             className="gp-shell console-editor-panel absolute left-0 top-0 border p-5 flex flex-col overflow-hidden"
             style={{ width: PANEL_W, maxHeight: (layerH - pos.y - PANEL_EDGE) / PANEL_SCALE, transform: `scale(${PANEL_SCALE})`, transformOrigin: "top left" }}>
             {/* The header is the drag handle: hold it and move the panel anywhere on the screen. */}
@@ -887,7 +884,7 @@ export function CustomPadEditor({
             <motion.div
               {...cardIn}
               transition={SPRING}
-              data-calm-theme={appearance} role="dialog" aria-label="Unsaved changes" className="gp-shell console-editor-panel border p-6 w-full max-w-[320px] pointer-events-auto"
+              role="dialog" aria-label="Unsaved changes" className="gp-shell console-editor-panel border p-6 w-full max-w-[320px] pointer-events-auto"
             >
               <h3 className="text-white font-bold text-lg mb-2">Unsaved Changes</h3>
               <p className="text-zinc-400 text-sm mb-6">Do you want to save your changes before leaving?</p>

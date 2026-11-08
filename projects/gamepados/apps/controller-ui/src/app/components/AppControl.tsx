@@ -21,10 +21,9 @@ import { announceExtraTime } from "../store/rewardedAd";
 import { requestSignIn } from "../store/navIntent";
 import { adNetwork, getAppInfo, nativeCreditGuestFreeTime, openUrl } from "../platform/native";
 import { getInstallId } from "../feedback";
-import { useShellAppearance } from "./CalmShell";
 
 // Theme tokens (styles/calm-shell.css). Sheets render into <body>, so Sheet wraps them in a
-// .gp-shell element carrying the current light/dark theme: these resolve exactly as on the page.
+// .gp-shell element: these resolve exactly as on the page.
 const ACCENT = "var(--calm-accent)";
 const MUTED = "var(--calm-muted)";
 const GOOD = "var(--calm-good)";
@@ -49,14 +48,12 @@ function Sheet({ open, onClose, children, label, z = 2000 }: {
     window.addEventListener("keydown", key);
     return () => window.removeEventListener("keydown", key);
   }, [open, onClose]);
-  // The app's own light/dark setting, so a sheet in <body> matches the page under it.
-  const { appearance: theme } = useShellAppearance();
   if (typeof document === "undefined") return null;
   // AnimatePresence stays mounted so the sheet can animate OUT as well as in (it used to vanish the
   // instant `open` went false). Same fade + card motion as every other pop-up (../motion), and a
   // plain darker scrim instead of a 14px backdrop blur, which repaints every frame it animates.
   return createPortal(
-    <div className="gp-shell" data-calm-theme={theme} style={{ background: "transparent" }}>
+    <div className="gp-shell" style={{ background: "transparent" }}>
       <AnimatePresence>
         {open && (
           <motion.div key="sheet" role="dialog" aria-modal="true" aria-label={label}
@@ -65,7 +62,7 @@ function Sheet({ open, onClose, children, label, z = 2000 }: {
             style={{
               position: "fixed", inset: 0, zIndex: z, display: "flex", alignItems: "center", justifyContent: "center",
               padding: "max(20px, env(safe-area-inset-top)) 20px max(20px, env(safe-area-inset-bottom))",
-              background: theme === "light" ? "rgba(24,24,26,0.5)" : "rgba(0,0,0,0.68)",
+              background: "rgba(0,0,0,0.68)",
             }}>
             <motion.div {...cardIn} transition={SPRING} style={{
               width: "100%", maxWidth: 380, maxHeight: "100%", overflowY: "auto", borderRadius: 28, padding: "24px 24px 22px",

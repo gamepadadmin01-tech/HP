@@ -1,7 +1,6 @@
 import React, { useEffect, useState, useSyncExternalStore } from "react";
-import { ArrowRight, ChevronRight, Clock3, Monitor, Moon, Sun, Wifi } from "lucide-react";
+import { ArrowRight, ChevronRight, Clock3, Monitor, Wifi } from "lucide-react";
 import { motion, useReducedMotion } from "framer-motion";
-import { KEYS, readString, writeString } from "../store/storage";
 import { linkHint, linkState, type LinkTelemetry } from "../linkState";
 import { guestTrial } from "../store/guestTrial";
 import { formatDuration } from "../store/billing";
@@ -9,39 +8,6 @@ import { getSession, onSessionChange } from "../store/account";
 import { getAppConfig, onAppConfigChange, ruleWords } from "../store/appConfig";
 import { requestDashboardTab } from "../store/navIntent";
 import { AdRewardChip, AdRewardStatus } from "./AdRewardChip";
-
-type Appearance = "light" | "dark";
-const themeEvent = "gp-shell-appearance";
-const readAppearance = (): Appearance => readString(KEYS.shellAppearance, "dark") === "light" ? "light" : "dark";
-
-/** This preference belongs to the surrounding screens, never the gameplay UI. */
-export function useShellAppearance() {
-  const [appearance, setAppearance] = useState<Appearance>(readAppearance);
-  useEffect(() => {
-    const update = () => setAppearance(readAppearance());
-    window.addEventListener(themeEvent, update);
-    return () => window.removeEventListener(themeEvent, update);
-  }, []);
-  const toggle = () => {
-    const next = appearance === "dark" ? "light" : "dark";
-    writeString(KEYS.shellAppearance, next);
-    setAppearance(next);
-    window.dispatchEvent(new Event(themeEvent));
-  };
-  return { appearance, toggle };
-}
-
-export function CalmBrand() {
-  return <div className="calm-brand" data-testid="app-brand"><span className="calm-mark" aria-hidden="true"><svg width="21" height="21" viewBox="0 0 24 24" fill="none"><path d="M4 4h7v4H8v8h8v-3h-4V9h8v11H4V4Z" fill="currentColor"/><path d="M15 4h5v3h-5z" fill="currentColor"/></svg></span><span>gamepad<span className="console-brand-os">os</span><span className="console-brand-dot">.</span></span></div>;
-}
-
-export function AppearanceButton({ appearance, onClick }: { appearance: Appearance; onClick: () => void }) {
-  const reduced = useReducedMotion();
-  return <motion.button data-no-shell-press data-testid="appearance-toggle-button" whileTap={reduced ? undefined : { rotate: 35, scale: .9 }} className="calm-icon-button" onClick={onClick}
-    aria-label={`Use ${appearance === "dark" ? "light" : "dark"} appearance`}>
-    {appearance === "dark" ? <Sun size={20} aria-hidden="true" /> : <Moon size={20} aria-hidden="true" />}
-  </motion.button>;
-}
 
 export function connectionName(telemetry?: LinkTelemetry | null) {
   if (telemetry?.connectionType === "usbdebug") return "USB debugging";

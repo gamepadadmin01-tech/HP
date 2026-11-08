@@ -18,7 +18,6 @@ import { beginPlay, clearBlock } from "../store/playtime";
 import { ruleWords } from "../store/appConfig";
 import { AdRewardButton } from "./AdRewardButton";
 import { playSellsNothing } from "../platform/native";
-import { useShellAppearance } from "./CalmShell";
 
 // The app's theme tokens (styles/calm-shell.css); the wrapper below carries .gp-shell and the
 // current light/dark theme, because this screen sits over the controller, outside the dashboard.
@@ -36,13 +35,11 @@ export function PlaytimeLockout({
   resetsAt?: string | null;
   onBack: () => void;
 }) {
-  const { appearance } = useShellAppearance();
   return (
     <motion.div
       {...backdropIn}
       transition={FADE}
       className="gp-shell absolute inset-0 flex flex-col items-center justify-center px-8"
-      data-calm-theme={appearance}
       // Above the pad, below nothing. The controller underneath has already
       // stopped streaming — this is not what stops it, and must not be the only
       // thing standing between a spent quota and input reaching the PC.

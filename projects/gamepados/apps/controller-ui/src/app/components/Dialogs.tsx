@@ -4,7 +4,6 @@ import { pendingWireless, confirmWireless } from "../store/connectionMemory";
 // @ts-ignore - createPortal types
 import { createPortal } from "react-dom";
 import { X, QrCode } from "lucide-react";
-import { useShellAppearance } from "./CalmShell";
 
 // The playtime credit / lockout dialogs that used to live here were REMOVED.
 //
@@ -70,7 +69,6 @@ function parsePairingPayload(raw: string): { ip: string; port: number; key: stri
 }
 
 export function QRScanOverlay({ onClose, onConnect }: { onClose: () => void; onConnect: () => void }) {
-  const { appearance } = useShellAppearance();
   // null = scanning, "verifying" = sent, "failed" = bad scan / no link in time.
   const [status, setStatus] = useState<null | "verifying" | "failed">(null);
   const [statusMsg, setStatusMsg] = useState("");
@@ -219,7 +217,7 @@ export function QRScanOverlay({ onClose, onConnect }: { onClose: () => void; onC
   };
 
   return (
-    <div data-testid="qr-scanner-screen" data-calm-theme={appearance} className="gp-shell console-scanner fixed inset-0 z-50 flex flex-col items-center justify-center bg-transparent scanner-overlay-active"
+    <div data-testid="qr-scanner-screen" className="gp-shell console-scanner fixed inset-0 z-50 flex flex-col items-center justify-center bg-transparent scanner-overlay-active"
       style={{ fontFamily: "'Inter',sans-serif" }}>
       <style>{`
         /* Force transparent backgrounds down to the root for Android CameraX visibility */

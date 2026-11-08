@@ -39,24 +39,23 @@ export function isLayoutDialogOpen() { return isOpen; }
 type Step = "type" | "template" | "name" | "import";
 
 type Props = {
-  appearance: string;
   /** Make the pad and open it in the editor. */
   onCreate: (template: string, name: string, color: string) => void;
   /** Fetch a shared pad by code and open it. Resolves with an error message, or null when it worked. */
   onImport: (code: string) => Promise<string | null>;
 };
 
-export function LayoutDialog({ appearance, onCreate, onImport }: Props) {
+export function LayoutDialog({ onCreate, onImport }: Props) {
   const open = useSyncExternalStore(subscribe, isLayoutDialogOpen, isLayoutDialogOpen);
   return createPortal(
     <AnimatePresence>
-      {open && <Inner key={openCount} appearance={appearance} onCreate={onCreate} onImport={onImport} />}
+      {open && <Inner key={openCount} onCreate={onCreate} onImport={onImport} />}
     </AnimatePresence>,
     document.body,
   );
 }
 
-function Inner({ appearance, onCreate, onImport }: Props) {
+function Inner({ onCreate, onImport }: Props) {
   const [step, setStep] = useState<Step>("type");
   const [template, setTemplate] = useState("");
   const [name, setName] = useState("");
@@ -95,7 +94,7 @@ function Inner({ appearance, onCreate, onImport }: Props) {
   );
 
   return (
-    <motion.div className="gp-shell calm-dialog calm-lay-scrim" data-calm-theme={appearance} {...backdropIn} transition={FADE}
+    <motion.div className="gp-shell calm-dialog calm-lay-scrim" {...backdropIn} transition={FADE}
       style={{ top: vp.top, height: vp.h }}>
       <motion.div ref={cardRef} className="calm-lay-card" role="dialog" aria-modal="true" aria-label="Create or import a layout"
         {...cardIn} transition={SPRING}

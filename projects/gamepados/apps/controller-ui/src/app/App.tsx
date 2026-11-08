@@ -15,7 +15,7 @@ import { CalmConnect } from "./components/CalmConnect";
 import { CalmSettings as TabSystem } from "./components/CalmSettings";
 import { useOverlayFocus, closeTopOverlay } from "./components/useOverlayFocus";
 import { LayoutDialog, openLayoutDialog, closeLayoutDialog, isLayoutDialogOpen, PAD_COLORS } from "./components/LayoutDialog";
-import { AppearanceButton, ConnectionSummary, DashboardAllowance, useShellAppearance } from "./components/CalmShell";
+import { ConnectionSummary, DashboardAllowance } from "./components/CalmShell";
 
 import { ShellMotion } from "./components/ShellMotion";
 import { ShellScreenTransition } from "./components/ShellScreenTransition";
@@ -2150,7 +2150,6 @@ function useNetworkTelemetry(isActive: boolean) {
 function ScannerScreen({ onDashboard }: { onDashboard: () => void }) {
   const shellPresent = useIsPresent();
   const realTelemetry = useNetworkTelemetry(true);
-  const { appearance, toggle } = useShellAppearance();
   const [showScanner, setShowScanner] = useState(false);
   useEffect(() => {
     (window as any).__scannerBack = () => {
@@ -2167,9 +2166,9 @@ function ScannerScreen({ onDashboard }: { onDashboard: () => void }) {
     (window as any).AndroidBridge?.connectToPC?.(ip, port, key);
     onDashboard();
   };
-  return <div className={`gp-connect gp-shell absolute inset-0 flex flex-col overflow-hidden ${showScanner ? "gp-camera-active" : ""}`} data-calm-theme={appearance} style={{ pointerEvents: shellPresent ? 'auto' : 'none' }}>
+  return <div className={`gp-connect gp-shell absolute inset-0 flex flex-col overflow-hidden ${showScanner ? "gp-camera-active" : ""}`} style={{ pointerEvents: shellPresent ? 'auto' : 'none' }}>
     {showScanner ? <QRScanOverlay onClose={() => setShowScanner(false)} onConnect={onDashboard} />
-      : <CalmConnect telemetry={realTelemetry} appearance={appearance} onAppearance={toggle}
+      : <CalmConnect telemetry={realTelemetry}
           onBack={onDashboard} onScan={() => setShowScanner(true)} onManual={manualConnect} />}
   </div>;
 }
@@ -3345,7 +3344,6 @@ function DashboardScreen({
   const profileButtonRef = useRef<HTMLButtonElement>(null);
   const shellPresent = useIsPresent();
   const mainRef=useRef<HTMLElement>(null);
-  const { appearance, toggle } = useShellAppearance();
   // Signed-in session, or null. Never gates the controller.
   const session = useSyncExternalStore(onSessionChange, getSession, getSession);
   // Confirm a stored token is still valid, once. Offline keeps the session.
@@ -3455,12 +3453,12 @@ function DashboardScreen({
 
 
   return (
-    <div className="gp-dashboard gp-shell flex flex-col h-full" data-calm-theme={appearance} style={{ pointerEvents: shellPresent ? 'auto' : 'none' }}>
+    <div className="gp-dashboard gp-shell flex flex-col h-full" style={{ pointerEvents: shellPresent ? 'auto' : 'none' }}>
       <ShellMotion />
-      {/* Top bar (2026-11-08): the light/dark switch on the left, the account button on the right, nothing in the
-          middle (owner removed the page name and the logo the same day). Each page keeps its own sr-only h1. */}
+      {/* Top bar (2026-11-08): only the account button, on the right. The page name, the logo and the light/dark
+          switch were removed the same day (the app is dark only). Each page keeps its own sr-only h1. */}
       <header className="calm-header calm-header-centred">
-        <AppearanceButton appearance={appearance} onClick={toggle} />
+        <span aria-hidden="true" />
         <span aria-hidden="true" />{/* no title or logo in the middle (owner, 2026-11-08): just the two buttons */}
         <div className="calm-header-actions">
           <button ref={profileButtonRef} data-testid="profile-shortcut-button" className="calm-account-shortcut" onClick={openProfile} aria-label={session ? 'Open your profile' : 'Sign in to GamepadOS'}>
@@ -3507,7 +3505,7 @@ function DashboardScreen({
         </motion.button>)}
       </nav>}
 
-      <LayoutDialog appearance={appearance} onCreate={createPad} onImport={importPadByCode} />
+      <LayoutDialog onCreate={createPad} onImport={importPadByCode} />
     </div>
   );
 }

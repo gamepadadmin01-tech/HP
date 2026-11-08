@@ -5,11 +5,11 @@ import { ShellMotion } from "./ShellMotion";
 import { getWiredPref, setWiredPref, type WiredPref } from "../store/prefs";
 import { linkState, type LinkTelemetry } from "../linkState";
 import { openUrl } from "../platform/native";
-import { AppearanceButton, ConnectionSummary } from "./CalmShell";
+import { ConnectionSummary } from "./CalmShell";
 
-export function CalmConnect({ telemetry, appearance, onAppearance, onBack, onScan, onManual }: {
-  telemetry: LinkTelemetry | null; appearance: "light" | "dark";
-  onAppearance: () => void; onBack: () => void; onScan: () => void;
+export function CalmConnect({ telemetry, onBack, onScan, onManual }: {
+  telemetry: LinkTelemetry | null;
+  onBack: () => void; onScan: () => void;
   onManual: (ip: string, port: number, key: string) => void;
 }) {
   const [tab, setTab] = useState<"wireless" | "wired">("wireless");
@@ -38,11 +38,11 @@ export function CalmConnect({ telemetry, appearance, onAppearance, onBack, onSca
 
   return <>
     <ShellMotion />
-    {/* Top bar: back arrow on the left, light/dark switch on the right, nothing in the middle. */}
+    {/* Top bar: just the back arrow on the left. */}
     <header className="calm-header calm-header-centred">
       <button data-testid="connect-back-button" className="calm-icon-button" onClick={onBack} aria-label="Back to Play"><ArrowLeft size={22} aria-hidden="true" /></button>
       <span aria-hidden="true" />
-      <div className="calm-header-actions"><AppearanceButton appearance={appearance} onClick={onAppearance} /></div>
+      <span aria-hidden="true" />
     </header>
       <div className="console-connect-chrome">
         <h1 className="sr-only" data-testid="connect-heading">Make the connection.</h1>
