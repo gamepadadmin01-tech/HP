@@ -411,3 +411,15 @@
 .gp-shell .calm-help-chevron { display: inline-grid; place-items: center; }
 .gp-shell .calm-help .calm-fold p { padding: 0 0 12px 22px; }
 .gp-shell :is(.calm-primary, .calm-secondary, .calm-text-button, .calm-create-layout, .calm-notice-bell, .calm-account-shortcut) { transition: background-color .2s ease, border-color .2s ease, color .2s ease; }
+
+/* ── 19. Create-a-layout pop-up, compact list (2026-11-08) ──────────────────────────────────────────────────────
+   Names only (no descriptions), 52 dp rows, a chevron on the right; the card's height eases between steps
+   (.calm-lay-viewport, animated in LayoutDialog.tsx) and steps slide over each other while it does. */
+.gp-shell .calm-lay-viewport { overflow: hidden; }
+.gp-shell .calm-lay-step { padding: 20px 16px 18px; }
+.gp-shell .calm-lay-head { margin-bottom: 8px; min-height: 44px; }
+.gp-shell .calm-lay-title { font: 500 20px var(--calm-body); }
+.gp-shell .calm-lay-option { min-height: 52px; padding: 6px 8px; gap: 14px; border-radius: 14px; }
+.gp-shell .calm-lay-option strong { flex: 1 1 auto; font-size: 16px; font-weight: 400; }
+.gp-shell .calm-lay-chevron { flex: 0 0 auto; color: var(--calm-muted); }
+.gp-shell .calm-lay-option:active { background: var(--calm-soft); transform: none; }
