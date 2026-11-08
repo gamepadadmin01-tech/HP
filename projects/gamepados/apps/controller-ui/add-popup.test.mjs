@@ -24,11 +24,8 @@ async function editor(reduced = false) {
   await page.goto("http://127.0.0.1:5187/");
   await page.waitForSelector('[data-testid="home-heading"]'); await pause(600);
   await page.click('[data-testid="create-layout-button"]');
-  await page.waitForFunction(() => [...document.querySelectorAll("button")].some((e) => e.textContent.includes("Custom layout")), { timeout: 8000 });
-  await page.evaluate(() => [...document.querySelectorAll("button")].find((e) => e.textContent.includes("Custom layout")).click());
-  await page.waitForSelector('input[placeholder="My Custom Layout"]', { timeout: 8000 });
-  await page.type('input[placeholder="My Custom Layout"]', "T");
-  await page.evaluate(() => [...document.querySelectorAll("button")].find((e) => e.textContent.includes("Create and open editor")).click()); await pause(900);
+  await page.waitForFunction(() => [...document.querySelectorAll("button")].some((e) => e.textContent.includes("Create custom pad")), { timeout: 8000 });
+  await page.evaluate(() => [...document.querySelectorAll("button")].find((e) => e.textContent.includes("Create custom pad")).click());
   await page.waitForSelector('[data-testid="editor-back-button"]');
   await page.setViewport({ width: 900, height: 405 }); await pause(800);
   return page;

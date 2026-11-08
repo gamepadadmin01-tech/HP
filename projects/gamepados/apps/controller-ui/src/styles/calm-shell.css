@@ -209,8 +209,6 @@
 .gp-shell.console-editor-panel .text-white { color: var(--calm-ink); }
 .gp-shell.console-editor-panel .text-zinc-400,.gp-shell.console-editor-panel .text-zinc-500 { color: var(--calm-muted); }
 .gp-shell.console-editor-panel button { min-height: 44px; min-width: 44px; border-radius: 8px; }
-.gp-shell.console-editor-rename { background: transparent; border-radius: 8px; }
-.gp-shell.console-editor-rename :is(button,input) { min-height: 44px; background: var(--calm-surface); border-color: var(--calm-line); color: var(--calm-ink); border-radius: 8px; box-shadow: none; backdrop-filter: none; }
 .gp-shell.console-editor-toolbar { background: var(--calm-surface); border-color: var(--calm-line); border-radius: 12px; }
 .gp-shell.console-editor-toolbar button { min-height: 44px; min-width: 44px; color: var(--calm-ink); border-radius: 8px; }
 .gp-shell.console-scanner { background: transparent; font-family: var(--calm-body) !important; }

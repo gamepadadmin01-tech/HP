@@ -2954,13 +2954,14 @@ function DashboardScreen({
   }
 
   // Import a shared layout by its code: fetch from the backend, add it as a fresh
-  // custom pad (new padId + name suffix), then open it in the editor.
-  // Resolves with an error message for the pop-up to show, or null when it worked.
-  async function importPadByCode(code: string): Promise<string | null> {
+  // custom pad (new padId). Since 2026-11-08 it does NOT open the editor: the pop-up says "Added" and stays
+  // open, and the layout is already in the list on Home.
+  // Resolves with { error } for the pop-up to show, or { name } of the layout that was added.
+  async function importPadByCode(code: string): Promise<{ error: string } | { name: string }> {
     try {
       const res = await fetch(`${PADS_API_BASE}/${encodeURIComponent(code)}`, { cache: "no-store" });
       const body = await res.json().catch(() => ({}));
-      if (!res.ok || !body?.success || !body?.pad) return body?.error || "No layout found for that code.";
+      if (!res.ok || !body?.success || !body?.pad) return { error: body?.error || "No layout found for that code." };
       const p = body.pad;
       const newPad: CustomPad = {
         padId: `cb${Date.now()}`,
@@ -2970,10 +2971,9 @@ function DashboardScreen({
         buttons: (p.buttons || []).map((b: CustomBtnDef) => ({ ...b, uid: mkUid() })),
       };
       onSaveCustomPad(newPad);
-      setPendingEditPad(newPad);
-      return null;
+      return { name: newPad.name };
     } catch {
-      return "Couldn't reach the server. Check your connection and try again.";
+      return { error: "Couldn't reach the server. Check your connection and try again." };
     }
   }
 

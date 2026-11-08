@@ -96,8 +96,12 @@ const CY = CANVAS_H / 2;
 const DEFAULT_NORM = `rgba(${CONTROLLER.rgb}, 0.12)`;   // the controller colour (themeVariant.ts); was blue
 const DEFAULT_HELD = `rgba(${CONTROLLER.rgb}, 0.85)`;
 
-// The toolbar, collapsed (nothing selected): back, then +. The "+" popup grows out of the "+", so its origin is derived from these.
-const TOOLBAR_W = 120;                                   // collapsed width, px
+// The toolbar, collapsed (nothing selected): back, a pencil (rename the layout), then +. Rename lives here since
+// 2026-11-08: the name used to float in the top-left corner, right over buttons like LB. The toolbar stays this
+// small so it covers no more of the pad than before; it widens only while a widget is selected or while typing a
+// new name. The "+" popup grows out of the "+", so its origin is derived from these.
+const TOOLBAR_W = 168;                                   // collapsed width, px (was 120: back + only)
+const TOOLBAR_WIDE = 280;                                // while a widget is selected, or while renaming
 const PLUS_OFFSET = TOOLBAR_W / 2 - 6 - 40 / 2;          // the "+" centre: half the toolbar, minus its 6px padding, minus half a 40px button
 
 // The widget-settings panel is drawn at 75% of its design size (so it hides less of the canvas) and can be dragged
@@ -668,37 +672,12 @@ export function CustomPadEditor({
         )}
       </AnimatePresence>
 
-      {/* Rename pill — top-left. Tap to edit the pad's name inline. */}
-      <div className="gp-shell console-editor-rename absolute top-2 left-3 z-20 pointer-events-auto">
-        {renaming ? (
-          <input
-            autoFocus
-            value={padName}
-            onChange={(e) => setPadName(e.target.value)}
-            onBlur={() => setRenaming(false)}
-            onKeyDown={(e) => { if (e.key === "Enter") { (e.target as HTMLInputElement).blur(); } }}
-            maxLength={24}
-            className="bg-zinc-900 border border-primary/60 rounded-full px-3 py-1.5 text-xs font-semibold text-white outline-none w-44"
-            placeholder="Pad name"
-          />
-        ) : (
-          <button
-            data-testid="rename-layout-button"
-            onClick={() => setRenaming(true)}
-            className="bg-zinc-900/95 border border-white/10 rounded-full px-3 py-1.5 flex items-center gap-1.5 text-xs font-semibold text-white/90 hover:text-white active:scale-95 transition-all shadow-lg max-w-[11rem]"
-          >
-            <span className="truncate">{padName || "My Custom Pad"}</span>
-            <Pencil size={12} className="text-primary flex-shrink-0" />
-          </button>
-        )}
-      </div>
-
       {/* Fluid toolbar — pinned to the very top edge of the canvas */}
       <div ref={toolbarRef} className="absolute top-1 left-0 right-0 flex justify-center pointer-events-none">
         <motion.div
           layout
           className="gp-shell console-editor-toolbar border flex items-center p-1.5 pointer-events-auto overflow-hidden"
-          style={{ width: selectedId ? "280px" : `${TOOLBAR_W}px` }}
+          style={{ width: selectedId || renaming ? `${TOOLBAR_WIDE}px` : `${TOOLBAR_W}px` }}
           transition={SPRING}
         >
           <div className="w-full flex justify-between items-center relative">
@@ -715,6 +694,37 @@ export function CustomPadEditor({
               className="w-10 h-10 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center text-white active:scale-95 transition-all z-10">
               <ArrowLeft size={20} />
             </button>
+            <AnimatePresence initial={false}>
+              {!selectedId && (
+                <motion.div key="name"
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.9, transition: EXIT }}
+                  transition={SPRING_SNAP}
+                  className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10 console-editor-name"
+                >
+                  {/* Rename the layout right here in the toolbar (nothing is laid over the pad). */}
+                  {renaming ? (
+                    <input
+                      autoFocus
+                      value={padName}
+                      onChange={(e) => setPadName(e.target.value)}
+                      onFocus={(e) => e.target.select()}
+                      onBlur={() => setRenaming(false)}
+                      onKeyDown={(e) => { if (e.key === "Enter") { (e.target as HTMLInputElement).blur(); } }}
+                      maxLength={32}
+                      aria-label="Layout name"
+                      placeholder="Layout name"
+                    />
+                  ) : (
+                    <button data-testid="rename-layout-button" aria-label={`Rename layout: ${padName || "My Custom Pad"}`} title={padName || "My Custom Pad"}
+                      onClick={() => setRenaming(true)} className="console-editor-pencil active:scale-95 transition-all">
+                      <Pencil size={18} aria-hidden="true" />
+                    </button>
+                  )}
+                </motion.div>
+              )}
+            </AnimatePresence>
             <AnimatePresence>
               {selectedId && (
                 <motion.div
