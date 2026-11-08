@@ -9,8 +9,6 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.view.Surface
-import android.view.SurfaceHolder
-import android.view.SurfaceView
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
@@ -35,7 +33,7 @@ import com.google.zxing.qrcode.QRCodeReader
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
-class MainActivity : AppCompatActivity(), SurfaceHolder.Callback, android.hardware.SensorEventListener {
+class MainActivity : AppCompatActivity(), android.hardware.SensorEventListener {
 
     // Native JNI hooks
     private external fun initGameplaySurface(surface: Surface, width: Int, height: Int)
@@ -368,7 +366,6 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback, android.hardwa
         }
     }
     private lateinit var gameContainer: FrameLayout
-    private lateinit var gameSurfaceView: SurfaceView
     private lateinit var previewView: PreviewView
     private var activeCameraProvider: ProcessCameraProvider? = null
     // ZXing QR decoder (used on the single-threaded cameraExecutor → no sharing issues).
@@ -475,7 +472,7 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback, android.hardwa
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == REQUEST_CODE_PERMISSIONS) {
             if (allPermissionsGranted()) {
-                previewView.visibility = View.VISIBLE
+                cameraBehindPage(true)
                 startCameraXScanner()
             } else {
                 Toast.makeText(this, "Permissions not granted by the user.", Toast.LENGTH_SHORT).show()
@@ -497,7 +494,7 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback, android.hardwa
             val decel = android.view.animation.DecelerateInterpolator()
             provider.view.animate()
                 .alpha(0f)
-                .setDuration(180L)   // no logo any more: a quick fade from the app's colour into the app
+                .setDuration(240L)   // the logo fades into the app (logo back 2026-11-09; 180 ms while there was none)
                 .setInterpolator(decel)
                 .withEndAction { provider.remove() }
                 .start()
@@ -608,10 +605,12 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback, android.hardwa
     private fun setupHybridLayout() {
         gameContainer = FrameLayout(this)
 
-        // 1. SurfaceView at the bottom (transparent, maps directly to JNI game canvas)
-        gameSurfaceView = SurfaceView(this)
-        gameSurfaceView.holder.addCallback(this)
-        gameContainer.addView(gameSurfaceView, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+        // 1. (Removed 2026-11-09) There used to be a SurfaceView here for a "JNI game canvas". Nothing ever drew on it:
+        //    the native side only stored its size and never read it. But a SurfaceView punches a BLACK HOLE through the
+        //    window wherever the views above it have not painted yet, and at launch the WebView paints a moment after
+        //    the splash starts to fade, so the screen went brown -> BLACK -> brown. That was the "app opens twice"
+        //    glitch, with or without the logo. The container's colour now shows instead, the same brown as the page.
+        gameContainer.setBackgroundColor(Color.parseColor("#1A1210"))
 
         // 2. CameraX PreviewView in the middle (starts invisible)
         previewView = PreviewView(this).apply {
@@ -629,7 +628,7 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback, android.hardwa
 
         // 3. Transparent high-performance WebView to host our "Smart React Brain" on top
         val webViewInstance = android.webkit.WebView(this).apply {
-            setBackgroundColor(Color.TRANSPARENT)
+            setBackgroundColor(Color.parseColor("#1A1210"))   // see-through only while the camera is on (cameraBehindPage)
             setLayerType(View.LAYER_TYPE_HARDWARE, null) // Hardware acceleration for ultra-low latency rendering
             
             settings.apply {
@@ -753,7 +752,7 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback, android.hardwa
                 fun startCameraScan() {
                     runOnUiThread {
                         if (allPermissionsGranted()) {
-                            previewView.visibility = View.VISIBLE
+                            cameraBehindPage(true)
                             startCameraXScanner()
                         } else {
                             ActivityCompat.requestPermissions(this@MainActivity, REQUIRED_PERMISSIONS, REQUEST_CODE_PERMISSIONS)
@@ -765,7 +764,7 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback, android.hardwa
                 fun stopCameraScan() {
                     runOnUiThread {
                         stopCameraXScanner()
-                        previewView.visibility = View.INVISIBLE
+                        cameraBehindPage(false)
                     }
                 }
 
@@ -1696,6 +1695,13 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback, android.hardwa
         }
     }
 
+    /** The QR camera shows THROUGH the page, so the WebView is see-through only while the camera is on;
+     *  otherwise it is the app's brown, so an unpainted page frame is never a different colour (2026-11-09). */
+    private fun cameraBehindPage(on: Boolean) {
+        previewView.visibility = if (on) View.VISIBLE else View.INVISIBLE
+        webView?.setBackgroundColor(if (on) Color.TRANSPARENT else Color.parseColor("#1A1210"))
+    }
+
     private fun startCameraXScanner() {
         val cameraProviderFuture = ProcessCameraProvider.getInstance(this)
         cameraProviderFuture.addListener({
@@ -1835,7 +1841,7 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback, android.hardwa
         }
         
         runOnUiThread {
-            previewView.visibility = View.INVISIBLE
+            cameraBehindPage(false)
             stopCameraXScanner()
             showSystemUI()
             // PHASE 3: session teardown must also take the native overlay out of the
@@ -1843,10 +1849,6 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback, android.hardwa
             try { if (::nativeInput.isInitialized) nativeInput.setActive(false) } catch (e: Exception) {}
             webView?.evaluateJavascript("if (window.onSessionExited) window.onSessionExited();", null)
         }
-    }
-
-    override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
-        initGameplaySurface(holder.surface, width, height)
     }
 
     private fun startChargeBypass() {
@@ -2332,8 +2334,6 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback, android.hardwa
         } catch (e: Exception) {}
     }
 
-    override fun surfaceCreated(h: SurfaceHolder) {}
-    override fun surfaceDestroyed(h: SurfaceHolder) { destroyGameplaySurface() }
 
     companion object {
         init { System.loadLibrary("gamepad_engine") }

@@ -1,16 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Android 12+ SplashScreen (backported to API 24 via androidx core-splashscreen).
-         Paints the app's background colour INSTANTLY at process launch (no logo since 2026-11-08), covering
+         Paints the app's background colour + the app logo INSTANTLY at process launch, covering
          the WebView cold-start so the user never sees the old black window. The
          activity keeps this splash on screen (MainActivity.setKeepOnScreenCondition)
          until the React UI has painted, then cross-fades out into the identical JS
          splash — one continuous, butter-smooth opening animation. -->
     <style name="Theme.App.Splash" parent="Theme.SplashScreen">
         <item name="windowSplashScreenBackground">@color/splash_bg</item>
-        <!-- No logo (2026-11-08): an empty icon, so the start screen is just the app's colour. -->
-        <item name="windowSplashScreenAnimatedIcon">@drawable/splash_none</item>
-        <!-- After the splash, swap to the app's real (no action bar) theme. -->
-        <item name="postSplashScreenTheme">@style/Theme.AppCompat.NoActionBar</item>
+        <!-- The logo is back (owner, 2026-11-09). The launch glitch was never the logo: it was a black SurfaceView
+             showing through the not-yet-painted page (see MainActivity.setupHybridLayout). splash_none.xml is unused. -->
+        <item name="windowSplashScreenAnimatedIcon">@drawable/splash_icon</item>
+        <!-- After the splash, swap to the app's real theme. -->
+        <item name="postSplashScreenTheme">@style/Theme.App.Main</item>
+    </style>
+
+    <!-- The app's own theme after the splash: no action bar, and the window itself is the app's brown (plain
+         Theme.AppCompat.NoActionBar has a grey window), so no frame at launch can ever be another colour. -->
+    <style name="Theme.App.Main" parent="Theme.AppCompat.NoActionBar">
+        <item name="android:windowBackground">@color/splash_bg</item>
     </style>
 </resources>

@@ -122,6 +122,11 @@ memory claimed the old `F:` drive was Google Drive-synced — that was wrong, an
 - **2026-07-02 — the Antigravity incident.** Another AI broke pairing and version handling; needed
   a full restore.
 - **The worktree incident.** See rule 4.
+- **2026-11-09 — the "app opens twice" launch glitch.** Weeks of reports, survived three wrong fixes (colours,
+  refresh rate, removing the logo). Cause: an unused black `SurfaceView` under the transparent WebView in
+  `MainActivity.setupHybridLayout` showed through until the page painted (brown → black → brown). Removed in
+  test APK 16; the WebView is now brown except while the QR camera is on. Never put a surface layer under the
+  WebView again, and never make the WebView transparent outside the camera screen.
 - **2026-07-26 — `F:` was formatted.** The whole tree moved to `D:\AKHIL\HP`. Three guide files
   were lost. Every memory path was rewritten to `D:\` on 2026-08-13; any `F:\` you now see is
   deliberate history, not a live path.

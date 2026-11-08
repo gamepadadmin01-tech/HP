@@ -45,9 +45,9 @@ const MIN = 60;
 export const DEFAULT_CONFIG: AppConfig = {
   ads: { available: true, message: "" },
   guest: {
-    welcomeSeconds: 30 * MIN,
+    welcomeSeconds: 20 * MIN,   // 2026-11-09: 20 minutes free at the start (was 30)
     adRewardSeconds: 30 * MIN,
-    adCapSeconds: 30 * MIN,
+    adCapSeconds: 60 * MIN,     // 2026-11-09: ads only while under 1 hour is held (was 30 minutes)
     freeTime: {
       enabled: false, seconds: 30 * MIN, belowSeconds: 30 * MIN, perDay: 6,
       title: "Sign in to get unlimited time",

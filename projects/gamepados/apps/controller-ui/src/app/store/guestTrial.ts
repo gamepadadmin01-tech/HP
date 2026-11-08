@@ -4,8 +4,8 @@ import { readJson, writeJson, KEYS } from "./storage";
 // Rules of 2026-09-30 (the same as the phone's GuestQuota): no daily free time,
 // a ONE-TIME 30 minutes, ads add 30 more each and are offered only while under
 // 30 minutes are left (was an hour until 2026-10-30).
-export const GUEST_SECONDS = 30 * 60;
-export const AD_CAP_SECONDS = 30 * 60;
+export const GUEST_SECONDS = 20 * 60;   // 2026-11-09: 20 minutes (was 30)
+export const AD_CAP_SECONDS = 60 * 60;  // 2026-11-09: 1 hour (was 30 minutes)
 type BrowserUsage = { bank: number; welcome: boolean };
 let browserActive = false;
 let lastTick = performance.now();

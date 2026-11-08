@@ -26,8 +26,8 @@ internal class GuestQuota(
     companion object {
         /** Daily free time. 0 since 2026-09-30: all play time comes from the bank. */
         const val LIMIT_MS = 0L
-        const val WELCOME_MS = 30 * 60 * 1000L
-        const val AD_CAP_MS = 30 * 60 * 1000L
+        const val WELCOME_MS = 20 * 60 * 1000L      // 2026-11-09: 20 minutes (was 30)
+        const val AD_CAP_MS = 60 * 60 * 1000L       // 2026-11-09: ads only while under 1 hour is left (was 30 min)
         const val AD_REWARD_MS = 30 * 60 * 1000L
         private const val MINUTE = 60 * 1000L
         private const val HOUR = 60 * MINUTE
