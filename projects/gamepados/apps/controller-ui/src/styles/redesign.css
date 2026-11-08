@@ -183,3 +183,55 @@
 /* The old panel drew a line under each block (Tailwind divide-y); the flat look has none. */
 .gp-shell .calm-panel.divide-y > * { border-top-width: 0 !important; border-bottom-width: 0 !important; }
 .gp-shell .calm-panel [data-testid='privacy-policy-link'] { border: 1px solid var(--calm-line) !important; }
+
+/* ── 9. Review fixes (owner, 2026-11-08) ────────────────────────────────────────────────────────────────────────
+   No coloured strip on top of the app, no orange line on top of pop-ups, no line under the header (Remote Gamepad
+   has none of these). */
+.gp-shell .calm-header::before { display: none; }
+.gp-shell .calm-header { border-bottom: 0 !important; box-shadow: none; }
+.gp-shell .console-spectrum { display: none; }
+.gp-shell.calm-dialog [role='dialog'] { border-top: 1px solid var(--calm-line) !important; border-radius: 28px !important; }
+.gp-shell.calm-rating > div { border-top: 1px solid var(--calm-line) !important; border-radius: 28px !important; }
+/* Layout cards: a plain grey outline like Remote Gamepad; the chosen card shows the tick only. */
+.gp-shell .calm-controller-card[data-selected='true'] { border-color: var(--calm-line); }
+
+/* Settings labels in regular weight, like Remote Gamepad (500 read as bold at 16). */
+.gp-shell .calm-setting-label,.gp-shell .calm-setting-detail h3,.gp-shell .calm-range label { font-weight: 400; }
+
+/* Connect: the status and the manual form sit on the page, not in boxes; outlined 56 dp fields; no line above help. */
+.gp-shell .calm-connection,
+.gp-shell .calm-connection[data-link-state] { padding: 4px 0; background: transparent; border: 0; border-radius: 0; margin-top: 8px; }
+.gp-shell .calm-connection-icon { width: 28px; color: var(--calm-muted); }
+.gp-shell .calm-connection-icon:after { border-color: var(--calm-paper); }
+.gp-shell .calm-connection strong { font-size: 16px; font-weight: 500; }
+.gp-shell .calm-connection small { font-size: 14px; }
+.gp-shell .calm-connection[data-link-state='connected'] strong { color: var(--calm-good); }
+.gp-shell .calm-manual { padding: 4px 0 8px; border: 0; border-radius: 0; background: transparent; }
+.gp-shell .calm-manual > p { font-size: 14px; line-height: 1.5; margin-bottom: 18px; }
+.gp-shell .calm-form-field { font-size: 14px; font-weight: 500; }
+.gp-shell .calm-fields input,.gp-shell .calm-form-field input { min-height: 56px; padding: 0 16px; border-radius: 8px; background: transparent; font-size: 16px; }
+.gp-shell .calm-fields input:focus,.gp-shell .calm-form-field input:focus { border-color: var(--calm-accent); outline: 1px solid var(--calm-accent); }
+.gp-shell .calm-manual .calm-primary { width: auto; padding: 0 28px; }
+.gp-shell .calm-help { border-top: 0; margin: 4px 0 16px; }
+.gp-shell .calm-help summary { padding: 10px 0; }
+.gp-shell .calm-help p { font-size: 14px; line-height: 1.5; }
+
+/* New custom layout pop-up: a soft sheet with round corners, choices as plain rows (icon, 16 title, 14 line) instead
+   of boxed tiles, a plain close/back icon, outlined fields and an orange pill button. */
+.gp-shell .calm-lay-card { border-radius: 28px; border: 0; }
+.gp-shell .calm-lay-step { padding: 24px 20px; }
+.gp-shell .calm-lay-head { margin-bottom: 12px; }
+.gp-shell .calm-lay-title { font: 500 22px var(--calm-body); letter-spacing: 0; }
+.gp-shell .calm-lay-sub { margin-top: 4px; font-size: 14px; }
+.gp-shell .calm-lay-iconbtn { width: 44px; height: 44px; background: transparent; border: 0; color: var(--calm-ink); }
+.gp-shell .calm-lay-list { gap: 0; }
+.gp-shell .calm-lay-option { padding: 14px 4px; gap: 16px; border: 0; border-radius: 12px; background: transparent; }
+.gp-shell .calm-lay-option:active { background: var(--calm-soft); border-color: transparent; }
+.gp-shell .calm-lay-option-icon { width: 24px; height: 24px; background: transparent; color: var(--calm-accent); }
+.gp-shell .calm-lay-option strong { font-size: 16px; font-weight: 500; }
+.gp-shell .calm-lay-option small { margin-top: 4px; font-size: 14px; line-height: 1.45; }
+.gp-shell .calm-lay-label { font-size: 14px; font-weight: 500; color: var(--calm-ink); }
+.gp-shell .calm-lay-input { min-height: 56px; padding: 0 16px; border-radius: 8px; border: 1px solid var(--calm-line); background: transparent; font-weight: 400; }
+.gp-shell .calm-lay-code { letter-spacing: .2em; }
+.gp-shell .calm-lay-primary { display: block; width: auto; min-width: 60%; margin: 24px auto 0; padding: 0 28px; border-radius: 999px; color: var(--calm-on-accent); font: 500 15px var(--calm-body); letter-spacing: 0; }
+.gp-shell .calm-setting-detail h3 { font-family: var(--calm-body); }

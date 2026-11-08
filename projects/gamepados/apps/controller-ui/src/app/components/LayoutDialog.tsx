@@ -104,21 +104,21 @@ function Inner({ appearance, onCreate, onImport }: Props) {
         {step === "type" && (
           <div key="type" className="calm-lay-step">
             <div className="calm-lay-head">
-              <div className="calm-lay-headtext"><h3 className="calm-lay-title">Choose Type</h3><p className="calm-lay-sub">How would you like to start?</p></div>
+              <div className="calm-lay-headtext"><h3 className="calm-lay-title">Choose type</h3><p className="calm-lay-sub">How would you like to start?</p></div>
               <button type="button" className="calm-lay-iconbtn" aria-label="Close" onClick={closeLayoutDialog}><X size={16} aria-hidden="true" /></button>
             </div>
             <div className="calm-lay-list">
               <button type="button" className="calm-lay-option" onClick={() => pick("blank", "Blank Canvas", PAD_COLORS[0])}>
                 <span className="calm-lay-option-icon"><Plus size={22} aria-hidden="true" /></span>
-                <span><strong>Blank Canvas</strong><small>Start completely empty and build widget by widget.</small></span>
+                <span><strong>Blank canvas</strong><small>Start completely empty and build widget by widget.</small></span>
               </button>
               <button type="button" className="calm-lay-option" onClick={() => setStep("template")}>
                 <span className="calm-lay-option-icon"><LayoutGrid size={22} aria-hidden="true" /></span>
-                <span><strong>Standard Layouts</strong><small>Choose from a variety of pre-configured gamepads.</small></span>
+                <span><strong>Standard layouts</strong><small>Choose from a variety of pre-configured gamepads.</small></span>
               </button>
               <button type="button" className="calm-lay-option" onClick={() => { setError(""); setCode(""); setStep("import"); }}>
                 <span className="calm-lay-option-icon"><Download size={22} aria-hidden="true" /></span>
-                <span><strong>Import from Code</strong><small>Got a share code? Paste it to load someone's controller.</small></span>
+                <span><strong>Import from code</strong><small>Got a share code? Paste it to load someone's controller.</small></span>
               </button>
             </div>
           </div>
@@ -128,7 +128,7 @@ function Inner({ appearance, onCreate, onImport }: Props) {
           <motion.div key="template" className="calm-lay-step" {...stepProps}>
             <div className="calm-lay-head">
               <Back to="type" />
-              <div className="calm-lay-headtext"><h3 className="calm-lay-title">Choose Template</h3><p className="calm-lay-sub">Pick a starting point for your layout</p></div>
+              <div className="calm-lay-headtext"><h3 className="calm-lay-title">Choose template</h3><p className="calm-lay-sub">Pick a starting point for your layout</p></div>
             </div>
             <div className="calm-lay-list">
               {TEMPLATES.map(({ key, name: tn, desc, Icon, padName }, i) => (
@@ -145,14 +145,14 @@ function Inner({ appearance, onCreate, onImport }: Props) {
           <motion.div key="import" className="calm-lay-step" {...stepProps}>
             <div className="calm-lay-head">
               <Back to="type" />
-              <div className="calm-lay-headtext"><h3 className="calm-lay-title">Import from Code</h3><p className="calm-lay-sub">Paste the code someone shared with you</p></div>
+              <div className="calm-lay-headtext"><h3 className="calm-lay-title">Import from code</h3><p className="calm-lay-sub">Paste the code someone shared with you</p></div>
             </div>
-            <label className="calm-lay-label" htmlFor="calm-lay-code">Share Code</label>
+            <label className="calm-lay-label" htmlFor="calm-lay-code">Share code</label>
             <input id="calm-lay-code" className="calm-lay-input calm-lay-code" value={code} maxLength={12} autoCapitalize="characters"
               placeholder="e.g. K7M2QP" onChange={(e) => { setCode(e.target.value.toUpperCase()); setError(""); }}
               onKeyDown={(e) => { if (e.key === "Enter") void doImport(); }} />
             {error && <p role="alert" className="calm-lay-error">{error}</p>}
-            <button type="button" className="calm-lay-primary" disabled={busy} onClick={() => void doImport()}>{busy ? "Importing…" : "Import Controller"}</button>
+            <button type="button" className="calm-lay-primary" disabled={busy} onClick={() => void doImport()}>{busy ? "Importing…" : "Import layout"}</button>
           </motion.div>
         )}
 
@@ -160,13 +160,13 @@ function Inner({ appearance, onCreate, onImport }: Props) {
           <motion.div key="name" className="calm-lay-step" {...stepProps}>
             <div className="calm-lay-head">
               <Back to={template === "blank" ? "type" : "template"} />
-              <div className="calm-lay-headtext"><h3 className="calm-lay-title">Name Your Pad</h3><p className="calm-lay-sub">Customize before building</p></div>
+              <div className="calm-lay-headtext"><h3 className="calm-lay-title">Name your layout</h3><p className="calm-lay-sub">Customize before building</p></div>
             </div>
-            <label className="calm-lay-label" htmlFor="calm-lay-name">Layout Name</label>
+            <label className="calm-lay-label" htmlFor="calm-lay-name">Layout name</label>
             <input id="calm-lay-name" className="calm-lay-input" value={name} maxLength={24} placeholder="My Custom Layout"
               style={{ borderColor: name ? color + "80" : undefined, caretColor: color }}
               onChange={(e) => setName(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") create(); }} />
-            <span className="calm-lay-label calm-lay-label-gap">Accent Color</span>
+            <span className="calm-lay-label calm-lay-label-gap">Accent color</span>
             <div className="calm-lay-swatches" role="radiogroup" aria-label="Accent color">
               {PAD_COLORS.map((c) => (
                 <button key={c} type="button" role="radio" aria-checked={color === c} aria-label={c} className="calm-lay-swatch"
@@ -175,7 +175,7 @@ function Inner({ appearance, onCreate, onImport }: Props) {
                 </button>
               ))}
             </div>
-            <button type="button" className="calm-lay-primary" style={{ background: color }} onClick={create}>CREATE &amp; OPEN EDITOR</button>
+            <button type="button" className="calm-lay-primary" onClick={create}>Create and open editor</button>
           </motion.div>
         )}
       </motion.div>
