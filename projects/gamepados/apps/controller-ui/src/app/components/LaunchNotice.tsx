@@ -17,7 +17,7 @@ export function LaunchNotice() {
   const words = ruleWords();
   return <motion.section className="calm-launch-notice" data-testid="first-launch-intro" initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true }}>
     <div>
-      <span className="console-eyebrow">WELCOME TO YOUR NEW CONTROLLER</span><h2>Less hardware. More possibility.</h2>
+      <span className="console-eyebrow">Welcome to your new controller</span><h2>Less hardware. More possibility.</h2>
       <p>Start with {words.welcome} free, no account needed. Want more? Watch a short ad for {words.reward} more whenever you have under {words.cap} left.</p>
       {/* The Play build sells nothing -- "plans" would point at nothing there. */}
       <button onClick={() => requestDashboardTab("account")}>{playSellsNothing() ? "See your time" : "Explore plans"}</button>

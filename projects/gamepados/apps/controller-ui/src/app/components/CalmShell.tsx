@@ -71,7 +71,7 @@ export function ConnectionSummary({ telemetry, onClick }: { telemetry?: LinkTele
     </motion.button>
     <p id={descriptionId} data-testid="connect-pc-status" className="console-connect-status" role="status">
       <span className="console-connect-status-dot" aria-hidden="true" />
-      <span>{state === 'off' ? 'No PC connected · Wi-Fi or USB' : <>{title}<span className="console-connect-detail">{detail}</span></>}</span>
+      <span>{state === 'off' ? 'No PC connected' : <>{title}<span className="console-connect-detail">{detail}</span></>}</span>
     </p>
   </div>;
   const body = <><span className="calm-connection-icon"><Icon size={21} aria-hidden="true" /></span>
@@ -98,8 +98,8 @@ function AllowanceCard() {
   // The arrow keeps its test id so the UI tests that click it still reach the same handler.
   return <button type="button" className="calm-allowance" data-testid="daily-allowance" onClick={() => requestDashboardTab("account")}>
     <span className="console-allowance-icon"><Clock3 size={20} aria-hidden="true" /></span>
-    <span className="calm-grow"><span className="console-eyebrow">{session ? "YOUR MEMBERSHIP" : "YOUR PLAY TIME"}</span>
-      <strong>{session ? "Your plan & playtime" : remaining > 0 ? <><span data-testid="remaining-playtime">{formatDuration(remaining)}</span> <small>left</small></> : !cfg.ads.available ? "Get free time" : `Watch an ad for ${ruleWords().reward}`}</strong>
+    <span className="calm-grow"><span className="console-eyebrow">{session ? "Your membership" : "Time left"}</span>
+      <strong>{session ? "Your plan & playtime" : remaining > 0 ? <><span data-testid="remaining-playtime">{formatDuration(remaining)}</span></> : !cfg.ads.available ? "Get free time" : `Watch an ad for ${ruleWords().reward}`}</strong>
     </span>
     <span className="sr-only">{session ? "View account" : "View plans"}</span>
     <span className="calm-allowance-go" data-testid="view-plans-button" aria-hidden="true"><ChevronRight size={19} /></span>

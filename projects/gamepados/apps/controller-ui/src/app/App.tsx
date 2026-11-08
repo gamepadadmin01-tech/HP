@@ -3,7 +3,7 @@ import { createTransportCoordinator, USB_CHOICE_EVENT, WIRELESS_CHOICE_EVENT, pr
 import React, { useState, useRef, useEffect, useCallback, useMemo, useSyncExternalStore } from "react";
 // @ts-ignore - Ignore missing declaration file error
 import { createPortal } from "react-dom";
-import { Home, Gamepad2, X, Settings, User, Check, ArrowUpRight, Plus, ChevronRight, MoreHorizontal } from "lucide-react";
+import { Home, Gamepad2, X, Settings, User, Check, ArrowUpRight, Plus, MoreHorizontal } from "lucide-react";
 import { QRScanOverlay } from "./components/Dialogs";
 import { PlaytimeLockout } from "./components/PlaytimeLockout";
 import { PlaytimeToast } from "./components/PlaytimeToast";
@@ -2848,7 +2848,7 @@ function TabHome({ realTelemetry, onLaunch, onConnect, onLaunchEditor, selectedP
       {/* One line from the server (admin portal → App control); tap for the whole message. */}
       <NoticeLine />
       <ConnectionSummary telemetry={realTelemetry} onClick={onConnect} />
-      <div className="calm-section-heading"><h2>Your loadout</h2><span>{controllers.length.toString().padStart(2, "0")} {controllers.length === 1 ? "LAYOUT" : "LAYOUTS"}</span></div>
+      <div className="calm-section-heading"><h2>Layouts</h2></div>
       <div className="calm-library" data-count={controllers.length}>
         {controllers.map(({ id, preset, pad }) => pad ? <CustomPadSlot key={id} pad={pad}
           active={selectedPresetId === id} onSelect={() => onSelectPreset(id)}
@@ -2860,7 +2860,7 @@ function TabHome({ realTelemetry, onLaunch, onConnect, onLaunchEditor, selectedP
               onSelect={() => onSelectPreset(id)} onPlay={() => { onSelectPreset(id); onLaunch(); }} />)}
       </div>
       <button className="calm-create-layout" data-testid="create-layout-button" onClick={onNewLayout}>
-        <span className="console-create-icon"><Plus size={22} aria-hidden="true" /></span><span className="calm-grow"><strong>Make it your own.</strong><small>Create a custom controller layout</small></span><ChevronRight size={18} aria-hidden="true" />
+        <Plus size={20} aria-hidden="true" /><span>New custom layout</span>
       </button>
       <DashboardAllowance />
       <LaunchNotice />

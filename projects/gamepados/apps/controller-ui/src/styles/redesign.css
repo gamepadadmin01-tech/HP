@@ -95,3 +95,50 @@
 .gp-shell .console-nav-active,
 .gp-shell .calm-nav button[data-testid] .console-nav-active { background: var(--calm-accent); border-radius: 16px; }
 .gp-shell .calm-nav button[aria-current='page'] .console-nav-icon > svg { color: var(--calm-on-accent); }
+
+/* ── 7. Home (Play tab), like Remote Gamepad's home ─────────────────────────────────────────────────────────────
+   Top row: connection status on the left (green when connected), a pill "Connect to PC" on the right. Then an accent
+   "Layouts" heading, layout cards with the preview on top and the name under it, a "+ New custom layout" outlined
+   pill, and play time as plain text instead of a coloured box. The previews are pictures of the controller; the
+   controller screen itself is not touched. */
+.gp-shell .console-connect-entry { display: flex; flex-direction: row-reverse; align-items: center; justify-content: space-between; gap: 12px; margin: 0 0 26px; }
+.gp-shell .console-connect-button { width: auto; flex: 0 0 auto; min-height: 48px; padding: 0 22px; gap: 10px; border: 0; border-radius: 999px; font: 500 15px var(--calm-body); }
+.gp-shell .console-connect-button > span { flex: 0 0 auto; }
+.gp-shell .console-connect-button > svg:last-child { display: none; }
+.gp-shell .console-connect-status { flex: 1 1 auto; min-width: 0; display: block; justify-content: flex-start; padding: 0; text-align: left; font: 500 16px/1.35 var(--calm-body); color: var(--calm-muted); }
+.gp-shell .console-connect-status-dot { display: none; }
+.gp-shell .console-connect-detail { display: block; margin-top: 2px; font-size: 13px; font-weight: 400; color: var(--calm-muted); }
+
+.gp-shell .calm-section-heading { margin: 0 0 12px; }
+.gp-shell .calm-section-heading h2 { font: 600 14px var(--calm-body); letter-spacing: 0; color: var(--calm-accent); }
+
+.gp-shell .calm-library { gap: 12px; }
+.gp-shell .calm-controller-card,
+.gp-shell .calm-controller-card[data-selected='true'] { aspect-ratio: auto; padding: 0; gap: 0; overflow: hidden; border-radius: 12px; background: transparent; border: 1px solid var(--calm-line); box-shadow: none; }
+.gp-shell .calm-controller-card[data-selected='true'] { border-color: var(--calm-accent); }
+.gp-shell .calm-pad-preview { order: -1; flex: 0 0 auto; margin: 0; border: 0; border-bottom: 1px solid var(--calm-line); border-radius: 0; background: var(--calm-art); }
+.gp-shell .calm-card-select { height: auto; min-height: 52px; padding: 10px 12px; align-items: center; }
+.gp-shell .calm-card-name { font: 500 16px/1.3 var(--calm-body); letter-spacing: 0; }
+.gp-shell .calm-card-actions { height: auto; padding: 0 12px 12px; }
+.gp-shell .calm-card-actions > .calm-primary { min-height: 40px; border-radius: 999px; font-size: 14px; font-weight: 500; }
+
+.gp-shell .calm-create-layout { width: auto; display: inline-flex; gap: 10px; padding: 0 20px; min-height: 48px; margin: 16px 0 28px; border: 1px solid var(--calm-line); border-style: solid; border-radius: 999px; font: 500 15px var(--calm-body); }
+.gp-shell .calm-create-layout svg { color: var(--calm-ink); }
+
+.gp-shell .calm-allowance-block { margin: 0 0 28px; }
+.gp-shell .calm-allowance-row { align-items: center; }
+.gp-shell .calm-allowance-row > .calm-allowance,
+.gp-shell .calm-allowance { padding: 4px 0; gap: 14px; background: transparent; border: 0; border-radius: 0; }
+.gp-shell .console-allowance-icon { width: 24px; height: 24px; background: transparent; color: var(--calm-accent); }
+.gp-shell .calm-allowance .console-eyebrow { font: 400 13px var(--calm-body); letter-spacing: 0; color: var(--calm-muted); }
+.gp-shell .calm-allowance strong { font: 500 18px var(--calm-body); letter-spacing: 0; margin-top: 2px; }
+.gp-shell .calm-allowance-go { color: var(--calm-muted); }
+.gp-shell .calm-ad-chip { flex-direction: row; min-width: 0; min-height: 40px; padding: 0 16px; gap: 8px; border: 1px solid var(--calm-line); border-radius: 999px; background: transparent; }
+.gp-shell .calm-ad-chip-main { font: 500 14px var(--calm-body); }
+.gp-shell .calm-ad-chip-sub { font: 600 14px var(--calm-body); }
+
+.gp-shell .calm-launch-notice { border-top: 0; padding: 0; }
+.gp-shell .calm-launch-notice .console-eyebrow { font: 600 14px var(--calm-body); letter-spacing: 0; color: var(--calm-accent); margin-bottom: 6px; }
+.gp-shell .calm-launch-notice h2 { font: 500 18px var(--calm-body); }
+.gp-shell .calm-launch-notice p { font-size: 14px; line-height: 1.5; }
+.gp-shell .calm-launch-notice button { margin-top: 6px; padding: 0 18px; min-height: 40px; border: 1px solid var(--calm-line); border-radius: 999px; font: 500 14px var(--calm-body); color: var(--calm-ink); }
