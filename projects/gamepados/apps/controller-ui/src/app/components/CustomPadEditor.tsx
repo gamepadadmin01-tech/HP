@@ -111,6 +111,23 @@ const PANEL_W = 300;      // design width, before the scale
 const PANEL_GAP = 8;      // gap between the toolbar and the panel when it first opens
 const PANEL_EDGE = 4;     // the panel never goes closer than this to a screen edge
 
+// The toolbar can be dragged anywhere (owner, 2026-11-08). A slide of more than TOOLBAR_DRAG_SLOP px on it moves it;
+// a shorter touch is still a normal tap on its buttons. Its place is remembered (as a fraction of the screen, so it
+// survives rotation and other screen sizes). It is kept fully on screen even at its WIDE size.
+const TOOLBAR_DRAG_SLOP = 6;
+const TOOLBAR_H = 57;     // measured: p-1.5 + a 44px-min button + border
+const TOOLBAR_EDGE = 4;
+const TOOLBAR_POS_KEY = "gp_editor_toolbar_pos";
+function loadToolbarFrac(): { fx: number; fy: number } | null {
+  try {
+    const v = JSON.parse(localStorage.getItem(TOOLBAR_POS_KEY) || "null");
+    return v && typeof v.fx === "number" && typeof v.fy === "number" ? v : null;
+  } catch { return null; }
+}
+function saveToolbarFrac(v: { fx: number; fy: number }) {
+  try { localStorage.setItem(TOOLBAR_POS_KEY, JSON.stringify(v)); } catch {}
+}
+
 // Per-type default radius (single source for both "Add" and resize bounds).
 const DEFAULT_R: Record<WidgetType, number> = {
   button: 56,
@@ -519,10 +536,64 @@ export function CustomPadEditor({
       y: Math.max(PANEL_EDGE, Math.min(layerH - h - PANEL_EDGE, y)),
     };
   };
-  // First opening: centred just under the toolbar, with a real gap so the two never touch.
+  // ── Toolbar position (draggable) ──
+  // Held as a fraction of the layer and turned into pixels here, clamped so even the WIDE toolbar stays on screen.
+  const [tbFrac, setTbFrac] = useState<{ fx: number; fy: number } | null>(loadToolbarFrac);
+  const clampTb = (cx: number, top: number) => ({
+    cx: Math.max(TOOLBAR_WIDE / 2 + TOOLBAR_EDGE, Math.min(layerW - TOOLBAR_WIDE / 2 - TOOLBAR_EDGE, cx)),
+    top: Math.max(TOOLBAR_EDGE, Math.min(layerH - TOOLBAR_H - TOOLBAR_EDGE, top)),
+  });
+  const tb = tbFrac ? clampTb(tbFrac.fx * layerW, tbFrac.fy * layerH) : clampTb(layerW / 2, TOOLBAR_EDGE);
+  const tbLow = tb.top + TOOLBAR_H / 2 > layerH / 2;      // in the lower half: things open ABOVE it instead of below
+  // The drag follows the finger across the WHOLE screen (window listeners), not only while it is over the toolbar,
+  // so a fast swipe never loses it. Taps are untouched: under TOOLBAR_DRAG_SLOP px of movement nothing happens and
+  // the button's own click runs; after a real drag the one click the browser sends on release is swallowed.
+  const toolbarDragging = useRef(false);
+  const onToolbarDown = (e: React.PointerEvent) => {
+    if (renaming || toolbarDragging.current || !toolbarRef.current) return;   // typing a name: the text box gets the touch
+    const el = toolbarRef.current;
+    const sx = e.clientX, sy = e.clientY, start = { cx: tb.cx, top: tb.top }, id = e.pointerId;
+    let moved = false;
+    let cur = start;
+    toolbarDragging.current = true;
+    const move = (ev: PointerEvent) => {
+      if (ev.pointerId !== id) return;
+      const dx = ev.clientX - sx, dy = ev.clientY - sy;
+      if (!moved) {
+        if (Math.hypot(dx, dy) < TOOLBAR_DRAG_SLOP) return;
+        moved = true;
+        setShowAddMenu(false);
+      }
+      const l = toLayerDelta(dx, dy);
+      cur = clampTb(start.cx + l.x, start.top + l.y);
+      el.style.left = cur.cx + "px";                         // straight to the element: a drag re-renders nothing
+      el.style.top = cur.top + "px";
+    };
+    const swallow = (ev: MouseEvent) => { ev.stopPropagation(); ev.preventDefault(); };
+    const up = (ev: PointerEvent) => {
+      if (ev.pointerId !== id) return;
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", up);
+      toolbarDragging.current = false;
+      if (!moved) return;
+      window.addEventListener("click", swallow, { capture: true, once: true });
+      setTimeout(() => window.removeEventListener("click", swallow, { capture: true }), 0);
+      const f = { fx: cur.cx / layerW, fy: cur.top / layerH };
+      setTbFrac(f); saveToolbarFrac(f);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", up);
+  };
+
+  // First opening: centred on the toolbar with a real gap so the two never touch: under it, or above it when the
+  // toolbar has been dragged into the lower half of the screen.
   const defaultPanelPos = () => {
-    const tb = toolbarRef.current;
-    return { x: (layerW - PANEL_W * PANEL_SCALE) / 2, y: (tb ? tb.offsetTop + tb.offsetHeight : 64) + PANEL_GAP };
+    const h = (panelBodyRef.current?.offsetHeight ?? 0) * PANEL_SCALE;
+    const x = tb.cx - (PANEL_W * PANEL_SCALE) / 2;
+    const y = tbLow ? tb.top - PANEL_GAP - h : tb.top + TOOLBAR_H + PANEL_GAP;
+    return clampPanel(x, y);
   };
   const pos = panelPos ?? defaultPanelPos();
   // A screen-space drag, expressed in the layer's own axes (they differ only in the rotated desktop fallback).
@@ -648,8 +719,12 @@ export function CustomPadEditor({
             exit={reduceMotion ? { opacity: 0, pointerEvents: "none" as const, transition: EXIT } : popupIn.exit}
             transition={SPRING}
             role="dialog" aria-label="Add a button"
-            className="gp-shell console-editor-panel absolute top-16 left-0 right-0 mx-auto w-[62%] min-w-[300px] max-w-[620px] max-h-[calc(100%-4.75rem)] border p-3 flex flex-col"
-            style={{ transformOrigin: `calc(50% + ${PLUS_OFFSET}px) 0px` }}   /* grows out of the "+" (see PLUS_OFFSET) */
+            className="gp-shell console-editor-panel absolute left-0 right-0 mx-auto w-[62%] min-w-[300px] max-w-[620px] border p-3 flex flex-col"
+            /* Opens under the toolbar (or above it when the toolbar sits in the lower half) and grows out of the "+"
+               wherever the toolbar has been dragged (see PLUS_OFFSET). */
+            style={tbLow
+              ? { bottom: layerH - tb.top + 8, maxHeight: tb.top - 16, transformOrigin: `calc(50% + ${tb.cx + PLUS_OFFSET - layerW / 2}px) 100%` }
+              : { top: tb.top + TOOLBAR_H + 8, maxHeight: layerH - tb.top - TOOLBAR_H - 16, transformOrigin: `calc(50% + ${tb.cx + PLUS_OFFSET - layerW / 2}px) 0px` }}
           >
             <div className="grid gap-2 overflow-y-auto overscroll-contain touch-pan-y min-h-0 justify-center"
               style={{ gridTemplateColumns: `repeat(auto-fill, ${ADD_CELL}px)`, gridAutoRows: `${ADD_CELL}px`, gridAutoFlow: "dense" }}>
@@ -672,13 +747,17 @@ export function CustomPadEditor({
         )}
       </AnimatePresence>
 
-      {/* Fluid toolbar — pinned to the very top edge of the canvas */}
-      <div ref={toolbarRef} className="absolute top-1 left-0 right-0 flex justify-center pointer-events-none">
+      {/* Fluid toolbar: top-centre at first; slide it to move it anywhere (its place is remembered). The wrapper is
+          positioned by its CENTRE, so the toolbar grows evenly both ways when it widens. */}
+      <div ref={toolbarRef} className="absolute flex justify-center pointer-events-none"
+        style={{ left: tb.cx, top: tb.top, transform: "translateX(-50%)" }}>
         <motion.div
           layout
+          data-testid="editor-toolbar"
           className="gp-shell console-editor-toolbar border flex items-center p-1.5 pointer-events-auto overflow-hidden"
-          style={{ width: selectedId || renaming ? `${TOOLBAR_WIDE}px` : `${TOOLBAR_W}px` }}
+          style={{ width: selectedId || renaming ? `${TOOLBAR_WIDE}px` : `${TOOLBAR_W}px`, touchAction: "none" }}
           transition={SPRING}
+          onPointerDown={onToolbarDown}
         >
           <div className="w-full flex justify-between items-center relative">
             <button
