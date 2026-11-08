@@ -75,10 +75,6 @@
 .gp-shell .calm-create-layout { width: 100%; display: flex; align-items: center; gap: 12px; text-align: left; padding: 18px 14px; margin: 16px 0 22px; border: 1px dashed var(--calm-line); border-radius: 12px; color: var(--calm-ink); }
 .gp-shell .calm-create-layout strong { font-size: 14px; display: block; }
 .gp-shell .calm-create-layout small { display: block; margin-top: 4px; color: var(--calm-muted); font-size: 11px; }
-.gp-shell .calm-launch-notice { border-top: 1px solid var(--calm-line); padding: 22px 0 0; }
-.gp-shell .calm-launch-notice h2 { font: 600 17px var(--calm-display); }
-.gp-shell .calm-launch-notice p { color: var(--calm-muted); font-size: 12px; line-height: 1.7; margin-top: 8px; }
-.gp-shell .calm-launch-notice button { color: var(--calm-accent); min-height: 44px; font-size: 12px; }
 .gp-shell .calm-nav { display: flex; flex-shrink: 0; padding: 10px 16px calc(var(--android-safe-bottom, env(safe-area-inset-bottom, 0px)) + 10px); background: var(--calm-paper); border-top: 1px solid var(--calm-line); }
 .gp-shell .calm-nav button { flex: 1; min-height: 54px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; color: var(--calm-muted); font-size: 10px; }
 .gp-shell .calm-nav button[aria-current='page'] { color: var(--calm-accent); }

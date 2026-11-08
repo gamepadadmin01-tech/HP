@@ -74,9 +74,6 @@ export const KEYS = {
   playtime: "gp_playtime",
   guestTrial: "gp_guest_trial_preview",
 
-  // Which one-off in-app notice has been dismissed, by id. A plain string so a
-  // later announcement can use a new id and is not silenced by an old dismissal.
-  noticeDismissed: "gp_notice_dismissed",
   // Set once the user has actually sent app feedback, so the launch notice can
   // stop asking for it.
   feedbackSent: "gp_feedback_sent",

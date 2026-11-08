@@ -11,7 +11,6 @@ import { beginPlay, endPlay, getPlaytimeState, isBlocked, onPlaytimeChange } fro
 import { onDashboardTabRequest, onSignInRequest, requestDashboardTab } from "./store/navIntent";
 import { KillScreen, NoticeBell } from "./components/AppControl";
 import type { NoticeAction } from "./store/appConfig";
-import { LaunchNotice } from "./components/LaunchNotice";
 import { CalmConnect } from "./components/CalmConnect";
 import { CalmSettings as TabSystem } from "./components/CalmSettings";
 import { useOverlayFocus, closeTopOverlay } from "./components/useOverlayFocus";
@@ -2459,7 +2458,6 @@ function TabHome({ realTelemetry, onLaunch, onConnect, onLaunchEditor, selectedP
         <Plus size={20} aria-hidden="true" /><span>Create a layout</span>
       </button>
       <DashboardAllowance />
-      <LaunchNotice />
       {/* Editor is rendered at the APP ROOT as its own full-screen view, not
           here — a fixed element under this CSS-transformed tab container would
           anchor to the transform and let the dashboard bleed through. */}

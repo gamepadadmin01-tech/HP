@@ -129,11 +129,6 @@
 .gp-shell .calm-ad-chip-main { font: 500 14px var(--calm-body); }
 .gp-shell .calm-ad-chip-sub { font: 600 14px var(--calm-body); }
 
-.gp-shell .calm-launch-notice { border-top: 0; padding: 0; }
-.gp-shell .calm-launch-notice .console-eyebrow { font: 600 14px var(--calm-body); letter-spacing: 0; color: var(--calm-accent); margin-bottom: 6px; }
-.gp-shell .calm-launch-notice h2 { font: 500 18px var(--calm-body); }
-.gp-shell .calm-launch-notice p { font-size: 14px; line-height: 1.5; }
-.gp-shell .calm-launch-notice button { margin-top: 6px; padding: 0 18px; min-height: 40px; border: 1px solid var(--calm-line); border-radius: 999px; font: 500 14px var(--calm-body); color: var(--calm-ink); }
 
 /* ── 8. Plans tab─────────────────────────────────────────────────────────
    Offers are soft cards (a lighter shade, no outline, round corners, roomy), with a big name, 16 dp bullet lines and
@@ -363,14 +358,13 @@
 
 /* Outline pills everywhere: regular weight, a little shorter. */
 .gp-shell .calm-create-layout,
-.gp-shell .calm-launch-notice button,
 .gp-shell .calm-step .calm-text-button,
 .gp-shell .calm-support-actions button,
 .gp-shell [data-testid='privacy-policy-link'] span,
 .gp-shell [data-testid='watch-ad-button'] { font-weight: 400 !important; }
 .gp-shell .calm-create-layout { min-height: 44px; }
 .gp-shell .calm-support-actions button,.gp-shell [data-testid='privacy-policy-link'] { min-height: 38px !important; }
-.gp-shell .calm-launch-notice button,.gp-shell .calm-step .calm-text-button { min-height: 38px; }
+.gp-shell .calm-step .calm-text-button { min-height: 38px; }
 
 /* Plans: slightly smaller offer text, quieter lines. */
 .gp-shell .guest-status { font-size: 15px; }
