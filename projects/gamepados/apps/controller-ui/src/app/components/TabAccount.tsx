@@ -127,7 +127,7 @@ const Section = React.memo(function Section(
 
 function Panel({ children }: { children: React.ReactNode }) {
   return (
-    <div className="rounded-xl overflow-hidden divide-y divide-white/5"
+    <div className="calm-panel rounded-xl overflow-hidden divide-y divide-white/5"
       style={{ background: "var(--calm-surface, #202527)", border: "1px solid var(--calm-line, #343c3f)" }}>
       {children}
     </div>

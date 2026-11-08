@@ -142,3 +142,44 @@
 .gp-shell .calm-launch-notice h2 { font: 500 18px var(--calm-body); }
 .gp-shell .calm-launch-notice p { font-size: 14px; line-height: 1.5; }
 .gp-shell .calm-launch-notice button { margin-top: 6px; padding: 0 18px; min-height: 40px; border: 1px solid var(--calm-line); border-radius: 999px; font: 500 14px var(--calm-body); color: var(--calm-ink); }
+
+/* ── 8. Plans tab, like Remote Gamepad's Upgrade screen ─────────────────────────────────────────────────────────
+   Offers are soft cards (a lighter shade, no outline, round corners, roomy), with a big name, 16 dp bullet lines and
+   a centred pill button. Everything else (status, headings, support) sits on the page with no box. Several of these
+   elements carry inline styles from older code, hence the !important on colours and borders. */
+.gp-shell .calm-account.space-y-3 > * + * { margin-top: 20px; }
+.gp-shell .guest-plans.space-y-3 > * + * { margin-top: 16px; }
+.gp-shell .guest-status { padding: 0; background: transparent; border: 0; border-radius: 0; font-size: 16px; gap: 10px; }
+.gp-shell .guest-status > svg { width: 20px; height: 20px; }
+
+.gp-shell .console-plan-card,
+.gp-shell .console-plan-card[data-plan] { padding: 20px; border: 0; border-radius: 16px; background: var(--calm-surface); }
+.gp-shell .console-plan-card p.text-sm { font: 500 24px/1.2 var(--calm-body) !important; }
+.gp-shell .console-plan-card ul { margin-top: 12px; }
+.gp-shell .console-plan-card li.text-xs { font-size: 16px; line-height: 1.6; color: var(--calm-ink) !important; gap: 10px; }
+.gp-shell .console-plan-card li > svg { width: 16px; height: 16px; }
+.gp-shell .console-plan-card .console-plan-price { font: 600 28px var(--calm-body) !important; letter-spacing: -.5px; }
+.gp-shell .console-plan-card .console-plan-buy { display: block; width: auto; min-width: 70%; margin: 20px auto 0; min-height: 48px; padding: 0 28px; border-radius: 999px !important; font: 500 15px var(--calm-body); }
+
+.gp-shell .calm-free-divider { margin: 28px 0 0; font: 600 14px var(--calm-body); letter-spacing: 0; text-transform: none; color: var(--calm-accent); }
+.gp-shell .calm-free-divider::before,.gp-shell .calm-free-divider::after { display: none; }
+.gp-shell .calm-free-card { padding: 20px; border: 0; border-radius: 16px; background: var(--calm-surface); }
+.gp-shell .calm-free-card :is(p,span) { font-size: 15px; }
+
+.gp-shell .calm-account .calm-signin-line { font-size: 15px; min-height: 48px; }
+
+.gp-shell .calm-account-section-title { font: 600 14px var(--calm-body) !important; letter-spacing: 0 !important; text-transform: none !important; color: var(--calm-accent) !important; margin: 12px 0 10px; }
+.gp-shell .calm-panel { background: transparent !important; border: 0 !important; border-radius: 0; overflow: visible; }
+.gp-shell .calm-panel.divide-y > * + * { border-top-width: 0 !important; }
+.gp-shell .calm-support-actions { padding: 0 0 10px; }
+.gp-shell .calm-support-actions .flex { flex-wrap: wrap; gap: 8px; }
+.gp-shell .calm-support-actions button { flex: 0 0 auto; padding: 0 20px; min-height: 40px; border-radius: 999px !important; color: var(--calm-ink) !important; font: 500 14px var(--calm-body) !important; }
+.gp-shell [data-testid='privacy-policy-link'] { width: auto !important; display: inline-flex !important; gap: 8px; padding: 0 20px !important; min-height: 40px !important; border: 1px solid var(--calm-line) !important; border-radius: 999px !important; }
+.gp-shell [data-testid='privacy-policy-link'] span { font: 500 14px var(--calm-body) !important; color: var(--calm-ink) !important; }
+.gp-shell [data-testid='privacy-policy-link'] svg { display: none; }
+/* liquid-glass-trial.css turns every rounded-xl/2xl corner into a squircle, which bends pills out of shape. The flat
+   look uses plain round corners; scoped to the Plans/Account page so the controller screen is untouched. */
+@supports (corner-shape: squircle) { .gp-shell .calm-account [class*="rounded-"] { corner-shape: round; } }
+/* The old panel drew a line under each block (Tailwind divide-y); the flat look has none. */
+.gp-shell .calm-panel.divide-y > * { border-top-width: 0 !important; border-bottom-width: 0 !important; }
+.gp-shell .calm-panel [data-testid='privacy-policy-link'] { border: 1px solid var(--calm-line) !important; }

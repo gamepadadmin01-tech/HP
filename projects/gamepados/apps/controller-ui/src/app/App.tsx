@@ -2975,7 +2975,7 @@ function FeedbackCard() {
   return (
     <>
       {/* Bare block: the Account page owns the panel and the heading. */}
-      <div className="p-3">
+      <div className="p-3 calm-support-actions">
         <div className="flex gap-2">
           <button onClick={openTray}
             className="flex-1 py-2.5 rounded-lg text-[13px] font-semibold active:scale-95 transition-transform"
