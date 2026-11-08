@@ -364,3 +364,46 @@
 .gp-shell .calm-google-circle:focus-visible { outline: 2px solid var(--calm-accent); outline-offset: 3px; }
 .gp-shell .calm-google-circle svg { color: #3c4043; }
 @media (prefers-reduced-motion: reduce) { .gp-shell .calm-google-circle { transition: none; } .gp-shell .calm-google-circle:active { transform: none; } }
+
+/* ── 16. One notch tighter (owner, 2026-11-08: "the app looks a little zoomed in", Settings and Plans) ──────────
+   Measured against the reference at the same phone width: text SIZES already match (16 labels, 14 notes), the phone
+   is not enlarging anything (checked from a phone screenshot). What made it feel zoomed was bulk:
+   - the bundled fonts are only Regular and Semibold, and fonts.css maps every weight from 500 up to Semibold, so all
+     the "500" labels, chips and outline buttons rendered BOLD. They now use 400; filled orange buttons stay bold;
+   - big 52x32 switches, 40 dp chips, a 16 dp slider track and roomy rows. All one step smaller below. */
+.gp-shell .calm-segment button { min-height: 36px; padding: 0 16px; font-weight: 400; }
+.gp-shell .calm-segment button[aria-pressed='true'] { font-weight: 600; }
+.gp-shell .calm-switch { width: 50px; height: 44px; }
+.gp-shell .calm-switch > span { width: 46px; height: 28px; padding: 3px; border-radius: 14px; }
+.gp-shell .calm-switch i { width: 20px; height: 20px; }
+.gp-shell .calm-setting-row { min-height: 52px; padding: 4px 0; }
+.gp-shell .calm-settings-section { margin-top: 24px; }
+.gp-shell .calm-setting-detail,.gp-shell .calm-range { padding: 8px 0 10px; }
+.gp-shell .calm-setting-detail h3,.gp-shell .calm-range label { margin-bottom: 4px; }
+.gp-shell .calm-range input[type='range'] { height: 34px; }
+.gp-shell .calm-range input[type='range']::-webkit-slider-runnable-track { height: 12px; border-radius: 6px; }
+.gp-shell .calm-range input[type='range']::-webkit-slider-thumb { width: 6px; height: 28px; margin-top: -8px; border-radius: 3px; }
+.gp-shell .calm-range output { font-weight: 600; font-size: 15px; }
+
+/* Outline pills everywhere: regular weight, a little shorter. */
+.gp-shell .calm-create-layout,
+.gp-shell .calm-launch-notice button,
+.gp-shell .calm-step .calm-text-button,
+.gp-shell .calm-support-actions button,
+.gp-shell [data-testid='privacy-policy-link'] span,
+.gp-shell [data-testid='watch-ad-button'] { font-weight: 400 !important; }
+.gp-shell .calm-create-layout { min-height: 44px; }
+.gp-shell .calm-support-actions button,.gp-shell [data-testid='privacy-policy-link'] { min-height: 38px !important; }
+.gp-shell .calm-launch-notice button,.gp-shell .calm-step .calm-text-button { min-height: 38px; }
+
+/* Plans: slightly smaller offer text, quieter lines. */
+.gp-shell .guest-status { font-size: 15px; }
+.gp-shell .console-plan-card,.gp-shell .console-plan-card[data-plan] { padding: 18px; }
+.gp-shell .console-plan-card p.text-sm { font-size: 22px !important; }
+.gp-shell .console-plan-card li.text-xs { font-size: 15px; line-height: 1.55; }
+.gp-shell .console-plan-card .console-plan-price { font-size: 26px !important; }
+.gp-shell .console-plan-card .console-plan-buy { min-height: 44px; margin-top: 16px; }
+.gp-shell .calm-free-card { padding: 16px; }
+.gp-shell .calm-account .calm-signin-line { font-size: 14px; font-weight: 400; }
+.gp-shell .calm-account.space-y-3 > * + * { margin-top: 16px; }
+.gp-shell .calm-incard-panel p.text-sm { font-size: 17px !important; }

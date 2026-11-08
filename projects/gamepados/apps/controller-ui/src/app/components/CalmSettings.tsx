@@ -23,7 +23,7 @@ export function CalmSwitch({label, detail, on, onChange}: {label:string; detail?
   const reduced = useReducedMotion();
   return <div className="calm-setting-row"><div className="calm-grow"><span id={id} className="calm-setting-label">{label}</span>
     {detail && <p id={`${id}-detail`}>{detail}</p>}</div>
-    <button data-testid={`${label.toLowerCase().replace(/\s+/g, '-')}-switch`} className="calm-switch" role="switch" aria-checked={on} aria-labelledby={id} aria-describedby={detail ? `${id}-detail` : undefined} onClick={()=>onChange(!on)}><span><motion.i animate={{ x: on ? 20 : 0 }} transition={reduced ? { duration: 0 } : { type: 'spring', stiffness: 500, damping: 28 }} /></span></button>
+    <button data-testid={`${label.toLowerCase().replace(/\s+/g, '-')}-switch`} className="calm-switch" role="switch" aria-checked={on} aria-labelledby={id} aria-describedby={detail ? `${id}-detail` : undefined} onClick={()=>onChange(!on)}><span><motion.i animate={{ x: on ? 18 : 0 }} transition={reduced ? { duration: 0 } : { type: 'spring', stiffness: 500, damping: 28 }} /></span></button>
   </div>;
 }
 
