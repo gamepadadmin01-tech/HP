@@ -48,6 +48,8 @@ export const KEYS = {
   wiredPref: "gp_wired_pref",
   // Where the player dragged the on-controller time chip (fractions of the screen).
   timeChipPos: "gp_time_chip_pos",
+  // The id of the last notification the player opened from the bell (no dot until a new one arrives).
+  noticeSeen: "gp_notice_seen",
 
   // Signed-in user, absent while a guest
   account: "gp_account",

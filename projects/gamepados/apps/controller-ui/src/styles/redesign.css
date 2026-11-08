@@ -393,3 +393,15 @@
 .gp-shell .calm-account .calm-signin-line { font-size: 14px; font-weight: 400; }
 .gp-shell .calm-account.space-y-3 > * + * { margin-top: 16px; }
 .gp-shell .calm-incard-panel p.text-sm { font-size: 17px !important; }
+
+/* ── 17. Notification bell (2026-11-08) ─────────────────────────────────────────────────────────────────────────
+   Beside the account button and the same size and look (40 dp round, same tint and outline), so the top bar reads
+   as one pair of controls on the right. An orange dot while a notification is unread. */
+.gp-shell .calm-header-actions { gap: 8px; }
+.gp-shell .calm-notice-bell { position: relative; display: grid; place-items: center; width: 40px; height: 40px; min-height: 40px; padding: 0; flex: 0 0 auto;
+  border-radius: 999px; border: 1px solid var(--console-violet-line); background: var(--console-violet-tint); color: var(--console-violet); }
+.gp-shell .calm-notice-bell:active { transform: scale(.94); }
+.gp-shell .calm-notice-bell:focus-visible { outline: 2px solid var(--calm-accent); outline-offset: 2px; }
+.gp-shell .calm-notice-dot { position: absolute; top: 7px; right: 8px; width: 9px; height: 9px; border-radius: 50%; background: var(--calm-accent); box-shadow: 0 0 0 2px var(--calm-paper); }
+.gp-shell .calm-header-centred .calm-account-shortcut { min-width: 40px; height: 40px; }
+@media (prefers-reduced-motion: reduce) { .gp-shell .calm-notice-bell:active { transform: none; } }

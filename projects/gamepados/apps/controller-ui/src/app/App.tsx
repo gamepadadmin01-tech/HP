@@ -9,7 +9,8 @@ import { PlaytimeLockout } from "./components/PlaytimeLockout";
 import { PlaytimeToast } from "./components/PlaytimeToast";
 import { beginPlay, endPlay, getPlaytimeState, isBlocked, onPlaytimeChange } from "./store/playtime";
 import { onDashboardTabRequest, onSignInRequest, requestDashboardTab } from "./store/navIntent";
-import { KillScreen, NoticeLine } from "./components/AppControl";
+import { KillScreen, NoticeBell } from "./components/AppControl";
+import type { NoticeAction } from "./store/appConfig";
 import { LaunchNotice } from "./components/LaunchNotice";
 import { CalmConnect } from "./components/CalmConnect";
 import { CalmSettings as TabSystem } from "./components/CalmSettings";
@@ -2837,8 +2838,6 @@ function TabHome({ realTelemetry, onLaunch, onConnect, onLaunchEditor, selectedP
     <div className="calm-home">
       {/* The visible intro lines were removed (owner request, 2026-10-12). The heading stays for screen readers and for the UI tests. */}
       <h1 className="sr-only" data-testid="home-heading">Home</h1>
-      {/* One line from the server (admin portal → App control); tap for the whole message. */}
-      <NoticeLine />
       <ConnectionSummary telemetry={realTelemetry} onClick={onConnect} />
       <div className="calm-section-heading"><h2>Your layouts</h2></div>
       <div className="calm-library" data-count={controllers.length}>
@@ -3417,6 +3416,16 @@ function DashboardScreen({
     else setAuthOpen(true);
   }
 
+  // The notification's button (portal → App control): links open in the browser inside NoticeBell; every
+  // other destination is a place in this dashboard.
+  function handleNoticeAction(a: NoticeAction) {
+    if (a.kind === "plans") changeTab('account');
+    else if (a.kind === "settings") changeTab('system');
+    else if (a.kind === "connect") onBack();
+    else if (a.kind === "signin") openProfile();
+    else if (a.kind === "layout") { changeTab('home'); openLayoutDialog(); }
+  }
+
   function closeSignIn() {
     setAuthOpen(false);
     mainRef.current?.scrollTo({ top: 0 });
@@ -3461,6 +3470,7 @@ function DashboardScreen({
         <span aria-hidden="true" />
         <span aria-hidden="true" />{/* no title or logo in the middle (owner, 2026-11-08): just the two buttons */}
         <div className="calm-header-actions">
+          <NoticeBell onAction={handleNoticeAction} />
           <button ref={profileButtonRef} data-testid="profile-shortcut-button" className="calm-account-shortcut" onClick={openProfile} aria-label={session ? 'Open your profile' : 'Sign in to GamepadOS'}>
             <User size={18} aria-hidden="true" />{session && <span>{session.user.displayName}</span>}
           </button>

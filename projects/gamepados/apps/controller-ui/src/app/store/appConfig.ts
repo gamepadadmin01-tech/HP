@@ -29,10 +29,15 @@ export type FreeTimeConfig = {
   body: string;
 };
 
+/** Where the notification's optional button goes (set in the portal's App control, 2026-11-08). */
+export type NoticeActionKind = "link" | "plans" | "connect" | "settings" | "signin" | "layout";
+export type NoticeAction = { kind: NoticeActionKind; label: string; url?: string };
+const NOTICE_KINDS: NoticeActionKind[] = ["link", "plans", "connect", "settings", "signin", "layout"];
+
 export type AppConfig = {
   ads: { available: boolean; message: string };
   guest: { welcomeSeconds: number; adRewardSeconds: number; adCapSeconds: number; freeTime: FreeTimeConfig };
-  notice: { id: string; text: string } | null;
+  notice: { id: string; text: string; action?: NoticeAction } | null;
   kill: { message: string; storeUrl: string } | null;
 };
 
@@ -63,6 +68,18 @@ const str = (v: unknown, max: number, fallback = "") =>
   typeof v === "string" ? v.trim().slice(0, max) : fallback;
 
 /** Anything missing or odd falls back to the built-in default; numbers are clamped. */
+/** The button, only if it is one we know; a link only if it is a plain https:// address (the server
+ *  checks this too, this is the second lock). Anything else: no button, the text still shows. */
+function noticeAction(a: any): { action?: NoticeAction } {
+  if (!a || typeof a !== "object" || !NOTICE_KINDS.includes(a.kind)) return {};
+  const label = str(a.label, 30);
+  if (!label) return {};
+  if (a.kind !== "link") return { action: { kind: a.kind, label } };
+  const url = typeof a.url === "string" ? a.url.trim() : "";
+  try { if (new URL(url).protocol !== "https:") return {}; } catch { return {}; }
+  return { action: { kind: "link", label, url: url.slice(0, 400) } };
+}
+
 function sanitize(raw: any): AppConfig {
   const d = DEFAULT_CONFIG;
   const g = raw?.guest ?? {};
@@ -88,7 +105,7 @@ function sanitize(raw: any): AppConfig {
       },
     },
     notice: n && typeof n.text === "string" && n.text.trim()
-      ? { id: str(n.id, 32) || "notice", text: str(n.text, 800) }
+      ? { id: str(n.id, 32) || "notice", text: str(n.text, 800), ...noticeAction(n.action) }
       : null,
     kill: k && k.killed === true && typeof k.storeUrl === "string" && /^https:\/\//.test(k.storeUrl)
       ? { message: str(k.message, 600) || "This version is no longer supported. Please update to keep playing.", storeUrl: k.storeUrl }

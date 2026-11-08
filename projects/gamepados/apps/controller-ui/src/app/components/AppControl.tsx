@@ -2,7 +2,7 @@
 //
 //   AdsDownNote      the plans-screen message while rewarded ads are switched off
 //   FreeTimeButton   guests only, while ads are off: tap → server → time on the phone
-//   NoticeLine       the one-line notice at the top of Home; tap for the whole text
+//   NoticeBell       the bell in the top bar: a dot for a new notification, tap for the whole text
 //   KillScreen       this build was switched off: a full-screen lock with an update button
 //
 // Everything that pops up is a Sheet: rendered into <body> (so it sits above the controller
@@ -12,15 +12,16 @@ import React, { useEffect, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { SPRING, FADE, cardIn, backdropIn } from "../motion";
-import { AlertTriangle, Bell, ChevronRight, Gift, Loader2, RefreshCw, X } from "lucide-react";
+import { AlertTriangle, Bell, Gift, Loader2, RefreshCw, X } from "lucide-react";
 import { API_ORIGIN } from "../api/account";
-import { getAppConfig, minutesShort, minutesText, onAppConfigChange, refreshAppConfig } from "../store/appConfig";
+import { getAppConfig, minutesShort, minutesText, onAppConfigChange, refreshAppConfig, type NoticeAction } from "../store/appConfig";
 import { getSession, onSessionChange } from "../store/account";
 import { guestTrial } from "../store/guestTrial";
 import { announceExtraTime } from "../store/rewardedAd";
 import { requestSignIn } from "../store/navIntent";
 import { adNetwork, getAppInfo, nativeCreditGuestFreeTime, openUrl } from "../platform/native";
 import { getInstallId } from "../feedback";
+import { KEYS, readString, writeString } from "../store/storage";
 
 // Theme tokens (styles/calm-shell.css). Sheets render into <body>, so Sheet wraps them in a
 // .gp-shell element: these resolve exactly as on the page.
@@ -227,31 +228,50 @@ export function FreeTimeButton({ onSignIn }: { onSignIn?: () => void }) {
   </>;
 }
 
-// ── The notice line at the top of Home ──────────────────────────────────────
+// ── The notification bell in the top bar (2026-11-08) ──────────────────────
+// Sits beside the account button, the same size. A dot shows while there is a notification the player
+// has not opened; tapping opens it (the same sheet as the old notice line on Home). The portal may add
+// ONE button to it (store/appConfig.ts NoticeAction): the dashboard decides what each destination does.
 
-export function NoticeLine() {
+export function NoticeBell({ onAction }: { onAction: (action: NoticeAction) => void }) {
   const cfg = useConfig();
   const [open, setOpen] = useState(false);
-  if (!cfg.notice) return null;
-  const text = cfg.notice.text;
+  const [seen, setSeen] = useState(() => readString(KEYS.noticeSeen, ""));
+  const notice = cfg.notice;
+  const unread = !!notice && notice.id !== seen;
+  const show = () => {
+    setOpen(true);
+    if (notice) { writeString(KEYS.noticeSeen, notice.id); setSeen(notice.id); }
+  };
+  const act = (a: NoticeAction) => {
+    setOpen(false);
+    if (a.kind === "link" && a.url) openUrl(a.url);
+    else onAction(a);
+  };
   return <>
-    <button data-testid="notice-line" onClick={() => setOpen(true)} style={{
-      width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "6px 0", minHeight: 40, textAlign: "left",
-      background: "transparent", border: "none",
-      color: INK, marginBottom: 14,
-    }}>
-      <Bell size={15} aria-hidden="true" style={{ flex: "none", color: ACCENT }} />
-      <span style={{ flex: 1, minWidth: 0, fontSize: 14, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{text}</span>
-      <ChevronRight size={16} aria-hidden="true" style={{ flex: "none", color: MUTED }} />
+    <button type="button" data-testid="notice-bell" className="calm-notice-bell" onClick={show}
+      aria-label={unread ? "Notifications, 1 new" : "Notifications"}>
+      <Bell size={18} aria-hidden="true" />
+      {unread && <span className="calm-notice-dot" aria-hidden="true" />}
     </button>
-    <Sheet open={open} onClose={() => setOpen(false)} label="Notice">
+    <Sheet open={open} onClose={() => setOpen(false)} label="Notifications">
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
         <SheetIcon><Bell size={22} /></SheetIcon>
         <button aria-label="Close" onClick={() => setOpen(false)} style={{ background: "none", border: "none", color: SOFT, padding: 4 }}><X size={18} /></button>
       </div>
-      <div style={{ fontSize: 14, fontWeight: 600, color: ACCENT, marginBottom: 6 }}>From GamepadOS</div>
-      <p style={{ fontSize: 15, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{text}</p>
-      <div style={{ marginTop: 18 }}><PrimaryButton onClick={() => setOpen(false)}>Got it</PrimaryButton></div>
+      {notice ? <>
+        <div style={{ fontSize: 14, fontWeight: 600, color: ACCENT, marginBottom: 6 }}>From GamepadOS</div>
+        <p data-testid="notice-text" style={{ fontSize: 15, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{notice.text}</p>
+        <div style={{ marginTop: 18 }}>
+          {notice.action
+            ? <><PrimaryButton onClick={() => act(notice.action!)}>{notice.action.label}</PrimaryButton><QuietButton onClick={() => setOpen(false)}>Got it</QuietButton></>
+            : <PrimaryButton onClick={() => setOpen(false)}>Got it</PrimaryButton>}
+        </div>
+      </> : <>
+        <div style={{ fontSize: 14, fontWeight: 600, color: ACCENT, marginBottom: 6 }}>Notifications</div>
+        <p style={{ fontSize: 15, lineHeight: 1.6, color: MUTED }}>Nothing new right now. News from GamepadOS will show up here.</p>
+        <div style={{ marginTop: 18 }}><PrimaryButton onClick={() => setOpen(false)}>Got it</PrimaryButton></div>
+      </>}
     </Sheet>
   </>;
 }
