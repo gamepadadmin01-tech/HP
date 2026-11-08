@@ -118,30 +118,6 @@ export function isBlocked(): boolean {
   return state.status === "blocked";
 }
 
-/**
- * Whole minutes of play left (free time + ad bank), or null when there is no
- * countdown to show (unlimited plan, untracked, idle). Rounded UP so "0 min"
- * never appears while time remains. A primitive that changes once a minute, so
- * the on-controller chip re-renders once a minute, not once a second.
- */
-export function getRemainingMinutes(): number | null {
-  if (state.status === "unlimited" || state.status === "untracked" || state.status === "idle") return null;
-  if (state.status === "blocked") return 0;
-  const s = state.remainingSeconds;
-  return typeof s === "number" && Number.isFinite(s) ? Math.max(0, Math.ceil(s / 60)) : null;
-}
-
-/** The chip's text ("1h 05m", "29m", "45s"), or null when nothing is counted.
- *  A string that changes once a minute (every second only in the last minute). */
-export function getRemainingLabel(): string | null {
-  if (state.status === "unlimited" || state.status === "untracked" || state.status === "idle") return null;
-  const s = state.remainingSeconds;
-  if (typeof s !== "number" || !Number.isFinite(s)) return null;
-  const t = Math.max(0, Math.floor(s));
-  const h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60);
-  return h > 0 ? `${h}h ${String(m).padStart(2, "0")}m` : m > 0 ? `${m}m` : `${t}s`;
-}
-
 export type PlaytimeAlert = "none" | "warn-15" | "warn-10" | "warn-5";
 
 /** Which countdown warning is currently showing, if any. A short-lived string,

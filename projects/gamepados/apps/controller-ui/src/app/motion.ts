@@ -81,15 +81,6 @@ export const toastIn = {
   exit: { opacity: 0, y: -8, transition: EXIT },
 };
 
-/** Step transition inside a wizard. `dir` is +1 going forward, -1 going back,
- *  so the content always moves the way the user is travelling. Kept small
- *  (10px) — enough to read as movement, not enough to look like a slide show. */
-export const stepIn = (dir: 1 | -1 = 1) => ({
-  initial: { opacity: 0, x: 10 * dir },
-  animate: { opacity: 1, x: 0 },
-  exit: { opacity: 0, x: -10 * dir },
-});
-
 // ─── The editor "+" popup ─────────────────────────────────────────────────────
 //
 // A panel that GROWS OUT OF the button that opened it, then its tiles arrive one after another.

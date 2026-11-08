@@ -1,5 +1,4 @@
 /* Glass is reserved for floating controls; comparison cards remain quiet content. */
-.guest-checkout { padding:20px; border-radius:24px; background:rgba(28,30,36,.96); }
 .guest-back { min-height:44px; display:inline-flex; align-items:center; gap:8px;
   padding:10px 16px; border-radius:999px; background:rgba(255,255,255,.07); color:rgba(255,255,255,.85); }
 .guest-plans button { min-height:44px; }

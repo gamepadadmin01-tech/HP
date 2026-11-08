@@ -25,7 +25,7 @@ export const ACCENT_RGB = CONTROLLER.rgb;   // orange 255,104,38 normally; the o
 // NOTE: the RED_* names are historical — these have not been red for a long
 // time. Renaming would touch every widget call site, so the names stay and the
 // values are what actually matter.
-export const RED_NORM = `rgba(${ACCENT_RGB}, 0.12)`;  // resting fill
+export const RED_NORM = `rgba(${ACCENT_RGB}, 0.16)`;  // resting fill (0.12 until 2026-11-08: a richer amber glass)
 export const RED_HELD = `rgba(${ACCENT_RGB}, 0.85)`;  // pressed fill — the press
 
 /** Text drawn on a button. The stick-click buttons are stored as "Left stick" / "Right stick"
@@ -33,15 +33,6 @@ export const RED_HELD = `rgba(${ACCENT_RGB}, 0.85)`;  // pressed fill — the pr
  *  Display only — never use this for mapping. Used by the editor, the pad and the thumbnail. */
 export const buttonText = (label: string): string =>
   label === "Left stick" ? "L3" : label === "Right stick" ? "R3" : label;
-                                                      // feedback depends on this
-                                                      // staying distinct from NORM
-export const FACE_COLORS = {
-  Y: { norm: "rgba(234, 179, 8, 0.15)", held: "rgba(234, 179, 8, 0.85)" },  // Neon Yellow
-  X: { norm: "rgba(59, 130, 246, 0.15)", held: "rgba(59, 130, 246, 0.85)" }, // Neon Blue
-  A: { norm: "rgba(34, 197, 94, 0.15)", held: "rgba(34, 197, 94, 0.85)" },  // Neon Green
-  B: { norm: "rgba(239, 68, 68, 0.15)", held: "rgba(239, 68, 68, 0.85)" },  // Neon Red
-};
-
 // ─── Touch ripple (#5) ───────────────────────────────────────────────────────
 // A wave that expands from the EXACT touch point to the button edges, clipped to
 // the button shape. SVG-native: a <circle> whose `r` and opacity are CSS-
@@ -81,7 +72,7 @@ function rippleCircles(ripples: RippleHit[], cx: number, cy: number, coverBase: 
     const coverR = coverBase + Math.hypot(rp.x - cx, rp.y - cy) + 4;
     return (
       <circle key={rp.k} cx={rp.x} cy={rp.y} r={rp.grown ? coverR : 0}
-        fill="rgba(255,255,255,0.5)" opacity={rp.grown ? 0 : 0.5}
+        fill="rgba(255,255,255,0.3)" opacity={rp.grown ? 0 : 0.3}
         style={{ transition: "r 0.5s cubic-bezier(0.22,1,0.36,1), opacity 0.54s ease-out", pointerEvents: "none" }} />
     );
   });
@@ -235,10 +226,10 @@ function BtnBase({ cx, cy, r, label, id, held, dn, up, fontSize, normColor = RED
           a gentle bloom, not a hard flash. */}
       {isRect ? (
         <rect x={cx - w! / 2 - 6} y={cy - h! / 2 - 6} width={w! + 12} height={h! + 12} rx={rx + 6}
-          fill={heldColor} style={{ pointerEvents: "none", filter: "blur(12px)", opacity: isHeld ? 0.11 : 0, transition: "opacity 0.2s ease-out" }} />
+          fill={heldColor} style={{ pointerEvents: "none", filter: "blur(12px)", opacity: isHeld ? 0.06 : 0, transition: "opacity 0.2s ease-out" }} />
       ) : (
         <circle cx={cx} cy={cy} r={r + 14} fill={heldColor}
-          style={{ pointerEvents: "none", filter: "blur(12px)", opacity: isHeld ? 0.11 : 0, transition: "opacity 0.2s ease-out" }} />
+          style={{ pointerEvents: "none", filter: "blur(12px)", opacity: isHeld ? 0.06 : 0, transition: "opacity 0.2s ease-out" }} />
       )}
       <g style={{
         transform: isHeld ? "scale(0.96)" : "scale(1)",
@@ -305,10 +296,10 @@ function BtnBase({ cx, cy, r, label, id, held, dn, up, fontSize, normColor = RED
             trigger's dim gradient fill sitting inside its glass pill). */}
         {isRect ? (
           <rect x={cx - w! / 2} y={cy - h! / 2} width={w!} height={h!} rx={rx}
-            style={{ fill: heldColor, pointerEvents: "none", opacity: isHeld ? 0.26 : 0, transition: "opacity 0.16s ease-out" }} />
+            style={{ fill: heldColor, pointerEvents: "none", opacity: isHeld ? 0.14 : 0, transition: "opacity 0.16s ease-out" }} />
         ) : (
           <circle cx={cx} cy={cy} r={r}
-            style={{ fill: heldColor, pointerEvents: "none", opacity: isHeld ? 0.26 : 0, transition: "opacity 0.16s ease-out" }} />
+            style={{ fill: heldColor, pointerEvents: "none", opacity: isHeld ? 0.14 : 0, transition: "opacity 0.16s ease-out" }} />
         )}
         {/* SPECULAR CAP — replaces the old flat 10%-white ellipse. A gradient
             that is bright at the crown and gone by ~45% down reads as light
@@ -363,7 +354,7 @@ function BtnBase({ cx, cy, r, label, id, held, dn, up, fontSize, normColor = RED
       {isHeld && (
         <g clipPath={`url(#${clipId})`} style={{ pointerEvents: "none" }}>
           <ellipse cx={cx} cy={cy} rx={span * 0.9} ry={(isRect ? h! : r * 2) * 0.3}
-            fill={`rgba(${CONTROLLER.shine},0.10)`} style={{ filter: "blur(6px)" }}>
+            fill={`rgba(${CONTROLLER.shine},0.06)`} style={{ filter: "blur(6px)" }}>
             <animate attributeName="cx"
               values={`${cx - span};${cx + span};${cx - span}`}
               dur="1.6s" repeatCount="indefinite"
@@ -485,7 +476,7 @@ function DpadBase({ cx, cy, r, held, dn, up, dirIds }: {
         // Always rendered so the highlight can FADE in/out (a transition can't
         // animate from `transparent`). Pale target opacity → soft, not a harsh flash.
         <path key={id} d={sector(angle - 44, angle + 44)} fill={RED_HELD}
-          style={{ pointerEvents: "none", opacity: held.has(id) ? 0.5 : 0, transition: "opacity 0.16s ease-out" }} />
+          style={{ pointerEvents: "none", opacity: held.has(id) ? 0.28 : 0, transition: "opacity 0.16s ease-out" }} />
       ))}
       {ripples.length > 0 && (
         <>
@@ -570,7 +561,7 @@ function RightStickBase({ cx, cy, outerR, innerR, stick, id, held, dn, up, tag }
       {/* Soft neon ring while the stick is grabbed — always rendered so it fades
           in/out smoothly rather than snapping on. */}
       <circle cx={cx} cy={cy} r={outerR} fill="none" stroke={`rgba(${ACCENT_RGB}, 0.55)`} strokeWidth={3}
-        style={{ pointerEvents: "none", filter: "blur(3px)", opacity: isHeld ? 1 : 0, transition: "opacity 0.2s ease-out" }} />
+        style={{ pointerEvents: "none", filter: "blur(3px)", opacity: isHeld ? 0.55 : 0, transition: "opacity 0.2s ease-out" }} />
       <PadGlassDefs />
       <ellipse cx={cx} cy={cy + outerR * 0.74} rx={outerR * 0.92} ry={outerR * 0.28}
         fill="url(#padUnder)" style={{ pointerEvents: "none" }} />
@@ -692,7 +683,7 @@ function TriggerPillBase({ x, y, w, h, rx, label, id, dn, up, fill, onFillChange
       {/* Soft outer glow when active — low intensity, fades in/out smoothly. */}
       <rect x={x - 8} y={y - 8} width={w + 16} height={h + 16} rx={rx + 8}
         fill={RED_HELD}
-        style={{ pointerEvents: "none", filter: "blur(14px)", opacity: isHeld ? 0.22 : 0, transition: "opacity 0.2s ease-out" }} />
+        style={{ pointerEvents: "none", filter: "blur(14px)", opacity: isHeld ? 0.12 : 0, transition: "opacity 0.2s ease-out" }} />
 
       <rect x={x} y={y} width={w} height={h} rx={rx}
         style={{
@@ -714,9 +705,9 @@ function TriggerPillBase({ x, y, w, h, rx, label, id, dn, up, fill, onFillChange
       {isHeld && (
         <g clipPath={`url(#${clipId})`} style={{ pointerEvents: "none" }}>
           <rect x={x} y={surfaceY - 2.5} width={w} height={6}
-            fill={`rgba(${CONTROLLER.shineDeep},0.28)`} style={{ filter: "blur(3px)" }} />
+            fill={`rgba(${CONTROLLER.shineDeep},0.16)`} style={{ filter: "blur(3px)" }} />
           <ellipse cx={x + w / 2} cy={surfaceY} rx={w * 0.24} ry={4}
-            fill={`rgba(${CONTROLLER.shine},0.34)`} style={{ filter: "blur(4px)" }}>
+            fill={`rgba(${CONTROLLER.shine},0.2)`} style={{ filter: "blur(4px)" }}>
             <animate attributeName="cx"
               values={`${x + w * 0.22};${x + w * 0.78};${x + w * 0.22}`}
               dur="1.5s" repeatCount="indefinite"

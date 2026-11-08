@@ -9,11 +9,11 @@ export function ShellScreenTransition({ children, direction, className, skipEntr
   const present = useIsPresent();
   const reduced = useReducedMotion();
   const connectScreen = direction === -1;
-  const normalTransition = { duration: reduced ? 0 : .24, ease: [.22, 1, .36, 1] as const };
+  const normalTransition = { duration: reduced ? 0 : .2, ease: [.22, 1, .36, 1] as const };
   return <motion.div
     data-testid={connectScreen ? 'connect-screen-transition' : 'dashboard-screen-transition'}
     // Use settled values, not initial=false: descendants must still animate on tab changes.
-    initial={{ opacity: reduced || skipEntrance ? 1 : 0, x: 0, y: reduced || skipEntrance ? 0 : 5 }}
+    initial={{ opacity: reduced || skipEntrance ? 1 : 0, x: 0, y: reduced || skipEntrance ? 0 : 4 }}
     animate={{ opacity: 1, x: 0, y: 0, transition: normalTransition }}
     variants={{ leaving: { opacity: 0, x: 0, y: 0,
       transition: { duration: reduced ? 0 : .10, ease: 'easeOut' } } }}

@@ -65,7 +65,6 @@
 .gp-shell .calm-primary,.gp-shell .calm-secondary { border-radius: 999px; min-height: 48px; font-size: 15px; }
 
 /* ── 5. Connect to PC: plain accent numbers, readable step text, outlined pill links, a pill scan button ───────── */
-.gp-shell .calm-back { font-size: 14px; }
 .gp-shell .console-connect-chrome { padding-bottom: 24px; }
 .gp-shell .calm-step { gap: 14px; margin: 0 0 26px; }
 .gp-shell .calm-step-number { width: 16px; height: auto; display: block; margin-top: 1px; border-radius: 0; background: transparent; color: var(--calm-accent); font: 500 16px var(--calm-body); }
@@ -182,7 +181,6 @@
    (none of them add anything). */
 .gp-shell .calm-header::before { display: none; }
 .gp-shell .calm-header { border-bottom: 0 !important; box-shadow: none; }
-.gp-shell .console-spectrum { display: none; }
 .gp-shell.calm-dialog [role='dialog'] { border-top: 1px solid var(--calm-line) !important; border-radius: 28px !important; }
 .gp-shell.calm-rating > div { border-top: 1px solid var(--calm-line) !important; border-radius: 28px !important; }
 /* Layout cards: a plain grey outline; the chosen card shows the tick only. */
@@ -255,9 +253,6 @@
 .gp-shell .calm-header-centred { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 8px; min-height: 64px; padding-top: calc(var(--android-safe-top, env(safe-area-inset-top, 0px)) + 8px); padding-bottom: 8px; }
 .gp-shell .calm-header-centred > :first-child { justify-self: start; }
 .gp-shell .calm-header-centred > .calm-header-actions { justify-self: end; }
-.gp-shell .calm-header-title { margin: 0; font: 400 22px var(--calm-body); letter-spacing: 0; color: var(--calm-ink); white-space: nowrap; }
-.gp-shell .calm-header-centred .calm-brand { font-size: 20px; }
-.gp-shell .calm-header-centred .calm-mark { width: 28px; height: 28px; }
 .gp-shell .calm-header-centred .calm-icon-button { width: 44px; height: 44px; border: 0; background: transparent; color: var(--calm-ink); }
 .gp-shell .calm-header-centred .calm-account-shortcut { min-height: 40px; border-radius: 999px; }
 /* Connect: the back arrow now lives in the top bar, so the chips start right under it. */
@@ -307,11 +302,8 @@
 .gp-shell .console-signin .calm-form-field input { min-height: 56px; border-radius: 8px; background: transparent; }
 .gp-shell .console-signin .calm-password-field button { height: 54px; }
 .gp-shell .console-signin .calm-primary { min-height: 48px; border-radius: 999px; }
-.gp-shell .console-signin .calm-auth-links .calm-text-button,.gp-shell .console-signin-footer .calm-text-button { font-size: 14px; }
+.gp-shell .console-signin .calm-auth-links .calm-text-button { font-size: 14px; }
 .gp-shell .console-signin .calm-auth-links .calm-text-button:last-child { color: var(--calm-accent); }
-.gp-shell .console-signin-footer { border-top: 0; }
-.gp-shell .console-signin-footer > span { font-size: 13px; }
-.gp-shell .console-signin .calm-back { font-size: 14px; }
 
 /* ── 14. Sign-in, create account, confirm email, reset password (2026-11-08) ─────────────────────────────────────
    Same language as the rest of the app: 14 labels and links, outlined 56 dp fields, a centred orange pill, messages
@@ -328,8 +320,6 @@
 .gp-shell .calm-auth-form .calm-primary:disabled { opacity: .45; }
 .gp-shell .calm-form-message { padding: 14px 16px; border: 0; border-radius: 16px; background: var(--calm-surface); color: var(--calm-ink); font-size: 14px; line-height: 1.5; }
 .gp-shell .calm-form-message.calm-form-error { color: var(--calm-error); }
-.gp-shell .calm-google-button { width: auto; min-width: 60%; margin: 4px auto 0; padding: 0 24px; min-height: 48px; border-radius: 999px; font: 500 15px var(--calm-body); }
-.gp-shell .calm-auth-or { font-size: 13px; letter-spacing: 0; }
 
 /* ── 15. Colour test "cool": the app takes the controller's colours (owner, 2026-11-08) ────────────────────────
    Only in a test build made with VITE_THEME_VARIANT=cool (themeVariant.ts marks <html data-variant="cool">).

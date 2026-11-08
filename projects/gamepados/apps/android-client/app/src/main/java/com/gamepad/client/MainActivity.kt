@@ -312,49 +312,57 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback, android.hardwa
             (getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as android.os.VibratorManager).defaultVibrator
         else @Suppress("DEPRECATION") (getSystemService(Context.VIBRATOR_SERVICE) as android.os.Vibrator)
 
+    /** Play a button haptic as a TOUCH vibration where the OS supports it (API 33+), so the phone's own
+     *  touch-feedback strength setting applies; older versions play it plainly. */
+    private fun vibrateTouch(v: android.os.Vibrator, effect: android.os.VibrationEffect) {
+        if (android.os.Build.VERSION.SDK_INT >= 33) {
+            val attrs = android.os.VibrationAttributes.Builder()
+                .setUsage(android.os.VibrationAttributes.USAGE_TOUCH).build()
+            v.vibrate(effect, attrs)
+        } else if (android.os.Build.VERSION.SDK_INT >= 26) {
+            v.vibrate(effect)
+        }
+    }
+
     internal fun playHapticEvent(event: String) {
         runOnUiThread {
             try {
                 val v = vib()
                 if (!v.hasVibrator()) return@runOnUiThread
-                if (android.os.Build.VERSION.SDK_INT >= 29) {
-                    // OEM-TUNED PREDEFINED EFFECT played as a TOUCH haptic — exactly
-                    // what the Android system itself uses on LRA
-                    // phones: a crisp "click" that scales with the user's haptic-strength
-                    // setting, NOT a flat oneshot buzz. (Verified via dumpsys: the
-                    // reference fires Prebaked=CLICK with usage=TOUCH.) Composition
-                    // primitives are intentionally dropped — many LRA phones report
-                    // supportedPrimitives=[] and silently fall back to that buzz.
-                    // No amplitude control (e.g. Moto G84): the motor plays only ONE effect
-                    // at a time, so a press CLICK gets cancelled_superseded by the release
-                    // TICK ~45ms later and the press+release "double" collapses into a single
-                    // buzz. For press-type events on such motors, play an ATOMIC double-pulse
-                    // waveform (one effect — can't be superseded mid-play) so the double lands.
-                    // Amplitude-capable motors (e.g. POCO) keep the OEM-tuned predefined effects.
-                    val pressLike = event != "tick" && event != "uiToggle" && event != "buttonRelease" && event != "triggerPull"
-                    if (pressLike && !v.hasAmplitudeControl()) {
-                        v.vibrate(android.os.VibrationEffect.createWaveform(longArrayOf(0, 16, 30, 16), -1))
-                        return@runOnUiThread
+                // HALF STRENGTH (owner, 2026-11-08): every button haptic plays at about half the intensity
+                // it had. Predefined effects (TICK/CLICK/HEAVY_CLICK) have no strength setting, so each kind
+                // of motor gets its own half-strength version:
+                //   1. motors with composition primitives -> the same CLICK/TICK primitive at scale 0.5;
+                //   2. motors with amplitude control      -> a short one-shot at about half amplitude;
+                //   3. on/off motors (no amplitude)       -> shorter pulses, which feel weaker. The press
+                //      stays ONE atomic effect, so the release tick cannot cancel it mid-play (Moto G84).
+                // USAGE_TOUCH (API 33+) keeps the phone's own touch-haptic strength setting on top of this.
+                val release = event == "tick" || event == "uiToggle" || event == "buttonRelease"
+                val trigger = event == "triggerPull"
+                if (android.os.Build.VERSION.SDK_INT >= 30 && v.areAllPrimitivesSupported(
+                        android.os.VibrationEffect.Composition.PRIMITIVE_CLICK,
+                        android.os.VibrationEffect.Composition.PRIMITIVE_TICK)) {
+                    val prim = if (release) android.os.VibrationEffect.Composition.PRIMITIVE_TICK
+                               else android.os.VibrationEffect.Composition.PRIMITIVE_CLICK
+                    val scale = if (trigger) 0.6f else 0.5f
+                    vibrateTouch(v, android.os.VibrationEffect.startComposition().addPrimitive(prim, scale).compose())
+                } else if (android.os.Build.VERSION.SDK_INT >= 26 && v.hasAmplitudeControl()) {
+                    val effect = when {
+                        release -> android.os.VibrationEffect.createOneShot(8, 80)
+                        trigger -> android.os.VibrationEffect.createOneShot(14, 135)
+                        else    -> android.os.VibrationEffect.createOneShot(12, 120)
                     }
-                    val id = when (event) {
-                        // RELEASE + subtle UI → a light tick (the reference fires a
-                        // distinct, softer haptic on button release vs press).
-                        "tick", "uiToggle", "buttonRelease" -> android.os.VibrationEffect.EFFECT_TICK
-                        "triggerPull"                       -> android.os.VibrationEffect.EFFECT_HEAVY_CLICK  // heavier pull
-                        else                                -> android.os.VibrationEffect.EFFECT_CLICK        // PRESS (matches reference)
+                    vibrateTouch(v, effect)
+                } else if (android.os.Build.VERSION.SDK_INT >= 26) {
+                    val effect = when {
+                        release -> android.os.VibrationEffect.createOneShot(6, android.os.VibrationEffect.DEFAULT_AMPLITUDE)
+                        trigger -> android.os.VibrationEffect.createOneShot(10, android.os.VibrationEffect.DEFAULT_AMPLITUDE)
+                        else    -> android.os.VibrationEffect.createWaveform(longArrayOf(0, 9, 30, 9), -1)   // was 16 ms pulses
                     }
-                    val effect = android.os.VibrationEffect.createPredefined(id)
-                    if (android.os.Build.VERSION.SDK_INT >= 33) {
-                        val attrs = android.os.VibrationAttributes.Builder()
-                            .setUsage(android.os.VibrationAttributes.USAGE_TOUCH).build()
-                        v.vibrate(effect, attrs)
-                    } else {
-                        v.vibrate(effect)
-                    }
+                    vibrateTouch(v, effect)
                 } else {
-                    // API 24-28: no predefined effects → strong oneshot at full amplitude.
-                    val strong = event != "tick" && event != "uiToggle"
-                    doVibrate(if (strong) 22 else 14, if (strong) 255 else 150)
+                    // API 24-25: plain on/off vibration, shorter and at half amplitude where honoured.
+                    doVibrate(if (release) 8 else 12, if (release) 75 else 128)
                 }
             } catch (e: Exception) { e.printStackTrace() }
         }

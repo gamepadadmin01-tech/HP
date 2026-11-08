@@ -7,7 +7,6 @@ export type BtnId =
 // "account" carries what used to live in the Advanced tab: about, updates and
 // feedback, plus the user's layouts. Guests see it too — it is not a gate.
 export type DashTab = "home" | "system" | "account";
-export type PollingHz = 60 | 120 | 500 | 1000;
 
 export type GamepadPreset = {
   id: string; name: string; genre: string; color: string; icon: string;
@@ -15,9 +14,6 @@ export type GamepadPreset = {
   layout?: "standard" | "mobile";
   mapping: Partial<Record<BtnId, string>>;
 };
-
-export type BtnPosOverride = { cx: number; cy: number; r: number };
-export type PosOverrideMap = Partial<Record<string, BtnPosOverride>>;
 
 // ── Unified widget vocabulary ──────────────────────────────────────────────
 //  Individual widgets: button | thumbstick | trigger | macro

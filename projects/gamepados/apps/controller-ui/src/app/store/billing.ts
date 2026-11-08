@@ -212,12 +212,6 @@ export function remainingSeconds(s: BillingState): number | null {
   return Math.max(0, s.entitlement.today.remainingSeconds ?? 0);
 }
 
-/** True when a limited plan has nothing left today. */
-export function isExhausted(s: BillingState): boolean {
-  const left = remainingSeconds(s);
-  return left !== null && left <= 0;
-}
-
 /** "1h 00m" / "42m" / "38s" — the shape the quota is actually read in. */
 export function formatDuration(totalSeconds: number): string {
   const s = Math.max(0, Math.floor(totalSeconds));

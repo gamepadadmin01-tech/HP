@@ -26,7 +26,7 @@ import { playSellsNothing } from "./platform/native";
 import { motion, AnimatePresence, useIsPresent, useReducedMotion } from "framer-motion";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-import { View, BtnId, DashTab, GamepadPreset, CustomPad, CustomBtnDef, WidgetType, WidgetShape, WidgetAnchor, BtnPosOverride, PosOverrideMap } from "./types";
+import { View, BtnId, DashTab, GamepadPreset, CustomPad, CustomBtnDef, WidgetType, WidgetShape, WidgetAnchor } from "./types";
 import { CONTROLLER } from "./themeVariant";
 import { CustomPadEditor } from "./components/CustomPadEditor";
 import { FeatureIntroOverlay, recordSessionEnd, noteControllerOpened, suppressIntroOnce, introRated } from "./FeatureIntroOverlay";
@@ -36,7 +36,7 @@ import { stickFeel, stickResponse, installStickFeelToggle } from "./stickFeel";
 // there too because pad migrations mint widget ids.
 import {
   mkUid, loadPads, savePads, shareFingerprint, addTombstone, onPadsReplaced,
-  loadPresetOverrides, savePresetOverrides, loadPosOverrides, savePosOverrides,
+  loadPresetOverrides,
 } from "./store/pads";
 import { scheduleSync, onSignedInSync } from "./store/sync";
 import {
@@ -45,7 +45,7 @@ import {
 } from "./store/prefs";
 import { TabAccount, AppSupport } from "./components/TabAccount";
 import { getSession, onSessionChange, revalidate } from "./store/account";
-import { SPRING, SPRING_SNAP, FADE, cardIn, backdropIn, sheetIn, toastIn } from "./motion";
+import { SPRING, SPRING_SNAP, FADE, EASE, cardIn, backdropIn, sheetIn, toastIn } from "./motion";
 
 const GAMEPAD_PRESETS: GamepadPreset[] = [
   // color drives THREE things on the Home card: the selected ring, the status
@@ -62,15 +62,6 @@ const GAMEPAD_PRESETS: GamepadPreset[] = [
 
 // ─── Custom pad helpers ──────────────────────────────────────────────────────────────────────────────────
 const CUSTOM_COLORS = PAD_COLORS;
-
-export const BTN_PALETTE_COLORS = [
-  { norm: "rgba(180, 10, 10, 0.85)", held: "rgba(220, 0, 0, 1.0)" },
-  { norm: "rgba(20, 20, 58, 0.85)", held: "rgba(58, 58, 158, 1.0)" },
-  { norm: "rgba(10, 30, 10, 0.85)", held: "rgba(26, 94, 26, 1.0)" },
-  { norm: "rgba(46, 10, 22, 0.85)", held: "rgba(142, 24, 64, 1.0)" },
-  { norm: "rgba(30, 16, 10, 0.85)", held: "rgba(126, 64, 16, 1.0)" },
-  { norm: "rgba(10, 30, 46, 0.85)", held: "rgba(26, 94, 142, 1.0)" },
-];
 
 export function getTrueStandardLayout(): CustomBtnDef[] {
   // Match the exact same cyan/blue glassmorphic colors as TriggerPill (LT/RT)
@@ -230,34 +221,9 @@ export function triggerHaptic(strength: number) {
   if (bridge && bridge.playHaptic) { try { bridge.playHaptic(event); return; } catch {} }
   // Fallbacks (older shell / browser): scale the oneshot duration by tier. Kept
   // SHORT on purpose — a haptic is a button-touch tick, not a vibration.
-  const ms = strength <= 30 ? 8 : strength <= 65 ? 12 : 16;
+  const ms = strength <= 30 ? 5 : strength <= 65 ? 7 : 9;   // half strength (2026-11-08): shorter = weaker
   if (bridge && bridge.triggerHaptic) { bridge.triggerHaptic(ms); }
   else if (navigator.vibrate) { navigator.vibrate(ms); }
-}
-
-// Per-button haptic strength (0-100) chosen by the button's ROLE, so every
-// control feels appropriate by default: triggers give a strong pull, face
-// buttons a solid click, bumpers/sticks a medium tap, and the d-pad + system
-// buttons a light crisp tick. A stored per-widget value (from the editor) that
-// differs from the 60 default is respected as a user override; 0 means off.
-export function hapticForRole(type: string, label?: string): number {
-  const l = (label || "").trim().toUpperCase();
-  if (type === "trigger") return 45;                                                  // medium click (a touch, not a long pull)
-  if (type === "dpad") return 22;                                                     // light
-  if (type === "touchpad") return 30;                                                 // one soft tick when the finger lands
-  if (["↑", "↓", "←", "→", "UP", "DOWN", "LEFT", "RIGHT"].includes(l)) return 22;     // light d-pad
-  if (["VIEW", "MENU", "HOME", "START", "SELECT", "BACK", "OPTIONS"].includes(l)) return 18; // light system
-  if (["LB", "RB", "L1", "R1"].includes(l)) return 45;                                // medium bumper
-  if (type === "thumbstick" || type === "stickmode") return 42;                       // medium stick
-  if (type === "macro") return 55;                                                    // medium+ macro
-  return 50;                                                                           // face / default medium
-}
-
-// Resolve the effective press strength for a widget: honour an explicit editor
-// override, otherwise use the role default; 0 keeps it off.
-export function widgetHaptic(btn: { type: string; label?: string; haptic?: number }): number {
-  if (btn.haptic === 0) return 0;
-  return (btn.haptic != null && btn.haptic !== 60) ? btn.haptic : hapticForRole(btn.type, btn.label);
 }
 
 // Standard-controller per-button press strengths (0-100) by BtnId.
@@ -288,15 +254,6 @@ export function playHapticWaveform(timings: number[], amps: number[]) {
     try { bridge.playHapticWaveform(timings.join(","), amps.join(",")); return; } catch {}
   }
   if (navigator.vibrate) { try { navigator.vibrate(timings); } catch {} }
-}
-
-// The ripple's tactile twin: a short impact that fades — used by RippleButton.
-export function rippleHaptic() {
-  const bridge = (window as any).AndroidBridge;
-  if ((window as any).hapticsEnabled === false) return;
-  if (bridge && bridge.playHaptic) { try { bridge.playHaptic("ripple"); return; } catch {} }
-  // Fallback envelope: peak then two fading steps (~280ms total).
-  playHapticWaveform([0, 18, 50, 12, 60, 10], [0, 200, 0, 110, 0, 60]);
 }
 
 // ─── Hooks ────────────────────────────────────────────────────────────────────
@@ -2194,365 +2151,6 @@ function GamepadCard({ preset, active, onPlay }: {
   </div>;
 }
 
-// ─── Preset label editor ──────────────────────────────────────────────────────
-// Default positions for the standard layout — single source of truth
-const STANDARD_DEFAULTS: Record<string, BtnPosOverride> = {
-  LB:         { cx: 80,  cy: 80,  r: 52  },
-  RB:         { cx: 220, cy: 80,  r: 52  },
-  Y:          { cx: 160, cy: 220, r: 56  },
-  X:          { cx: 60,  cy: 320, r: 56  },
-  B:          { cx: 260, cy: 320, r: 56  },
-  A:          { cx: 160, cy: 420, r: 56  },
-  lstick:     { cx: 340, cy: 500, r: 56  },
-  view:       { cx: 500, cy: 140, r: 34  },
-  home:       { cx: 620, cy: 140, r: 34  },
-  menu:       { cx: 740, cy: 140, r: 34  },
-  dpad:       { cx: 500, cy: 360, r: 120 },
-  rstick_btn: { cx: 480, cy: 500, r: 56  },
-  rstick:     { cx: 800, cy: 360, r: 120 },
-};
-
-function PresetEditor({ preset, currentMapping, currentPos, onSave, onSaveLayout, onReset, onClose }: {
-  preset: GamepadPreset;
-  currentMapping: Partial<Record<BtnId, string>>;
-  currentPos: PosOverrideMap;
-  onSave: (m: Partial<Record<BtnId, string>>) => void;
-  onSaveLayout: (pos: PosOverrideMap) => void;
-  onReset: () => void;
-  onClose: () => void;
-}) {
-  const [tab, setTab] = useState<"labels" | "layout">("labels");
-  const [draft, setDraft] = useState<Partial<Record<BtnId, string>>>({ ...currentMapping });
-  // pos state: merge defaults with any saved overrides
-  const [pos, setPos] = useState<Record<string, BtnPosOverride>>(() => ({
-    ...STANDARD_DEFAULTS,
-    ...Object.fromEntries(
-      Object.entries(currentPos).filter(([, v]) => v != null) as [string, BtnPosOverride][]
-    ),
-  }));
-  const [selectedKey, setSelectedKey] = useState<string | null>(null);
-  const svgEditorRef = useRef<SVGSVGElement>(null);
-  const dragRef = useRef<{ key: string; ox: number; oy: number } | null>(null);
-
-  const [windowSize, setWindowSize] = useState({
-    w: typeof window !== "undefined" ? window.innerWidth : 1280,
-    h: typeof window !== "undefined" ? window.innerHeight : 720,
-  });
-
-  useEffect(() => {
-    let timeout: any;
-    const handleResize = () => {
-      clearTimeout(timeout);
-      timeout = setTimeout(() => {
-        setWindowSize({ w: window.innerWidth, h: window.innerHeight });
-      }, 150);
-    };
-    window.addEventListener("resize", handleResize);
-    return () => {
-      window.removeEventListener("resize", handleResize);
-      clearTimeout(timeout);
-    };
-  }, []);
-
-  const isPortrait = windowSize.w < windowSize.h;
-
-  const dn = preset.displayName ?? {};
-  const rows: { id: BtnId; label: string }[] = [
-    { id:"A",      label: dn.A  ? `A · ${dn.A}`   : "A — Bottom" },
-    { id:"B",      label: dn.B  ? `B · ${dn.B}`   : "B — Right" },
-    { id:"X",      label: dn.X  ? `X · ${dn.X}`   : "X — Left" },
-    { id:"Y",      label: dn.Y  ? `Y · ${dn.Y}`   : "Y — Top" },
-    { id:"LT",     label: dn.LT ?? "Left Trigger" },
-    { id:"RT",     label: dn.RT ?? "Right Trigger" },
-    { id:"LB",     label: dn.LB ?? "Left Bumper" },
-    { id:"RB",     label: dn.RB ?? "Right Bumper" },
-    { id:"up",     label: "D-Pad Up" },
-    { id:"down",   label: "D-Pad Down" },
-    { id:"left",   label: "D-Pad Left" },
-    { id:"right",  label: "D-Pad Right" },
-    { id:"lstick", label: "Left Stick (L3)" },
-    { id:"rstick", label: "Right Stick (R3)" },
-  ];
-
-  // Layout button metadata for the draggable editor
-  const layoutBtns: { key: string; label: React.ReactNode; color?: string }[] = [
-    { key: "LB",         label: "LB" },
-    { key: "RB",         label: "RB" },
-    { key: "Y",          label: "Y" },
-    { key: "X",          label: "X" },
-    { key: "B",          label: "B" },
-    { key: "A",          label: "A" },
-    { key: "lstick",     label: <><tspan x="0" dy="-0.6em">Left</tspan><tspan x="0" dy="1.2em">stick</tspan></> },
-    { key: "view",       label: "⧉" },
-    { key: "home",       label: "🎮" },
-    { key: "menu",       label: "≡" },
-    { key: "dpad",       label: "D‑Pad" },
-    { key: "rstick_btn", label: <><tspan x="0" dy="-0.6em">Right</tspan><tspan x="0" dy="1.2em">stick</tspan></> },
-    { key: "rstick",     label: "R‑Stick" },
-  ];
-
-  function toSVGCoords(clientX: number, clientY: number) {
-    const svg = svgEditorRef.current;
-    if (!svg) return { x: clientX, y: clientY };
-    const rect = svg.getBoundingClientRect();
-    if (!rect.width || !rect.height) return { x: 0, y: 0 };
-    
-    const scaleX = 1264 / rect.width;
-    const scaleY = 570 / rect.height;
-    let x = (clientX - rect.left) * scaleX;
-    let y = (clientY - rect.top) * scaleY;
-    
-    if (isNaN(x)) x = 0;
-    if (isNaN(y)) y = 0;
-    return { x, y };
-  }
-
-  function onBtnPointerDown(e: React.PointerEvent, key: string) {
-    e.stopPropagation();
-    try {
-      (e.currentTarget as Element).setPointerCapture(e.pointerId);
-    } catch (err) {
-      console.warn("PresetEditor: Pointer capture failed", err);
-    }
-    const p = toSVGCoords(e.clientX, e.clientY);
-    const btn = pos[key];
-    dragRef.current = { key, ox: p.x - btn.cx, oy: p.y - btn.cy };
-    setSelectedKey(key);
-  }
-
-  function onSVGPointerMove(e: React.PointerEvent) {
-    if (!dragRef.current) return;
-    const p = toSVGCoords(e.clientX, e.clientY);
-    const { key, ox, oy } = dragRef.current;
-    const r = pos[key].r;
-    
-    const nx = p.x - ox;
-    const ny = p.y - oy;
-    if (isNaN(nx) || isNaN(ny)) return;
-
-    setPos(prev => ({
-      ...prev,
-      [key]: {
-        ...prev[key],
-        cx: Math.max(r, Math.min(1264 - r, nx)),
-        cy: Math.max(r, Math.min(570 - r, ny)),
-      },
-    }));
-  }
-
-  function onSVGPointerUp() { dragRef.current = null; }
-
-  // Compute diff — only save keys that differ from defaults
-  function layoutDiff(): PosOverrideMap {
-    const diff: PosOverrideMap = {};
-    for (const [key, val] of Object.entries(pos)) {
-      const def = STANDARD_DEFAULTS[key];
-      if (!def) continue;
-      if (
-        Math.abs(val.cx - def.cx) > 0.5 ||
-        Math.abs(val.cy - def.cy) > 0.5 ||
-        Math.abs(val.r - def.r) > 0.5
-      ) {
-        diff[key] = val;
-      }
-    }
-    return diff;
-  }
-
-  return (
-    <motion.div
-      {...cardIn}
-      transition={SPRING}
-      className="fixed inset-0 z-50 overflow-hidden bg-black/80 touch-none select-none">
-      
-        {isPortrait ? (
-          <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#070910] z-50 px-8 text-center">
-            <div className="w-16 h-16 rounded-full bg-white/5 flex items-center justify-center mb-6">
-              <svg className="w-8 h-8 text-white/50 animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-              </svg>
-            </div>
-            <h2 className="text-xl font-bold text-white mb-2">Rotate Your Device</h2>
-            <p className="text-sm text-white/60">The editor requires a landscape orientation to give you enough space to design your gamepad.</p>
-            <button onClick={onClose} className="mt-8 px-6 py-2.5 rounded-full bg-white/10 text-white font-medium hover:bg-white/20 transition-colors">
-              Go Back
-            </button>
-          </div>
-        ) : (
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-auto" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="w-full max-w-lg rounded-3xl border border-border flex flex-col"
-        style={{ background: "rgba(10,14,24,0.99)", borderColor: `${preset.color}50`, maxHeight: "90vh", margin: "auto" }}>
-
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 pt-5 pb-3">
-          <div>
-            <h3 className="text-base font-semibold text-foreground flex items-center gap-2">
-              <span>{preset.icon}</span> {preset.name}
-            </h3>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              {tab === "labels" ? "Rename button actions" : "Drag buttons to reposition"}
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <button onClick={() => { onReset(); setPos({ ...STANDARD_DEFAULTS }); onClose(); }}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all active:scale-95"
-              style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.25)", color: "#ef4444" }}>
-              ↺ Reset
-            </button>
-            <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full"
-              style={{ background: "rgba(255,255,255,0.06)" }}><X size={14} /></button>
-          </div>
-        </div>
-
-        {/* Tabs */}
-        <div className="flex gap-1.5 px-5 mb-3">
-          {(["labels", "layout"] as const).map(t => (
-            <button key={t} onClick={() => setTab(t)}
-              className="flex-1 py-2 rounded-xl text-xs font-bold tracking-wide transition-all duration-150"
-              style={tab === t
-                ? { background: preset.color, color: "#fff" }
-                : { background: "rgba(255,255,255,0.05)", color: "rgba(255,255,255,0.4)", border: "1px solid rgba(255,255,255,0.08)" }}>
-              {t === "labels" ? "🏷️ Labels" : "✋ Layout"}
-            </button>
-          ))}
-        </div>
-
-        {/* Tab: Labels */}
-        {tab === "labels" && (
-          <div className="flex-1 overflow-y-auto px-5 pb-3">
-            <div className="grid grid-cols-2 gap-2">
-              {rows.map(({ id, label }) => (
-                <div key={id} className="flex flex-col gap-1">
-                  <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">{label}</label>
-                  <input value={draft[id] ?? ""} onChange={e => setDraft(d => ({ ...d, [id]: e.target.value }))}
-                    placeholder="e.g. Jump, Fire…" maxLength={14}
-                    className="w-full px-2.5 py-1.5 rounded-lg text-xs text-foreground outline-none"
-                    style={{ background: "rgba(255,255,255,0.05)", border: `1px solid ${preset.color}30` }} />
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Tab: Layout — draggable SVG canvas */}
-        {tab === "layout" && (
-          <div className="flex-1 flex flex-col px-5 pb-3 min-h-0">
-            {selectedKey && (
-              <div className="flex flex-col gap-2.5 mb-3 bg-white/5 border border-white/10 rounded-2xl p-3">
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">Selected:</span>
-                  <span className="text-xs font-bold" style={{ color: preset.color }}>{selectedKey}</span>
-                  <span className="text-[10px] font-mono text-muted-foreground">
-                    ({Math.round(pos[selectedKey]?.cx ?? 0)}, {Math.round(pos[selectedKey]?.cy ?? 0)}, r: {Math.round(pos[selectedKey]?.r ?? 0)}px)
-                  </span>
-                  <button onClick={() => {
-                    const def = STANDARD_DEFAULTS[selectedKey];
-                    if (def) setPos(p => ({ ...p, [selectedKey]: { ...def } }));
-                  }}
-                    className="ml-auto text-[10px] px-2 py-1 rounded-lg font-semibold transition-all active:scale-95"
-                    style={{ background: "rgba(239,68,68,0.1)", color: "#ef4444", border: "1px solid rgba(239,68,68,0.25)" }}>
-                    Reset Button
-                  </button>
-                </div>
-                <div className="flex items-center gap-3">
-                  <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider w-12">Size:</span>
-                  <input
-                    type="range"
-                    min="20"
-                    max="180"
-                    value={pos[selectedKey]?.r ?? 56}
-                    onChange={e => {
-                      const newR = parseInt(e.target.value, 10);
-                      setPos(prev => ({
-                        ...prev,
-                        [selectedKey]: {
-                          ...prev[selectedKey],
-                          r: newR
-                        }
-                      }));
-                    }}
-                    className="flex-1 accent-primary h-1 bg-white/10 rounded-lg appearance-none cursor-pointer"
-                    style={{ accentColor: preset.color }}
-                  />
-                  <span className="text-xs font-mono w-12 text-right text-muted-foreground">
-                    {Math.round(pos[selectedKey]?.r ?? 0)}px
-                  </span>
-                </div>
-              </div>
-            )}
-            <div className="flex-1 rounded-2xl overflow-hidden border" style={{ borderColor: `${preset.color}30`, background: "rgba(0,0,0,0.5)" }}>
-              <svg ref={svgEditorRef} viewBox="0 0 1264 570" className="w-full h-full"
-                style={{ touchAction: "none", userSelect: "none", display: "block" }}
-                onPointerMove={onSVGPointerMove}
-                onPointerUp={onSVGPointerUp}
-                onPointerLeave={onSVGPointerUp}>
-                {/* Grid dots */}
-                <defs>
-                  <pattern id="ed-grid" width="40" height="40" patternUnits="userSpaceOnUse">
-                    <circle cx="1" cy="1" r="1" fill="rgba(255,255,255,0.04)" />
-                  </pattern>
-                </defs>
-                <rect width="1264" height="570" fill="url(#ed-grid)" />
-
-                {/* LT / RT hint bars */}
-                <rect x={1062} y={16} width={92} height={538} rx={46} fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.08)" strokeWidth={1.5} />
-                <rect x={1166} y={16} width={92} height={538} rx={46} fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.08)" strokeWidth={1.5} />
-                <text x={1108} y={295} textAnchor="middle" fontSize={18} fill="rgba(255,255,255,0.2)" fontWeight="700">LT</text>
-                <text x={1212} y={295} textAnchor="middle" fontSize={18} fill="rgba(255,255,255,0.2)" fontWeight="700">RT</text>
-
-                {/* Draggable buttons */}
-                {layoutBtns.map(({ key, label, color }) => {
-                  const btn = pos[key];
-                  if (!btn) return null;
-                  const sel = key === selectedKey;
-                  const btnColor = color ?? (sel ? preset.color : "rgba(255,255,255,0.55)");
-                  return (
-                    <g key={key} style={{ cursor: "grab", touchAction: "none" }}
-                      onPointerDown={e => onBtnPointerDown(e, key)}>
-                      {sel && (
-                        <circle cx={btn.cx} cy={btn.cy} r={btn.r + 14} fill="none"
-                          stroke={preset.color} strokeWidth="2.5" strokeDasharray="8 5" opacity={0.7}
-                          style={{ pointerEvents: "none" }} />
-                      )}
-                      <circle cx={btn.cx} cy={btn.cy} r={btn.r}
-                        fill={sel ? `${preset.color}22` : "rgba(255,255,255,0.06)"}
-                        stroke={sel ? preset.color : "rgba(255,255,255,0.18)"}
-                        strokeWidth={sel ? 2.5 : 1.5}
-                        style={{ pointerEvents: "none" }} />
-                      <text x={btn.cx} y={btn.cy} textAnchor="middle" dominantBaseline="central"
-                        fontSize={Math.min(btn.r * 0.52, 30)} fontWeight="800" fill={btnColor}
-                        style={{ fontFamily: "'Inter',sans-serif", pointerEvents: "none", userSelect: "none" }}>
-                        {label}
-                      </text>
-                      {/* Transparent large hit area */}
-                      <circle cx={btn.cx} cy={btn.cy} r={Math.max(btn.r, 40)} fill="transparent" />
-                    </g>
-                  );
-                })}
-              </svg>
-            </div>
-            <p className="text-[10px] text-center text-muted-foreground mt-2">Drag any button to reposition it. LT/RT are fixed sliders.</p>
-          </div>
-        )}
-
-        {/* Footer actions */}
-        <div className="flex gap-2 px-5 pb-8 pt-3 border-t" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
-          <button onClick={() => { onSave(draft); onSaveLayout(layoutDiff()); onClose(); }}
-            className="flex-1 py-2.5 rounded-xl text-sm font-bold transition-all active:scale-95"
-            style={{ background: preset.color, color: "#fff" }}>
-            Save All Changes
-          </button>
-          <button onClick={onClose} className="px-4 py-2.5 rounded-xl text-sm font-medium text-muted-foreground"
-            style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)" }}>
-            Cancel
-          </button>
-        </div>
-      </div>
-      </div>
-        )}
-    </motion.div>
-  );
-}
 // ─── Layout-thumbnail widget — draws the real shape of each widget so the card
 //     preview looks like a mini picture of the pad (not text labels). ──────────
 function PadThumbWidget({ b, accent }: { b: CustomBtnDef; accent: string }) {
@@ -2760,7 +2358,7 @@ function CustomPadSlot({ pad, active, onPlay, onEdit, onDelete, onDuplicate, onS
 
 
 
-function TabHome({ realTelemetry, onLaunch, onConnect, onLaunchEditor, selectedPresetId, onSelectPreset, customPads, onSaveCustomPad, onDeleteCustomPad, onDuplicateCustomPad, presetOverrides, onSavePresetOverride, onResetPreset, posOverrides, onSavePosOverride, onResetPosOverride, onNewLayout, pendingEditPad, onClearPendingEditPad }: {
+function TabHome({ realTelemetry, onLaunch, onConnect, onLaunchEditor, selectedPresetId, onSelectPreset, customPads, onSaveCustomPad, onDeleteCustomPad, onDuplicateCustomPad, presetOverrides, onNewLayout, pendingEditPad, onClearPendingEditPad }: {
   realTelemetry: any;
   onLaunch: () => void; onConnect: () => void;
   selectedPresetId: string; onSelectPreset: (id: string) => void;
@@ -2768,24 +2366,11 @@ function TabHome({ realTelemetry, onLaunch, onConnect, onLaunchEditor, selectedP
   onDeleteCustomPad: (id: string) => void;
   onDuplicateCustomPad: (pad: CustomPad) => void;
   presetOverrides: Record<string, Partial<Record<BtnId, string>>>;
-  onSavePresetOverride: (id: string, m: Partial<Record<BtnId, string>>) => void;
-  onResetPreset: (id: string) => void;
-  posOverrides: Record<string, PosOverrideMap>;
-  onSavePosOverride: (id: string, pos: PosOverrideMap) => void;
-  onResetPosOverride: (id: string) => void;
   onNewLayout: () => void;
   onLaunchEditor?: (pad: CustomPad) => void;
   pendingEditPad: CustomPad | null;
   onClearPendingEditPad: () => void;
 }) {
-  const [editingPreset, setEditingPreset] = useState<GamepadPreset | null>(null);
-  useEffect(() => {
-    (window as any).__presetBack = () => {
-      if (!editingPreset) return false;
-      setEditingPreset(null); return true;
-    };
-    return () => { delete (window as any).__presetBack; };
-  }, [editingPreset]);
   // Share-by-code result modal state + publisher.
   const [shareState, setShareState] = useState<{ padName: string; status: "sharing" | "done" | "error"; code?: string; error?: string } | null>(null);
   const shareRef=useRef<HTMLDivElement>(null);
@@ -2885,18 +2470,6 @@ function TabHome({ realTelemetry, onLaunch, onConnect, onLaunchEditor, selectedP
       )}
       </AnimatePresence>
 
-      <AnimatePresence>
-      {editingPreset && (
-        <PresetEditor key="preset"
-          preset={editingPreset}
-          currentMapping={editingPreset.mapping}
-          currentPos={posOverrides[editingPreset.id] ?? {}}
-          onSave={m => { onSavePresetOverride(editingPreset.id, m); setEditingPreset(null); }}
-          onSaveLayout={pos => onSavePosOverride(editingPreset.id, pos)}
-          onReset={() => { onResetPreset(editingPreset.id); onResetPosOverride(editingPreset.id); setEditingPreset(null); }}
-          onClose={() => setEditingPreset(null)} />
-      )}
-      </AnimatePresence>
 
     </div>
   );
@@ -3298,8 +2871,7 @@ const TABS: { id: DashTab; label: string; Icon: React.ComponentType<{ size?: num
 
 // ─── Dashboard Screen ─────────────────────────────────────────────────────────
 function DashboardScreen({
-  onLaunch, onBack, onLaunchEditor, realTelemetry, selectedPresetId, onSelectPreset, customPads, onSaveCustomPad, onDeleteCustomPad, onDuplicateCustomPad, presetOverrides, onSavePresetOverride, onResetPreset,
-  posOverrides, onSavePosOverride, onResetPosOverride,
+  onLaunch, onBack, onLaunchEditor, realTelemetry, selectedPresetId, onSelectPreset, customPads, onSaveCustomPad, onDeleteCustomPad, onDuplicateCustomPad, presetOverrides,
   gyroOn, setGyroOn,
   gyroMaxAngle, setGyroMaxAngle,
   gyroWheel, setGyroWheel,
@@ -3317,11 +2889,6 @@ function DashboardScreen({
   onDeleteCustomPad: (id: string) => void;
   onDuplicateCustomPad: (pad: CustomPad) => void;
   presetOverrides: Record<string, Partial<Record<BtnId, string>>>;
-  onSavePresetOverride: (id: string, m: Partial<Record<BtnId, string>>) => void;
-  onResetPreset: (id: string) => void;
-  posOverrides: Record<string, PosOverrideMap>;
-  onSavePosOverride: (id: string, pos: PosOverrideMap) => void;
-  onResetPosOverride: (id: string) => void;
   gyroOn: boolean; setGyroOn: (v: boolean) => void;
   gyroMaxAngle: number; setGyroMaxAngle: (v: number) => void;
   gyroWheel: boolean; setGyroWheel: (v: boolean) => void;
@@ -3482,15 +3049,14 @@ function DashboardScreen({
           {/* Update banner. Renders nothing unless an update is actually
               available. Shown on every tab since 1.4.11: Settings no longer has its
               own "App" block with the full update section. */}
-          <motion.div key={authOpen ? 'sign-in' : tab} initial={reduceShellMotion || !dashboardEntered.current ? false : { opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: reduceShellMotion ? 0 : .22, ease: [.22, 1, .36, 1] }}>
+          <motion.div key={authOpen ? 'sign-in' : tab} initial={reduceShellMotion || !dashboardEntered.current ? false : { opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: reduceShellMotion ? 0 : .18, ease: [.22, 1, .36, 1] }}>
             {authOpen ? <SignInScreen onBack={closeSignIn} /> : <>
             {tab === "home"   && <TabHome realTelemetry={realTelemetry} onLaunch={onLaunch} onConnect={onBack}
               onLaunchEditor={onLaunchEditor}
               selectedPresetId={selectedPresetId} onSelectPreset={onSelectPreset}
               customPads={customPads} onSaveCustomPad={onSaveCustomPad} onDeleteCustomPad={onDeleteCustomPad}
               onDuplicateCustomPad={onDuplicateCustomPad}
-              presetOverrides={presetOverrides} onSavePresetOverride={onSavePresetOverride} onResetPreset={onResetPreset}
-              posOverrides={posOverrides} onSavePosOverride={onSavePosOverride} onResetPosOverride={onResetPosOverride}
+              presetOverrides={presetOverrides}
               onNewLayout={openLayoutDialog}
               pendingEditPad={pendingEditPad}
               onClearPendingEditPad={() => setPendingEditPad(null)} />}
@@ -3748,21 +3314,12 @@ export default function App() {
       setEditingPad(null);
     });
   }
-  const [editingPreset, setEditingPreset] = useState<GamepadPreset | null>(null);
-  // Orientation for the editor is handled inside openEditor/closeEditor (curtain
-  // path). This effect now only covers the preset editor, which has no curtain.
-  useEffect(() => {
-    const bridge = (window as any).AndroidBridge;
-    if (bridge && bridge.setScreenOrientation && editingPreset) {
-      try { bridge.setScreenOrientation("landscape"); } catch (e) {}
-    }
-  }, [editingPreset]);
+  // Orientation for the layout editor is handled inside openEditor/closeEditor (curtain path).
 
   const [customPads, setCustomPads] = useState<CustomPad[]>(() => loadPads());
-  // Persisted like custom_pads — otherwise a user's saved preset button remaps and
-  // dragged widget positions silently vanished on every app restart.
-  const [presetOverrides, setPresetOverrides] = useState<Record<string, Partial<Record<BtnId, string>>>>(() => loadPresetOverrides());
-  const [posOverrides, setPosOverrides] = useState<Record<string, PosOverrideMap>>(() => loadPosOverrides());
+  // Button remaps a player saved for the Standard Controller in older versions (the editor that made them
+  // was unreachable and removed 2026-11-08); still applied when playing.
+  const [presetOverrides] = useState<Record<string, Partial<Record<BtnId, string>>>>(() => loadPresetOverrides());
 
   // Gyro settings persist across app restarts. Defaults and validation live in
   // store/prefs.ts (GYRO_DEFAULTS): ON, 30°, racing, no deadzone, haptic ON,
@@ -3842,9 +3399,6 @@ export default function App() {
   // it settled on.
   useEffect(() => onPadsReplaced(setCustomPads), []);
 
-  useEffect(() => { savePresetOverrides(presetOverrides); }, [presetOverrides]);
-
-  useEffect(() => { savePosOverrides(posOverrides); }, [posOverrides]);
 
 
   useEffect(() => {
@@ -3853,7 +3407,6 @@ export default function App() {
       if (closeTopOverlay()) return;
       if ((window as any).__editorBack?.()) return;
       if ((window as any).__authBack?.()) return;
-      if ((window as any).__presetBack?.()) return;
       const currentView = viewRef.current;
       if (currentView === "controller") {
         navigateTo("dashboard");
@@ -3902,22 +3455,6 @@ export default function App() {
     setCustomPads(prev => [...prev, copy]);
   }
 
-  function savePresetOverride(id: string, m: Partial<Record<BtnId, string>>) {
-    setPresetOverrides(prev => ({ ...prev, [id]: m }));
-  }
-
-  function resetPreset(id: string) {
-    setPresetOverrides(prev => { const next = { ...prev }; delete next[id]; return next; });
-  }
-
-  function savePosOverride(id: string, pos: PosOverrideMap) {
-    setPosOverrides(prev => ({ ...prev, [id]: pos }));
-  }
-
-  function resetPosOverride(id: string) {
-    setPosOverrides(prev => { const next = { ...prev }; delete next[id]; return next; });
-  }
-
   const activePreset = GAMEPAD_PRESETS.find(p => p.id === selectedPresetId);
   const activeCustomPad = customPads.find(p => p.padId === selectedPresetId);
   const override = presetOverrides[selectedPresetId];
@@ -3950,7 +3487,7 @@ export default function App() {
         {isCurtainDown && (
           <motion.div
             {...backdropIn}
-            transition={FADE}
+            transition={{ duration: 0.09, ease: EASE }}   /* opaque before the swap at 100 ms, so the rotation never shows through */
             className="absolute inset-0 z-50 flex items-center justify-center"
             style={{ background: CONTROLLER.page }}
           >
@@ -3989,11 +3526,6 @@ export default function App() {
               customPads={customPads} onSaveCustomPad={saveCustomPad} onDeleteCustomPad={deleteCustomPad}
               onDuplicateCustomPad={duplicateCustomPad}
               presetOverrides={presetOverrides}
-              onSavePresetOverride={savePresetOverride}
-              onResetPreset={resetPreset}
-              posOverrides={posOverrides}
-              onSavePosOverride={savePosOverride}
-              onResetPosOverride={resetPosOverride}
               gyroOn={gyroOn} setGyroOn={setGyroOn}
               gyroMaxAngle={gyroMaxAngle} setGyroMaxAngle={setGyroMaxAngle}
               gyroWheel={gyroWheel} setGyroWheel={setGyroWheel}

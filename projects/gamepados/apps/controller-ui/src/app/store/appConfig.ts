@@ -59,7 +59,7 @@ export const DEFAULT_CONFIG: AppConfig = {
 };
 
 const STORE_KEY = "gp_app_config_v1";
-const REFRESH_MS = 15 * 60 * 1000;
+const REFRESH_MS = 5 * 60 * 1000;   // was 15 min: the portal's switches and notifications now reach an open app within ~5 min (2026-11-08)
 const FOCUS_THROTTLE_MS = 2 * 60 * 1000;
 
 const num = (v: unknown, lo: number, hi: number, fallback: number) =>

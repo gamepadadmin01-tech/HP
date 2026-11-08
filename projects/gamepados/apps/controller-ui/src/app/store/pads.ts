@@ -6,7 +6,7 @@
 // a reconciler behind this same interface rather than a second code path in the
 // UI. That is what keeps guest and signed-in users on identical behaviour.
 
-import { CustomPad, CustomBtnDef, BtnId, PosOverrideMap } from "../types";
+import { CustomPad, CustomBtnDef, BtnId } from "../types";
 import { KEYS, readJson, writeJson } from "./storage";
 
 /** Widget id. Moved here from App.tsx because pad migrations mint ids and the
@@ -148,11 +148,6 @@ export function savePads(pads: CustomPad[]): boolean {
   return ok;
 }
 
-/** Count for the Account hub. Real number or nothing — never a placeholder. */
-export function padCount(): number {
-  return loadPads().length;
-}
-
 // ─── Tombstones ───────────────────────────────────────────────────────────────
 //
 // A deleted pad has to be remembered, not just removed. Sync merges by padId,
@@ -206,7 +201,6 @@ export function replacePads(pads: CustomPad[]): boolean {
 // updated in a release without discarding what the user changed.
 
 export type PresetOverrides = Record<string, Partial<Record<BtnId, string>>>;
-export type PosOverrides = Record<string, PosOverrideMap>;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -216,20 +210,6 @@ export function loadPresetOverrides(): PresetOverrides {
   return readJson<PresetOverrides>(KEYS.presetOverrides, {}, isRecord as (v: unknown) => v is PresetOverrides);
 }
 
-export function savePresetOverrides(v: PresetOverrides): boolean {
-  return writeJson(KEYS.presetOverrides, v);
-}
 
-export function loadPosOverrides(): PosOverrides {
-  return readJson<PosOverrides>(KEYS.posOverrides, {}, isRecord as (v: unknown) => v is PosOverrides);
-}
 
-export function savePosOverrides(v: PosOverrides): boolean {
-  return writeJson(KEYS.posOverrides, v);
-}
 
-/** How many built-in presets ship with the app. Passed in by the caller that
- *  owns the preset list, so this module never has to guess a count. */
-export function standardLayoutCount(presets: readonly unknown[]): number {
-  return presets.length;
-}

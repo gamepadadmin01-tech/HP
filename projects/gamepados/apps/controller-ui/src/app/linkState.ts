@@ -67,20 +67,6 @@ export function linkState(t: LinkTelemetry | null | undefined): LinkState {
   return "no-reply";
 }
 
-/** Short label for the header badge. Space is tight — keep these brief. */
-export function linkLabel(s: LinkState): string {
-  switch (s) {
-    case "connected":
-      return "CONNECTED";
-    case "no-reply":
-      return "NO REPLY";
-    case "stalled":
-      return "LINK LOST";
-    default:
-      return "DISCONNECTED";
-  }
-}
-
 /**
  * One sentence a user can act on. Deliberately names the likely cause rather
  * than describing the symptom back at them.
@@ -98,15 +84,3 @@ export function linkHint(s: LinkState): string {
   }
 }
 
-/** Indicator colour. `no-reply`/`stalled` are amber: degraded, not dead. */
-export function linkColor(s: LinkState): string {
-  switch (s) {
-    case "connected":
-      return "#34d399";
-    case "no-reply":
-    case "stalled":
-      return "#fbbf24";
-    default:
-      return "#ef4444";
-  }
-}

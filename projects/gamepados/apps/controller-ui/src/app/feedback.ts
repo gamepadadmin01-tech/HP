@@ -235,21 +235,6 @@ export function submitRating(stars: number, nowMs: number, note?: string): void 
   void flushFeedbackQueue();
 }
 
-/**
- * Whether this install has ever sent feedback.
- *
- * Local only, and deliberately so: it drives what the launch notice ASKS for,
- * never what anyone is entitled to. The gift is granted server-side, and a
- * flag in localStorage must not be able to influence that.
- */
-export function hasSentFeedback(): boolean {
-  try {
-    return localStorage.getItem("gp_feedback_sent") === "1";
-  } catch {
-    return false;
-  }
-}
-
 /** Record that feedback went through. Safe to call more than once. */
 export function markFeedbackSent(): void {
   try {

@@ -110,21 +110,6 @@ export function stickMaxOffset(widgetR: number): number {
 }
 
 /**
- * Radial response curve, magnitude only so direction and the circular deadzone
- * shape are untouched (a per-axis curve would reintroduce the diagonal drift the
- * circular deadzone exists to prevent).
- *
- * exp 1 is the identity and reproduces the previous linear map exactly. Above 1
- * trades top-end travel — where a touch stick is already saturated — for
- * near-centre resolution: at 1.6, 10% output needs ~1.9mm of thumb travel instead
- * of ~0.66mm. MUST match NativeInputEngine.radialDeadzone.
- */
-export function applyStickCurve(factor: number): number {
-  const exp = stickFeel.curveExp;
-  return exp === 1 ? factor : Math.pow(factor, exp);
-}
-
-/**
  * The whole stick response in one place: circular deadzone, the curve, then the sensitivity gain.
  * Input is the stick's position in design units (±STICK_MAX_R); output is the normalized -1..1 value that
  * becomes the axis byte. App.tsx's packet builder calls this for BOTH sticks (gain 1 for the left one), and
