@@ -1,4 +1,5 @@
 import React, { useState, useRef } from "react";
+import { CONTROLLER } from "../themeVariant";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { Plus, ArrowLeft, Settings, Trash2, Pencil, TriangleAlert, GripHorizontal } from "lucide-react";
 import { ShellMotion } from "./ShellMotion";
@@ -92,8 +93,8 @@ const CANVAS_H = 570;
 const CX = CANVAS_W / 2;
 const CY = CANVAS_H / 2;
 
-const DEFAULT_NORM = "rgba(79, 134, 198, 0.12)";
-const DEFAULT_HELD = "rgba(79, 134, 198, 0.85)";
+const DEFAULT_NORM = `rgba(${CONTROLLER.rgb}, 0.12)`;   // the controller colour (themeVariant.ts); was blue
+const DEFAULT_HELD = `rgba(${CONTROLLER.rgb}, 0.85)`;
 
 // The toolbar, collapsed (nothing selected): back, then +. The "+" popup grows out of the "+", so its origin is derived from these.
 const TOOLBAR_W = 120;                                   // collapsed width, px

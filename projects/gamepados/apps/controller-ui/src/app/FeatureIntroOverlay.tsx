@@ -229,7 +229,7 @@ export function FeatureIntroOverlay({
               maxWidth: 360,
               borderRadius: 16,
               background: PANEL,
-              border: "1px solid rgba(79,134,198,0.12)",
+              border: "1px solid rgba(255,104,38,0.12)",
               boxShadow: "none",
               overflow: "hidden",
               fontFamily: "system-ui, sans-serif",
@@ -355,7 +355,7 @@ export function FeatureIntroOverlay({
                       style={{
                         width: "100%", boxSizing: "border-box", marginTop: 16, padding: 12,
                         borderRadius: 12, background: SUNK,
-                        border: "1px solid rgba(79,134,198,0.14)",
+                        border: "1px solid rgba(255,104,38,0.14)",
                         color: "var(--calm-ink, #f0f2ed)", fontSize: 13, lineHeight: 1.5,
                         fontFamily: "system-ui, sans-serif", resize: "none", outline: "none",
                       }}
@@ -396,8 +396,8 @@ export function FeatureIntroOverlay({
                       style={{
                         width: 54, height: 54, margin: "0 auto 14px", borderRadius: "50%",
                         display: "flex", alignItems: "center", justifyContent: "center",
-                        background: picked >= 4 ? "rgba(245,196,81,0.12)" : "rgba(79,134,198,0.12)",
-                        border: `1px solid ${picked >= 4 ? "rgba(245,196,81,0.30)" : "rgba(79,134,198,0.28)"}`,
+                        background: picked >= 4 ? "rgba(245,196,81,0.12)" : "rgba(255,104,38,0.12)",
+                        border: `1px solid ${picked >= 4 ? "rgba(245,196,81,0.30)" : "rgba(255,104,38,0.28)"}`,
                       }}
                     >
                       {picked >= 4
@@ -465,8 +465,8 @@ function Badge() {
       style={{
         width: 52, height: 52, margin: "0 auto", borderRadius: 14,
         display: "flex", alignItems: "center", justifyContent: "center",
-        background: "rgba(79,134,198,0.12)",
-        border: "1px solid rgba(79,134,198,0.25)",
+        background: "rgba(255,104,38,0.12)",
+        border: "1px solid rgba(255,104,38,0.25)",
         boxShadow: "none",
       }}
     >

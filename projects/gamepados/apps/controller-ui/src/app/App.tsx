@@ -3012,7 +3012,7 @@ function FeedbackCard() {
               <p className="text-[15px] font-semibold text-emerald-400">Thanks! Your feedback was sent ✓</p>
               <p className="text-[12px] text-muted-foreground">We'll reply to your email if it needs a response.</p>
               <button onClick={closeTray} className="mt-2 px-5 py-2 rounded-lg text-[13px] font-semibold"
-                style={{ background: "rgba(79,134,198,0.15)", color: "var(--calm-accent, #abc8db)", border: "1px solid rgba(79,134,198,0.35)" }}>Done</button>
+                style={{ background: "rgba(255,104,38,0.15)", color: "var(--calm-accent, #abc8db)", border: "1px solid rgba(255,104,38,0.35)" }}>Done</button>
             </div>
           ) : (
             <div className="space-y-3">
@@ -3035,9 +3035,9 @@ function FeedbackCard() {
               <button disabled={!valid || state === "sending"} onClick={submit}
                 className="w-full py-3 rounded-lg text-[14px] font-semibold transition-colors disabled:cursor-not-allowed"
                 style={{
-                  background: valid ? "rgba(79,134,198,0.18)" : "rgba(255,255,255,0.04)",
+                  background: valid ? "rgba(255,104,38,0.18)" : "rgba(255,255,255,0.04)",
                   color: valid ? "var(--calm-accent, #abc8db)" : "rgba(255,255,255,0.4)",
-                  border: `1px solid ${valid ? "rgba(79,134,198,0.4)" : "rgba(255,255,255,0.08)"}`,
+                  border: `1px solid ${valid ? "rgba(255,104,38,0.4)" : "rgba(255,255,255,0.08)"}`,
                 }}>
                 {state === "sending" ? "Sending…" : "Send feedback"}
               </button>
@@ -3256,7 +3256,7 @@ function UpdateChecker({ compact = false }: { compact?: boolean }) {
               )}
               <button onClick={download}
                 className="w-full py-2 rounded-lg text-xs font-bold active:scale-95 transition-transform"
-                style={{ background: "rgba(79,134,198,0.15)", border: "1px solid rgba(79,134,198,0.35)", color: "var(--calm-accent, #abc8db)" }}>
+                style={{ background: "rgba(255,104,38,0.15)", border: "1px solid rgba(255,104,38,0.35)", color: "var(--calm-accent, #abc8db)" }}>
                 {dl ? "Retry update" : (canSelfUpdate ? "Download & install update" : getDistributionChannel() === "playstore" ? "Update via Google Play" : "Update via store")}
               </button>
             </>

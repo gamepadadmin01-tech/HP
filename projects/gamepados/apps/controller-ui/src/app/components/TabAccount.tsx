@@ -69,7 +69,7 @@ export function TabAccount({
       <Section title="Controller library">
         <div className="calm-acc-row p-4 rounded-xl flex items-center gap-4"
           style={{ background: "var(--calm-surface, #202527)", border: "1px solid var(--calm-line, #343c3f)" }}>
-          <div className="p-2.5 rounded-xl" style={{ background: "rgba(79,134,198,0.10)", color: "var(--calm-accent, #abc8db)" }}>
+          <div className="p-2.5 rounded-xl" style={{ background: "rgba(255,104,38,0.10)", color: "var(--calm-accent, #abc8db)" }}>
             <Edit3 size={18} />
           </div>
           <div className="flex-1 min-w-0">
@@ -166,7 +166,7 @@ function SyncPanel() {
       <div className="flex items-center gap-3 p-4">
         <div className="p-2.5 rounded-xl"
           style={{
-            background: failed ? "rgba(224,87,79,0.10)" : "rgba(79,134,198,0.10)",
+            background: failed ? "rgba(224,87,79,0.10)" : "rgba(255,104,38,0.10)",
             color: failed ? "var(--calm-error, #ffaba6)" : "var(--calm-accent, #abc8db)",
           }}>
           {failed ? <CloudOff size={18} /> : <Cloud size={18} />}

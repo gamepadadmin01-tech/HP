@@ -227,8 +227,8 @@ export function QRScanOverlay({ onClose, onConnect }: { onClose: () => void; onC
         .corner2{animation:cornerPulse2 2.4s ease-in-out infinite}
         .c-tl2{animation-delay:0s}.c-tr2{animation-delay:0.6s}.c-bl2{animation-delay:1.2s}.c-br2{animation-delay:1.8s}
         .laser2{position:absolute;left:0;right:0;height:3px;
-          background:linear-gradient(90deg,transparent,#5D90CB,#5D90CB,transparent);
-          box-shadow:0 0 10px rgba(79,134,198,0.6);
+          background:linear-gradient(90deg,transparent,var(--calm-accent),var(--calm-accent),transparent);
+          box-shadow:0 0 10px var(--calm-accent);
           animation:laserSweep2 3s ease-in-out infinite}
       `}</style>
       
@@ -257,18 +257,18 @@ export function QRScanOverlay({ onClose, onConnect }: { onClose: () => void; onC
 
       {/* Target Reticle box */}
       <div className="scan-window relative z-10 rounded-xl" style={{ width: "min(72vw,52vh)", height: "min(72vw,52vh)" }}>
-        <div className="absolute inset-0 rounded-xl" style={{ background: "rgba(79,134,198,0.01)", border: "1px solid rgba(79,134,198,0.2)" }} />
+        <div className="absolute inset-0 rounded-xl" style={{ background: "rgba(255,104,38,0.01)", border: "1px solid rgba(255,104,38,0.2)" }} />
         {[
-          { pos:"top-0 left-0", cls:"c-tl2", style:{borderTop:"3px solid #5D90CB",borderLeft:"3px solid #5D90CB",borderRadius:"3px 0 0 0"} },
-          { pos:"top-0 right-0", cls:"c-tr2", style:{borderTop:"3px solid #5D90CB",borderRight:"3px solid #5D90CB",borderRadius:"0 3px 0 0"} },
-          { pos:"bottom-0 left-0", cls:"c-bl2", style:{borderBottom:"3px solid #5D90CB",borderLeft:"3px solid #5D90CB",borderRadius:"0 0 0 3px"} },
-          { pos:"bottom-0 right-0", cls:"c-br2", style:{borderBottom:"3px solid #5D90CB",borderRight:"3px solid #5D90CB",borderRadius:"0 0 3px 0"} },
+          { pos:"top-0 left-0", cls:"c-tl2", style:{borderTop:"3px solid var(--calm-accent)",borderLeft:"3px solid var(--calm-accent)",borderRadius:"3px 0 0 0"} },
+          { pos:"top-0 right-0", cls:"c-tr2", style:{borderTop:"3px solid var(--calm-accent)",borderRight:"3px solid var(--calm-accent)",borderRadius:"0 3px 0 0"} },
+          { pos:"bottom-0 left-0", cls:"c-bl2", style:{borderBottom:"3px solid var(--calm-accent)",borderLeft:"3px solid var(--calm-accent)",borderRadius:"0 0 0 3px"} },
+          { pos:"bottom-0 right-0", cls:"c-br2", style:{borderBottom:"3px solid var(--calm-accent)",borderRight:"3px solid var(--calm-accent)",borderRadius:"0 0 3px 0"} },
         ].map(({ pos, cls, style }) => (
           <div key={cls} className={`corner2 ${cls} absolute ${pos} w-10 h-10`} style={style} />
         ))}
         <div className="absolute inset-0 overflow-hidden rounded-xl"><div className="laser2" /></div>
         <div className="absolute inset-0 flex items-center justify-center">
-          <QrCode size={56} style={{ color: "rgba(79,134,198,0.06)" }} />
+          <QrCode size={56} style={{ color: "rgba(255,104,38,0.06)" }} />
         </div>
       </div>
       

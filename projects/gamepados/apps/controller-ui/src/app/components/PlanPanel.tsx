@@ -112,7 +112,7 @@ export function PlanPanel() {
             <p className="text-sm font-medium" style={{ color: DANGER }}>{state.message}</p>
             <button onClick={() => void refresh()}
               className="mt-3 px-3 py-2 rounded-lg text-xs font-semibold"
-              style={{ background: "rgba(79,134,198,0.12)", color: ACCENT }}>
+              style={{ background: "rgba(255,104,38,0.12)", color: ACCENT }}>
               Try again
             </button>
           </div>
@@ -196,7 +196,7 @@ export function PlanPanel() {
           <div className="flex items-center gap-3 p-4">
             <div className="p-2.5 rounded-xl"
               style={{
-                background: ent.unlimited ? "rgba(95,191,143,0.10)" : "rgba(79,134,198,0.10)",
+                background: ent.unlimited ? "rgba(95,191,143,0.10)" : "rgba(255,104,38,0.10)",
                 color: ent.unlimited ? GOOD : ACCENT,
               }}>
               {ent.unlimited ? <InfinityIcon size={18} /> : <Clock size={18} />}
@@ -372,8 +372,8 @@ export function PlanCard({ plan, onChoose }: { plan: CataloguePlan; onChoose?: (
         disabled={busy || done}
         className="console-plan-buy mt-3 w-full py-3 rounded-xl text-sm font-semibold transition-colors disabled:opacity-60"
         style={{
-          background: done ? "rgba(95,191,143,0.14)" : "rgba(79,134,198,0.14)",
-          border: `1px solid ${done ? "rgba(95,191,143,0.35)" : "rgba(79,134,198,0.35)"}`,
+          background: done ? "rgba(95,191,143,0.14)" : "rgba(255,104,38,0.14)",
+          border: `1px solid ${done ? "rgba(95,191,143,0.35)" : "rgba(255,104,38,0.35)"}`,
           color: done ? GOOD : ACCENT,
         }}>
         {done ? <span className="inline-flex items-center gap-1.5"><Check size={14} /> Active</span>
@@ -440,7 +440,7 @@ function PromoRow() {
         </div>
         <button type="submit" disabled={busy || !code.trim()}
           className="px-4 rounded-lg text-sm font-semibold disabled:opacity-40"
-          style={{ background: "rgba(79,134,198,0.14)", border: "1px solid rgba(79,134,198,0.35)", color: ACCENT }}>
+          style={{ background: "rgba(255,104,38,0.14)", border: "1px solid rgba(255,104,38,0.35)", color: ACCENT }}>
           {busy ? "…" : "Redeem"}
         </button>
       </div>

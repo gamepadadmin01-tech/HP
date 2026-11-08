@@ -76,12 +76,12 @@
      Account ships #4F86C6, which is 4.22:1 on its own card and therefore
      FAILS AA at the text-xs size it is actually used at. Lifted 8% toward
      white: same hue, 4.79:1. */
-  --primary:            #5D90CB;   /* fill  — dark label 5.89:1 */
+  --primary:            #ff6826;   /* the app's orange since 2026-11-08 (was blue #5D90CB) */
   --primary-foreground: #080C13;
-  --accent:             #7DA5D5;   /* text tone — 6.23:1 on card */
+  --accent:             #ff9a6b;   /* lighter orange for text on cards (was blue #7DA5D5) */
   --accent-foreground:  #080C13;
-  --ring:               rgba(93, 144, 203, 0.55);
-  --sidebar-primary:    #5D90CB;
+  --ring:               rgba(255, 104, 38, 0.55);
+  --sidebar-primary:    #ff6826;
   --sidebar-primary-foreground: #080C13;
 
   /* destructive: Account uses #E0574F — the exact colour this file rejected
@@ -97,8 +97,8 @@
   --input:          rgba(255, 255, 255, 0.10);
 
   /* charts keep semantic separation but move onto the new neutrals */
-  --chart-1: #5D90CB;
-  --chart-2: #7DA5D5;
+  --chart-1: #ff6826;
+  --chart-2: #ff9a6b;
   --chart-3: #34A98A;
   --chart-4: #E0A44A;
   --chart-5: #E2645D;

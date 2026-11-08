@@ -407,3 +407,4 @@
 @media (prefers-reduced-motion: reduce) { .gp-shell .calm-notice-bell:active { transform: none; } }
 /* The old shared "primary" colour (theme.css, now orange) stays teal in the "cool" colour test build. */
 :root[data-variant='cool'] { --primary: #2caaba; }
+:root[data-variant='cool'] { --accent: #5fc6d2; --ring: rgba(44, 170, 186, 0.55); }

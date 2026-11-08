@@ -28,6 +28,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Clock } from "lucide-react";
 import { SPRING_SNAP, toastIn } from "../motion";
 import { getPlaytimeAlert, onPlaytimeChange } from "../store/playtime";
+import { CONTROLLER } from "../themeVariant";
 
 const MINUTES: Record<string, number> = {
   "warn-15": 15,
@@ -41,7 +42,7 @@ export function PlaytimeToast() {
 
   // The last warning is the urgent one, so it is the only one that gets colour.
   const urgent = minutes === 5;
-  const accent = urgent ? "#E2645D" : "#5D90CB";
+  const accent = urgent ? "#E2645D" : `rgb(${CONTROLLER.rgb})`;   // the controller's colour (was blue)
 
   return (
     <div
