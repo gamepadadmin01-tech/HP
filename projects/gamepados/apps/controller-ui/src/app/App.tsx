@@ -3,7 +3,7 @@ import { createTransportCoordinator, USB_CHOICE_EVENT, WIRELESS_CHOICE_EVENT, pr
 import React, { useState, useRef, useEffect, useCallback, useMemo, useSyncExternalStore } from "react";
 // @ts-ignore - Ignore missing declaration file error
 import { createPortal } from "react-dom";
-import { Home, Gamepad2, X, Settings, User, Check, ArrowUpRight, Plus, MoreHorizontal } from "lucide-react";
+import { Home, Gamepad2, X, Settings, User, Plus, MoreHorizontal } from "lucide-react";
 import { QRScanOverlay } from "./components/Dialogs";
 import { PlaytimeLockout } from "./components/PlaytimeLockout";
 import { PlaytimeToast } from "./components/PlaytimeToast";
@@ -2177,24 +2177,19 @@ function ScannerScreen({ onDashboard }: { onDashboard: () => void }) {
 // Standard layout, rendered ONCE for the thumbnail (same shapes/names as gameplay).
 const STANDARD_LAYOUT_THUMB: CustomBtnDef[] = getTrueStandardLayout();
 
-function GamepadCard({ preset, active, onPlay, onEdit, onSelect, isModified }: {
+// Tap anywhere on a layout card to play it, like Remote Gamepad (owner, 2026-11-08); there is no separate Play button
+// or select step any more. The preview is the card's one real button and CSS stretches its tap area over the whole
+// card (redesign.css, .calm-pad-preview::after). The ⋯ menu on custom layouts sits above that area.
+function GamepadCard({ preset, active, onPlay }: {
   preset: GamepadPreset; active: boolean; onPlay: () => void;
-  onEdit?: () => void; onSelect?: () => void; isModified?: boolean;
 }) {
   return <div className="calm-controller-card" data-selected={active}>
-    <button data-no-shell-press className="calm-card-select" onClick={onSelect} aria-pressed={active}>
-      <span><strong className="calm-card-name">{preset.name}</strong><small className="calm-card-detail">{isModified ? "Personalized controls" : "Ready for your next game"}</small></span>
-      <span className="calm-card-check" aria-hidden="true"><Check size={16} /></span>
-    </button>
-    <button className="calm-pad-preview" onClick={onSelect} aria-label={`Select ${preset.name}`} aria-pressed={active}>
+    <button data-no-shell-press className="calm-pad-preview" onClick={onPlay} aria-label={`Play ${preset.name}`}>
       <svg viewBox="0 0 1280 570" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
         {STANDARD_LAYOUT_THUMB.map(b => <PadThumbWidget key={b.uid} b={b} accent={preset.color} />)}
       </svg>
     </button>
-    <div className="calm-card-actions">
-      <button className="calm-primary" onClick={onPlay} aria-label={`Play ${preset.name}`}>Play<ArrowUpRight size={18} aria-hidden="true" /></button>
-      {onEdit && <button className="calm-secondary" onClick={onEdit}>Edit</button>}
-    </div>
+    <div className="calm-card-select"><strong className="calm-card-name">{preset.name}</strong></div>
   </div>;
 }
 
@@ -2673,11 +2668,11 @@ function PadThumbWidget({ b, accent }: { b: CustomBtnDef; accent: string }) {
 }
 
 // ─── Custom pad slot card ─────────────────────────────────────────────────────
-function CustomPadSlot({ pad, active, onPlay, onEdit, onDelete, onDuplicate, onShare, onSelect }: {
+function CustomPadSlot({ pad, active, onPlay, onEdit, onDelete, onDuplicate, onShare }: {
   pad: CustomPad; active: boolean;
-  onPlay: () => void; onEdit: () => void; onDelete: () => void; onDuplicate: () => void; onShare: () => void; onSelect?: () => void;
+  onPlay: () => void; onEdit: () => void; onDelete: () => void; onDuplicate: () => void; onShare: () => void;
 }) {
-  // Only LAUNCH stays on the card; everything else lives behind a ⋮ menu.
+  // Tapping the card plays it (see GamepadCard); everything else lives behind the ⋯ menu.
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirmDel, setConfirmDel] = useState(false);
   const menuRef=useRef<HTMLDivElement>(null);
@@ -2688,18 +2683,14 @@ function CustomPadSlot({ pad, active, onPlay, onEdit, onDelete, onDuplicate, onS
 
   return (
     <div className="calm-controller-card" data-selected={active}>
-      <button data-no-shell-press className="calm-card-select" onClick={onSelect} aria-pressed={active}>
-        <span><strong className="calm-card-name">{pad.name}</strong><small className="calm-card-detail">{pad.buttons.length} controls · Your layout</small></span>
-        <span className="calm-card-check" aria-hidden="true"><Check size={16} /></span>
-      </button>
-      <button className="calm-pad-preview" onClick={onSelect} aria-label={`Select ${pad.name}`} aria-pressed={active}>
+      <button data-no-shell-press className="calm-pad-preview" onClick={onPlay} aria-label={`Play ${pad.name}`}>
         <svg viewBox={`0 0 ${CW} ${CH}`} preserveAspectRatio="xMidYMid meet" aria-hidden="true">
           {pad.buttons.length === 0 && <text x={CW / 2} y={CH / 2} textAnchor="middle" dominantBaseline="central" fontSize={36} fill="rgba(255,255,255,0.5)">Empty layout</text>}
           {pad.buttons.map(b => <PadThumbWidget key={b.uid} b={b} accent={pad.color} />)}
         </svg>
       </button>
+      <div className="calm-card-select"><strong className="calm-card-name">{pad.name}</strong>
       <div className="calm-card-actions">
-        <button className="calm-primary" onClick={onPlay} aria-label={`Play ${pad.name}`}>Play<ArrowUpRight size={18} aria-hidden="true" /></button>
         <button className="calm-icon-button" onClick={() => { setConfirmDel(false); setMenuOpen(v => !v); }} aria-label={`More options for ${pad.name}`} aria-expanded={menuOpen}>
           <MoreHorizontal size={22} aria-hidden="true" />
         </button>
@@ -2754,6 +2745,7 @@ function CustomPadSlot({ pad, active, onPlay, onEdit, onDelete, onDuplicate, onS
             </>
           )}
         </AnimatePresence>
+      </div>
       </div>
     </div>
   );
@@ -2851,13 +2843,12 @@ function TabHome({ realTelemetry, onLaunch, onConnect, onLaunchEditor, selectedP
       <div className="calm-section-heading"><h2>Layouts</h2></div>
       <div className="calm-library" data-count={controllers.length}>
         {controllers.map(({ id, preset, pad }) => pad ? <CustomPadSlot key={id} pad={pad}
-          active={selectedPresetId === id} onSelect={() => onSelectPreset(id)}
+          active={selectedPresetId === id}
           onPlay={() => { onSelectPreset(id); onLaunch(); }}
           onEdit={() => onLaunchEditor?.(pad)}
           onDelete={() => onDeleteCustomPad(id)} onDuplicate={() => onDuplicateCustomPad(pad)} onShare={() => sharePad(pad)} />
           : <GamepadCard key={id} preset={presetOverrides[id] ? { ...preset!, mapping: { ...preset!.mapping, ...presetOverrides[id] } } : preset!}
-              active={selectedPresetId === id} isModified={!!presetOverrides[id]}
-              onSelect={() => onSelectPreset(id)} onPlay={() => { onSelectPreset(id); onLaunch(); }} />)}
+              active={selectedPresetId === id} onPlay={() => { onSelectPreset(id); onLaunch(); }} />)}
       </div>
       <button className="calm-create-layout" data-testid="create-layout-button" onClick={onNewLayout}>
         <Plus size={20} aria-hidden="true" /><span>New custom layout</span>
