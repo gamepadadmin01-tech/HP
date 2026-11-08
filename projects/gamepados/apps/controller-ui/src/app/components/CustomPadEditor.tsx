@@ -4,7 +4,7 @@ import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { Plus, ArrowLeft, Settings, Trash2, Pencil, TriangleAlert, GripHorizontal } from "lucide-react";
 import { ShellMotion } from "./ShellMotion";
 import { CustomPad, CustomBtnDef, WidgetType } from "../types";
-import { RED_NORM, ACCENT_RGB, buttonText } from "./Widgets";
+import { ACCENT_RGB, buttonText } from "./Widgets";
 import { TouchpadArt } from "./Touchpad";
 import { TouchpadSettings } from "./TouchpadSettings";
 import { ADD_ITEMS, ADD_CELL, AddItem } from "../addItems";
@@ -177,7 +177,7 @@ const WidgetPreview = React.memo(function WidgetPreview({ b }: { b: CustomBtnDef
   const stroke = "rgba(255,255,255,0.12)";
   // The live pad draws every widget in RED_NORM and ignores the colours stored on the
   // widget, so the preview must too (it used a blue default, and ABXY drew at 85 %).
-  const fill = RED_NORM;
+  const fill = `rgba(${ACCENT_RGB}, 0.16)`;   // the editor's own preview tint (the live pad went darker on 2026-11-09)
 
   if (b.type === "dpad") {
     // Mirror the gameplay Dpad exactly: circular pad, 4 pie sectors, glossy top

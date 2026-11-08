@@ -1987,6 +1987,8 @@ function ControllerScreen({ onBack, isActive: screenActive, activeMapping, custo
                       <circle cx={btn.x} cy={btn.y} r={btn.r + 6} fill={`rgba(${ACCENT_RGB}, 0.35)`}
                         style={{ pointerEvents: "none", filter: "blur(8px)" }} />
                     )}
+                    {/* the same deep glass base as every other control (Widgets.tsx #padDeep, 2026-11-09) */}
+                    <circle cx={btn.x} cy={btn.y} r={btn.r} fill="url(#padDeep)" style={{ pointerEvents: "none" }} />
                     <circle cx={btn.x} cy={btn.y} r={btn.r}
                       fill={active ? RED_HELD : RED_NORM}
                       stroke={active ? "rgba(255,255,255,0.4)" : "rgba(255,255,255,0.1)"}

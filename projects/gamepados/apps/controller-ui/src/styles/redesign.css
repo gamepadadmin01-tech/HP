@@ -499,3 +499,18 @@
 .gp-shell .calm-lay-import-row .calm-lay-input { min-height: 42px; padding: 0 10px; font-size: 15px; letter-spacing: .12em; }
 .gp-shell .calm-lay-import-row .calm-lay-primary { min-height: 42px; padding: 0 14px; font-size: 14px; }
 .gp-shell .calm-lay-added, .gp-shell .calm-lay-import .calm-lay-error { font-size: 13px; }
+
+/* ── 24. Controller: long press (2026-11-09) ─────────────────────────────────────────────────────────────────────
+   Widgets.tsx BtnBase. A ring of the controller colour charges round a held button (starting after 0.22 s, so a
+   quick tap never shows it), then it and the soft glow breathe while the button stays held. Transform and
+   opacity-type properties only; the ring exists only while a button is held. */
+.gp-hold-ring { stroke-dasharray: 1 1; stroke-dashoffset: 1; opacity: 0;
+  animation: gp-hold-charge .9s cubic-bezier(.3, 0, .2, 1) .22s forwards, gp-hold-breathe 1.4s ease-in-out 1.12s infinite; }
+@keyframes gp-hold-charge { 0% { stroke-dashoffset: 1; opacity: 0; } 12% { opacity: .9; } 100% { stroke-dashoffset: 0; opacity: .9; } }
+@keyframes gp-hold-breathe { 0%, 100% { opacity: .9; } 50% { opacity: .45; } }
+.gp-hold-glow { animation: gp-hold-glow 1.4s ease-in-out 1.12s infinite; }
+@keyframes gp-hold-glow { 0%, 100% { opacity: .06; } 50% { opacity: .13; } }
+@media (prefers-reduced-motion: reduce) {
+  .gp-hold-ring { animation: none; stroke-dashoffset: 0; opacity: .9; }
+  .gp-hold-glow { animation: none; }
+}

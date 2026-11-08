@@ -25,7 +25,10 @@ export const ACCENT_RGB = CONTROLLER.rgb;   // orange 255,104,38 normally; the o
 // NOTE: the RED_* names are historical — these have not been red for a long
 // time. Renaming would touch every widget call site, so the names stay and the
 // values are what actually matter.
-export const RED_NORM = `rgba(${ACCENT_RGB}, 0.16)`;  // resting fill (0.12 until 2026-11-08: a richer amber glass)
+// Resting tint over the dark glass base (#padDeep). 0.07 since 2026-11-09 (owner: "the controller is a little dim, make
+// the buttons somewhat dark and impressive"): with the deep base underneath, more orange only turned the glass muddy.
+// The editor keeps its own lighter preview fill (CustomPadEditor), which has no base under it.
+export const RED_NORM = `rgba(${ACCENT_RGB}, 0.07)`;
 export const RED_HELD = `rgba(${ACCENT_RGB}, 0.85)`;  // pressed fill — the press
 
 /** Text drawn on a button. The stick-click buttons are stored as "Left stick" / "Right stick"
@@ -139,15 +142,25 @@ const phong = PAD_PHONG ? "url(#padPhong)" : undefined;
 export function PadGlassDefs() {
   return (
     <defs>
+      {/* DEEP BASE (2026-11-09): the opaque body under every control, lighter at the top and near-black at the
+          bottom, so each button has depth instead of being a flat black disc with a brown wash over it. */}
+      <linearGradient id="padDeep" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%"   stopColor="#22160f" />
+        <stop offset="55%"  stopColor="#100a07" />
+        <stop offset="100%" stopColor="#030202" />
+      </linearGradient>
+      {/* Shine: 0.42 -> 0.25 at the crown (2026-11-09), so the dark glass stays dark; still clearly glass. */}
       <linearGradient id="padSpec" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0%"   stopColor="#ffffff" stopOpacity="0.42" />
-        <stop offset="45%"  stopColor="#ffffff" stopOpacity="0.05" />
+        <stop offset="0%"   stopColor="#ffffff" stopOpacity="0.25" />
+        <stop offset="42%"  stopColor="#ffffff" stopOpacity="0.04" />
         <stop offset="100%" stopColor="#ffffff" stopOpacity="0" />
       </linearGradient>
+      {/* Rim: a bright top edge with a warm glint of the controller colour, falling to a dark lower edge. */}
       <linearGradient id="padRim" x1="0" y1="0" x2="0.4" y2="1">
-        <stop offset="0%"   stopColor="#ffffff" stopOpacity="0.50" />
-        <stop offset="45%"  stopColor="#ffffff" stopOpacity="0.12" />
-        <stop offset="100%" stopColor="#000000" stopOpacity="0.28" />
+        <stop offset="0%"   stopColor="#ffffff" stopOpacity="0.62" />
+        <stop offset="28%"  stopColor={`rgb(${ACCENT_RGB})`} stopOpacity="0.5" />
+        <stop offset="60%"  stopColor="#ffffff" stopOpacity="0.04" />
+        <stop offset="100%" stopColor="#000000" stopOpacity="0.45" />
       </linearGradient>
       <radialGradient id="padUnder" cx="0.5" cy="0.5" r="0.5">
         <stop offset="55%"  stopColor="#000000" stopOpacity="0.34" />
@@ -217,18 +230,19 @@ function BtnBase({ cx, cy, r, label, id, held, dn, up, fontSize, normColor = RED
           pure-black screen, but stops the gyro indicator (z-0, behind the canvas)
           shining through the ~90%-transparent button fills. */}
       {isRect ? (
-        <rect x={cx - w! / 2} y={cy - h! / 2} width={w!} height={h!} rx={rx} fill="#000" style={{ pointerEvents: "none" }} />
+        <rect x={cx - w! / 2} y={cy - h! / 2} width={w!} height={h!} rx={rx} fill="url(#padDeep)" style={{ pointerEvents: "none" }} />
       ) : (
-        <circle cx={cx} cy={cy} r={r} fill="#000" style={{ pointerEvents: "none" }} />
+        <circle cx={cx} cy={cy} r={r} fill="url(#padDeep)" style={{ pointerEvents: "none" }} />
       )}
       {/* Soft glow — always rendered so it can FADE in/out (opacity transitions,
           `transparent`/conditional mounts can't). Pale target so the press reads as
           a gentle bloom, not a hard flash. */}
       {isRect ? (
         <rect x={cx - w! / 2 - 6} y={cy - h! / 2 - 6} width={w! + 12} height={h! + 12} rx={rx + 6}
-          fill={heldColor} style={{ pointerEvents: "none", filter: "blur(12px)", opacity: isHeld ? 0.06 : 0, transition: "opacity 0.2s ease-out" }} />
+          fill={heldColor} className={isHeld ? "gp-hold-glow" : undefined}
+          style={{ pointerEvents: "none", filter: "blur(12px)", opacity: isHeld ? 0.06 : 0, transition: "opacity 0.2s ease-out" }} />
       ) : (
-        <circle cx={cx} cy={cy} r={r + 14} fill={heldColor}
+        <circle cx={cx} cy={cy} r={r + 14} fill={heldColor} className={isHeld ? "gp-hold-glow" : undefined}
           style={{ pointerEvents: "none", filter: "blur(12px)", opacity: isHeld ? 0.06 : 0, transition: "opacity 0.2s ease-out" }} />
       )}
       <g style={{
@@ -331,7 +345,7 @@ function BtnBase({ cx, cy, r, label, id, held, dn, up, fontSize, normColor = RED
         )}
         {typeof label === "string" || typeof label === "number" || (React.isValidElement(label) && (label.type === "tspan" || label.type === React.Fragment)) ? (
           <text x={cx} y={cy} textAnchor="middle" dominantBaseline="central"
-            fontSize={fs} fontWeight="800" fill={isHeld ? "#ffffff" : "#e5e7eb"}
+            fontSize={fs} fontWeight="800" fill={isHeld ? "#ffffff" : "#f4f4f5"}
             style={{ fontFamily: "'Inter',sans-serif", pointerEvents: "none", userSelect: "none", letterSpacing: "-0.02em" }}>
             {label}
           </text>
@@ -367,6 +381,19 @@ function BtnBase({ cx, cy, r, label, id, held, dn, up, fontSize, normColor = RED
           {rippleCircles(ripples, cx, cy, coverBase)}
         </g>
       )}
+      {/* LONG PRESS (owner, 2026-11-09: "make the button animation interactive when long pressed"). A quick tap looks
+          as before; keep holding and, after a moment, a thin ring of the controller colour charges round the button
+          from the top, then it and the soft glow above breathe for as long as the button is held. Mounted only while
+          held, animated by CSS (redesign.css section 24), so a resting pad costs nothing. */}
+      {isHeld && (isRect ? (
+        <rect x={cx - w! / 2 - 5} y={cy - h! / 2 - 5} width={w! + 10} height={h! + 10} rx={rx + 5}
+          pathLength={1} className="gp-hold-ring" fill="none" stroke={`rgb(${ACCENT_RGB})`} strokeWidth={3}
+          strokeLinecap="round" style={{ pointerEvents: "none" }} />
+      ) : (
+        <circle cx={cx} cy={cy} r={r + 5} transform={`rotate(-90 ${cx} ${cy})`}
+          pathLength={1} className="gp-hold-ring" fill="none" stroke={`rgb(${ACCENT_RGB})`} strokeWidth={3}
+          strokeLinecap="round" style={{ pointerEvents: "none" }} />
+      ))}
     </g>
   );
 }
@@ -464,7 +491,7 @@ function DpadBase({ cx, cy, r, held, dn, up, dirIds }: {
       <PadGlassDefs />
       <ellipse cx={cx} cy={cy + r * 0.72} rx={r * 0.92} ry={r * 0.30}
         fill="url(#padUnder)" style={{ pointerEvents: "none" }} />
-      <circle cx={cx} cy={cy} r={r} fill="#000" style={{ pointerEvents: "none" }} />
+      <circle cx={cx} cy={cy} r={r} fill="url(#padDeep)" style={{ pointerEvents: "none" }} />
       <circle cx={cx} cy={cy} r={r} fill={RED_NORM} filter={phong}
         stroke={anyHeld ? `rgba(${ACCENT_RGB}, 0.35)` : "rgba(255,255,255,0.06)"} strokeWidth={1.5}
         style={{ transition: "stroke 0.12s ease-out" }} />
@@ -557,7 +584,7 @@ function RightStickBase({ cx, cy, outerR, innerR, stick, id, held, dn, up, tag }
       onLostPointerCapture={(e) => { stick.onUp(e.pointerId); up(id); }}
     >
       {/* Black silhouette — occludes the gyro bar behind the canvas (see Btn). */}
-      <circle cx={cx} cy={cy} r={outerR} fill="#000" style={{ pointerEvents: "none" }} />
+      <circle cx={cx} cy={cy} r={outerR} fill="url(#padDeep)" style={{ pointerEvents: "none" }} />
       {/* Soft neon ring while the stick is grabbed — always rendered so it fades
           in/out smoothly rather than snapping on. */}
       <circle cx={cx} cy={cy} r={outerR} fill="none" stroke={`rgba(${ACCENT_RGB}, 0.55)`} strokeWidth={3}
@@ -678,7 +705,7 @@ function TriggerPillBase({ x, y, w, h, rx, label, id, dn, up, fill, onFillChange
       </defs>
 
       {/* Black silhouette — occludes the gyro bar behind the canvas (see Btn). */}
-      <rect x={x} y={y} width={w} height={h} rx={rx} fill="#000" style={{ pointerEvents: "none" }} />
+      <rect x={x} y={y} width={w} height={h} rx={rx} fill="url(#padDeep)" style={{ pointerEvents: "none" }} />
 
       {/* Soft outer glow when active — low intensity, fades in/out smoothly. */}
       <rect x={x - 8} y={y - 8} width={w + 16} height={h + 16} rx={rx + 8}
@@ -733,7 +760,7 @@ function TriggerPillBase({ x, y, w, h, rx, label, id, dn, up, fill, onFillChange
         fill="url(#padSpec)" style={{ pointerEvents: "none" }} />
       <text x={x + w / 2} y={y + h - 22} textAnchor="middle"
         fontSize={w * 0.32} fontWeight="800"
-        fill={isHeld ? "#ffffff" : "#e5e7eb"}
+        fill={isHeld ? "#ffffff" : "#f4f4f5"}
         style={{ fontFamily: "'Inter',sans-serif", pointerEvents: "none", userSelect: "none" }}>
         {label}
       </text>
