@@ -497,7 +497,7 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback, android.hardwa
             val decel = android.view.animation.DecelerateInterpolator()
             provider.view.animate()
                 .alpha(0f)
-                .setDuration(240L)
+                .setDuration(180L)   // no logo any more: a quick fade from the app's colour into the app
                 .setInterpolator(decel)
                 .withEndAction { provider.remove() }
                 .start()

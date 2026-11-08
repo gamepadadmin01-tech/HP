@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- An empty start-screen icon (owner, 2026-11-08: "we don't need logo animation"). Android 12+ always shows a
+     brief starting screen and apps cannot turn it off, so it shows NOTHING but the app's own background colour
+     (splash_bg) and the app fades in over it. splash_icon.xml (the old logo) is kept, just no longer used. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="@android:color/transparent" />
+    <size android:width="1dp" android:height="1dp" />
+</shape>
