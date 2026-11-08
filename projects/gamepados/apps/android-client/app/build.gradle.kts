@@ -384,14 +384,18 @@ android {
     //   "Unresolved reference 'UpdaterBridge'" (MainActivity.kt:560).
     // Registering both keeps Java and Kotlin sources in the same folder working.
     sourceSets {
-        listOf("aptoide", "uptodown", "amazonstore", "indusstore", "apkpure").forEach { flavor ->
+        listOf("aptoide", "amazonstore", "indusstore", "apkpure").forEach { flavor ->
             getByName(flavor).java.srcDir("src/store/java")
             getByName(flavor).kotlin.srcDir("src/store/java")
         }
         getByName("playstore").java.srcDir("src/playstore/java")
         getByName("playstore").kotlin.srcDir("src/playstore/java")
-        getByName("direct").java.srcDir("src/direct/java")
-        getByName("direct").kotlin.srcDir("src/direct/java")
+        // The in-app self-updater (download the APK, verify it, hand it to the installer): the website build, and
+        // since 2026-11-09 the Uptodown build too (owner: "direct download in uptodown and website bundles").
+        listOf("direct", "uptodown").forEach { flavor ->
+            getByName(flavor).java.srcDir("src/direct/java")
+            getByName(flavor).kotlin.srcDir("src/direct/java")
+        }
         // Rewarded ads: the real AdsBridge (src/ads/java) in the three builds that carry the
         // AdMob SDK, the empty one (src/noads/java) everywhere else — see AdsBridge.kt.
         listOf("playstore", "direct", "uptodown").forEach { flavor ->

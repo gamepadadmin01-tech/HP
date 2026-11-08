@@ -3,7 +3,7 @@ import { createTransportCoordinator, USB_CHOICE_EVENT, WIRELESS_CHOICE_EVENT, pr
 import React, { useState, useRef, useEffect, useCallback, useMemo, useSyncExternalStore } from "react";
 // @ts-ignore - Ignore missing declaration file error
 import { createPortal, flushSync } from "react-dom";
-import { Home, X, Settings, User, Plus, MoreHorizontal } from "lucide-react";
+import { Home, X, Settings, User, Plus, MoreHorizontal, Download } from "lucide-react";
 import { QRScanOverlay } from "./components/Dialogs";
 import { PlaytimeLockout } from "./components/PlaytimeLockout";
 import { PlaytimeToast } from "./components/PlaytimeToast";
@@ -2444,6 +2444,7 @@ function TabHome({ realTelemetry, onLaunch, onConnect, onLaunchEditor, selectedP
       {/* The visible intro lines were removed (owner request, 2026-10-12). The heading stays for screen readers and for the UI tests. */}
       <h1 className="sr-only" data-testid="home-heading">Home</h1>
       <ConnectionSummary telemetry={realTelemetry} onClick={onConnect} />
+      <UpdateChecker compact />
       <div className="calm-section-heading"><h2>Your layouts</h2></div>
       <div className="calm-library" data-count={controllers.length}>
         {controllers.map(({ id, preset, pad }) => pad ? <CustomPadSlot key={id} pad={pad}
@@ -2785,9 +2786,11 @@ function UpdateChecker({ compact = false }: { compact?: boolean }) {
   // plain browser download on older app shells without startApkUpdate.
   const download = () => {
     const b = (window as any).AndroidBridge;
-    // playstore flavor: hand the whole flow to Play's own full-screen update UI.
-    if (getDistributionChannel() === "playstore" && b?.startPlayUpdate) {
-      try { b.startPlayUpdate(); } catch {}
+    // Google Play build: open the app's Play Store page, where the player taps Update (owner, 2026-11-09: "redirect
+    // in playstore to update"). Play still decides WHETHER there is an update (checkPlayUpdate above), so the link
+    // only shows once Play really has it.
+    if (getDistributionChannel() === "playstore") {
+      try { b?.openUrl?.("market://details?id=com.gamepad.client"); } catch {}
       return;
     }
     if (b?.startApkUpdate) {
@@ -2806,22 +2809,22 @@ function UpdateChecker({ compact = false }: { compact?: boolean }) {
     dl.phase === "permission" ? (dl.msg || "Permission needed — tap Update again.") :
     `Downloading… ${Math.max(0, dl.pct)}%`;
 
-  // Compact = top-of-dashboard banner; nothing unless an update is available.
+  // Compact = one orange text button on Play, right under "No PC connected" (owner, 2026-11-09); nothing unless an
+  // update is available. Google Play: opens the Play Store page. Website and Uptodown builds: downloads and installs
+  // in the app, and the same line shows the progress. Styles: redesign.css section 25 (.calm-update-link).
   if (compact) {
     if (state !== "available") return null;
+    const text = busy ? dlText
+      : dl?.phase === "error" ? "Update failed · tap to try again"
+      : dl?.phase === "permission" ? "Allow installs, then tap again"
+      : "Update available";
     return (
-      <div className="console-update-banner flex items-center justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-xs font-bold text-foreground">Update available{info.version ? ` · v${info.version}` : ""}</p>
-          {info.notes && <p className="text-xs text-muted-foreground truncate">{info.notes}</p>}
-        </div>
-        {busy ? (
-          <span className="flex-shrink-0 text-xs font-bold" style={{ color: "var(--calm-accent, #abc8db)" }}>{dlText}</span>
-        ) : (
-          <button data-testid="download-update-button" onClick={download} className="calm-text-button">
-            {dl ? "Retry" : "Update"}
-          </button>
-        )}
+      <div className="calm-update-under">
+        <button data-testid="download-update-button" type="button" className="calm-update-link" onClick={download} disabled={busy}
+          aria-label={busy ? text : `Update available${info.version ? `, version ${info.version}` : ""}`}>
+          <Download size={16} aria-hidden="true" />
+          <span>{text}</span>
+        </button>
       </div>
     );
   }
@@ -3091,7 +3094,6 @@ function DashboardScreen({
             )}
             </>}
           </motion.div>
-          {!authOpen && <div className="calm-existing-update"><UpdateChecker compact /></div>}
         </div>
       </main>
 

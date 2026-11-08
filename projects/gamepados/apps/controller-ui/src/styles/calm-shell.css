@@ -85,9 +85,6 @@
 .gp-shell .console-nav-icon { position: relative; width: 50px; height: 30px; display: grid; place-items: center; }
 .gp-shell .console-nav-active { position: absolute; inset: 0; background: var(--calm-tint); border-radius: 8px; }
 .gp-shell .console-nav-icon > svg { position: relative; }
-.gp-shell .calm-existing-update:not(:empty) { margin-top: 22px; padding: 10px 14px; background: var(--calm-surface); border: 1px solid var(--calm-line); border-radius: 10px; }
-.gp-shell .console-update-banner { min-height: 44px; }
-.gp-shell .console-update-banner .calm-text-button { padding-left: 12px; }
 /* Pairing: the transparent native camera cutout must remain transparent. */
 .gp-connect.gp-camera-active { background: transparent; }
 .gp-shell .calm-connect-scroll { min-height: 0; flex: 1; overflow-y: auto; padding: 0 22px calc(var(--android-safe-bottom, env(safe-area-inset-bottom, 0px)) + 30px); scrollbar-width: none; }

@@ -3,7 +3,23 @@
      AdMob SDK for optional rewarded ads (owner's call, 2026-09-29). Its code is src/store/java
      like the other stores, plus src/ads/java (build.gradle.kts). -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- In-app self-update (2026-11-09): like the website build, Uptodown downloads the new APK itself and hands it
+         to the system installer (src/direct/java UpdaterBridge, wired in build.gradle.kts). -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+
     <application>
+        <!-- Hands the downloaded APK to the system installer via a content:// URI (same as the direct manifest). -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
         <!-- AdMob app id (rewarded ads). The SDK refuses to start without it. The admobAppId placeholder is
              Google's test id in debug builds and the live one in release (build.gradle.kts). -->
         <meta-data

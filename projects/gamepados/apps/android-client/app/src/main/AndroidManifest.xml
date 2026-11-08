@@ -8,9 +8,9 @@
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
-    <!-- REQUEST_INSTALL_PACKAGES lives ONLY in src/direct/AndroidManifest.xml —
+    <!-- REQUEST_INSTALL_PACKAGES lives ONLY in src/direct and src/uptodown AndroidManifest.xml —
          Google Play forbids an app from updating its own APK by any method other
-         than Play's own mechanism, so store flavors must never declare this. -->
+         than Play's own mechanism, so the Play build must never declare this. -->
 
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-feature android:name="android.hardware.sensor.gyroscope" android:required="false" />
@@ -65,8 +65,8 @@
             </intent-filter>
         </activity>
 
-        <!-- The FileProvider for the in-app updater's install-trigger lives ONLY in
-             src/direct/AndroidManifest.xml (it has no other use in this app). -->
+        <!-- The FileProvider for the in-app updater's install-trigger lives ONLY in the direct and uptodown
+             AndroidManifest.xml overlays (it has no other use in this app). -->
 
     </application>
 </manifest>
