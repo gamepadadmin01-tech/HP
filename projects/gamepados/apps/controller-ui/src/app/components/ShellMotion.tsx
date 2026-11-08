@@ -24,12 +24,12 @@ function install() {
     const button = event.target.closest<HTMLElement>('.gp-shell button');
     if (!button || button.hasAttribute('disabled') || button.hasAttribute('data-no-shell-press') || button.closest('.calm-pad-preview')) return;
     animations.get(button)?.stop();
-    animations.set(button, animate(button, { scale: .97 }, { duration: .08 }));
+    animations.set(button, animate(button, { scale: .965 }, { duration: .1, ease: [0.2, 0, 0, 1] }));
   };
   const release = () => animations.forEach((animation, button) => {
     animation.stop();
     animations.delete(button);
-    if (button.isConnected) animate(button, { scale: 1 }, { duration: reduced.matches ? 0 : .16 });
+    if (button.isConnected) animate(button, { scale: 1 }, reduced.matches ? { duration: 0 } : { type: 'spring', stiffness: 520, damping: 30, mass: 0.6 });
   });
   identify(document.body);
   const observer = new MutationObserver(records => {

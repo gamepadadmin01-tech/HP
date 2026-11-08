@@ -2125,9 +2125,17 @@ function ScannerScreen({ onDashboard }: { onDashboard: () => void }) {
     onDashboard();
   };
   return <div className={`gp-connect gp-shell absolute inset-0 flex flex-col overflow-hidden ${showScanner ? "gp-camera-active" : ""}`} style={{ pointerEvents: shellPresent ? 'auto' : 'none' }}>
-    {showScanner ? <QRScanOverlay onClose={() => setShowScanner(false)} onConnect={onDashboard} />
-      : <CalmConnect telemetry={realTelemetry}
-          onBack={onDashboard} onScan={() => setShowScanner(true)} onManual={manualConnect} />}
+    {/* Scanner <-> Connect fade through each other (they used to swap in a single frame). */}
+    <AnimatePresence mode="wait" initial={false}>
+      {showScanner
+        ? <motion.div key="scanner" className="absolute inset-0" {...backdropIn} transition={FADE}>
+            <QRScanOverlay onClose={() => setShowScanner(false)} onConnect={onDashboard} />
+          </motion.div>
+        : <motion.div key="connect" className="flex flex-1 min-h-0 flex-col" {...backdropIn} transition={FADE}>
+            <CalmConnect telemetry={realTelemetry}
+              onBack={onDashboard} onScan={() => setShowScanner(true)} onManual={manualConnect} />
+          </motion.div>}
+    </AnimatePresence>
   </div>;
 }
 

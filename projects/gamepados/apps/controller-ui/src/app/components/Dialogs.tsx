@@ -256,17 +256,23 @@ export function QRScanOverlay({ onClose, onConnect }: { onClose: () => void; onC
       </div>
 
       {/* Target Reticle box */}
-      <div className="scan-window relative z-10 rounded-xl" style={{ width: "min(72vw,52vh)", height: "min(72vw,52vh)" }}>
-        <div className="absolute inset-0 rounded-xl" style={{ background: "rgba(255,104,38,0.01)", border: "1px solid rgba(255,104,38,0.2)" }} />
+      <div className="scan-window relative z-10 rounded-[24px]" style={{ width: "min(72vw,52vh)", height: "min(72vw,52vh)" }}>
+        <div className="absolute inset-0 rounded-[24px]" style={{ background: "rgba(255,104,38,0.01)", border: "1px solid rgba(255,104,38,0.2)" }} />
+        {/* Round the dark cover's square hole: four quarter-circle fillers in the hole's corners, the same
+            colour as the cover (cheap: no box-shadow, nothing repaints while the camera runs). */}
+        {[["top-0 left-0", "100% 100%"], ["top-0 right-0", "0% 100%"], ["bottom-0 left-0", "100% 0%"], ["bottom-0 right-0", "0% 0%"]].map(([pos, at]) => (
+          <div key={pos} aria-hidden="true" className={`absolute ${pos} pointer-events-none`}
+            style={{ width: 24, height: 24, background: `radial-gradient(circle at ${at}, transparent 23.5px, rgba(0,0,0,0.85) 24px)` }} />
+        ))}
         {[
-          { pos:"top-0 left-0", cls:"c-tl2", style:{borderTop:"3px solid var(--calm-accent)",borderLeft:"3px solid var(--calm-accent)",borderRadius:"3px 0 0 0"} },
-          { pos:"top-0 right-0", cls:"c-tr2", style:{borderTop:"3px solid var(--calm-accent)",borderRight:"3px solid var(--calm-accent)",borderRadius:"0 3px 0 0"} },
-          { pos:"bottom-0 left-0", cls:"c-bl2", style:{borderBottom:"3px solid var(--calm-accent)",borderLeft:"3px solid var(--calm-accent)",borderRadius:"0 0 0 3px"} },
-          { pos:"bottom-0 right-0", cls:"c-br2", style:{borderBottom:"3px solid var(--calm-accent)",borderRight:"3px solid var(--calm-accent)",borderRadius:"0 0 3px 0"} },
+          { pos:"top-0 left-0", cls:"c-tl2", style:{borderTop:"3px solid var(--calm-accent)",borderLeft:"3px solid var(--calm-accent)",borderRadius:"24px 0 0 0"} },
+          { pos:"top-0 right-0", cls:"c-tr2", style:{borderTop:"3px solid var(--calm-accent)",borderRight:"3px solid var(--calm-accent)",borderRadius:"0 24px 0 0"} },
+          { pos:"bottom-0 left-0", cls:"c-bl2", style:{borderBottom:"3px solid var(--calm-accent)",borderLeft:"3px solid var(--calm-accent)",borderRadius:"0 0 0 24px"} },
+          { pos:"bottom-0 right-0", cls:"c-br2", style:{borderBottom:"3px solid var(--calm-accent)",borderRight:"3px solid var(--calm-accent)",borderRadius:"0 0 24px 0"} },
         ].map(({ pos, cls, style }) => (
           <div key={cls} className={`corner2 ${cls} absolute ${pos} w-10 h-10`} style={style} />
         ))}
-        <div className="absolute inset-0 overflow-hidden rounded-xl"><div className="laser2" /></div>
+        <div className="absolute inset-0 overflow-hidden rounded-[24px]"><div className="laser2" /></div>
         <div className="absolute inset-0 flex items-center justify-center">
           <QrCode size={56} style={{ color: "rgba(255,104,38,0.06)" }} />
         </div>

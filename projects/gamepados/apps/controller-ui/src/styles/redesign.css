@@ -398,3 +398,16 @@
 /* The old shared "primary" colour (theme.css, now orange) stays teal in the "cool" colour test build. */
 :root[data-variant='cool'] { --primary: #2caaba; }
 :root[data-variant='cool'] { --accent: #5fc6d2; --ring: rgba(44, 170, 186, 0.55); }
+
+/* ── 18. Connect to PC motion (2026-11-08) ───────────────────────────────────────────────────────────────────────
+   The chosen option's orange pill slides between options (CalmConnect ChoiceBar); colours fade instead of
+   snapping; fold-outs (manual entry, USB help) clip while they unfold. */
+.gp-shell .calm-segment-slide button { position: relative; isolation: isolate; background: transparent; transition: color .2s ease, border-color .2s ease; }
+.gp-shell .calm-segment-slide button[aria-pressed='true'] { background: transparent; border-color: var(--calm-accent); color: var(--calm-on-accent); }
+.gp-shell .calm-seg-pill { position: absolute; inset: -1px; border-radius: 999px; background: var(--calm-accent); z-index: -1; }
+.gp-shell .calm-seg-label { position: relative; display: inline-flex; align-items: center; gap: 8px; }
+.gp-shell .calm-fold { overflow: hidden; }
+.gp-shell .calm-help-toggle { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 6px 0; font-size: 14px; color: var(--calm-accent); }
+.gp-shell .calm-help-chevron { display: inline-grid; place-items: center; }
+.gp-shell .calm-help .calm-fold p { padding: 0 0 12px 22px; }
+.gp-shell :is(.calm-primary, .calm-secondary, .calm-text-button, .calm-create-layout, .calm-notice-bell, .calm-account-shortcut) { transition: background-color .2s ease, border-color .2s ease, color .2s ease; }
