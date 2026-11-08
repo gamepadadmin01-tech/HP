@@ -81,6 +81,14 @@ export const toastIn = {
   exit: { opacity: 0, y: -8, transition: EXIT },
 };
 
+/** A small drop-down menu under the button that opened it (the ⋯ menu on a layout card): it unfolds DOWN from
+ *  its top-right corner (the button) with the quick spring, and folds back up quicker. */
+export const menuIn = {
+  initial: { opacity: 0, scale: 0.94, y: -4 },
+  animate: { opacity: 1, scale: 1, y: 0, transition: SPRING_SNAP },
+  exit: { opacity: 0, scale: 0.97, y: -2, transition: EXIT },
+};
+
 // ─── The editor "+" popup ─────────────────────────────────────────────────────
 //
 // A panel that GROWS OUT OF the button that opened it, then its tiles arrive one after another.

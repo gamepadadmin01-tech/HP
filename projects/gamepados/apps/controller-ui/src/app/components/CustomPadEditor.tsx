@@ -890,34 +890,24 @@ export function CustomPadEditor({
           <motion.div
             {...backdropIn}
             transition={FADE}
-            className="absolute inset-0 z-[100] flex items-center justify-center bg-black/70 px-4"
+            className="absolute inset-0 z-[100] flex items-center justify-center px-4 console-editor-confirm-scrim"
+            onPointerDown={(e) => { if (e.target === e.currentTarget) setShowExitConfirm(false); }}
           >
+            {/* In the app's own colours (owner, 2026-11-08: it still had the old grey/red look). Styles: redesign.css
+                section 22 (.console-editor-confirm). */}
             <motion.div
               {...cardIn}
               transition={SPRING}
-              role="dialog" aria-label="Unsaved changes" className="gp-shell console-editor-panel border p-6 w-full max-w-[320px] pointer-events-auto"
+              role="dialog" aria-modal="true" aria-labelledby="editor-confirm-title" className="gp-shell console-editor-confirm pointer-events-auto"
             >
-              <h3 className="text-white font-bold text-lg mb-2">Unsaved Changes</h3>
-              <p className="text-zinc-400 text-sm mb-6">Do you want to save your changes before leaving?</p>
-              <div className="flex flex-col gap-3">
-                <button
-                  onClick={() => { setShowExitConfirm(false); handleSaveAndClose(); }}
-                  className="w-full py-3 rounded-xl bg-primary text-black font-bold text-sm active:scale-95 transition-all"
-                >
-                  Save & Quit
-                </button>
-                <button
-                  onClick={() => { setShowExitConfirm(false); close(); }}
-                  className="w-full py-3 rounded-xl bg-red-500/20 text-red-400 font-bold text-sm hover:bg-red-500/30 active:scale-95 transition-all"
-                >
-                  Discard Changes
-                </button>
-                <button
-                  onClick={() => setShowExitConfirm(false)}
-                  className="w-full py-3 rounded-xl bg-white/5 text-white font-bold text-sm hover:bg-white/10 active:scale-95 transition-all"
-                >
-                  Cancel
-                </button>
+              <h3 id="editor-confirm-title">Save changes?</h3>
+              <p>You changed this layout. Save it before you leave the editor?</p>
+              <button data-testid="editor-save-quit-button" className="console-editor-confirm-primary"
+                onClick={() => { setShowExitConfirm(false); handleSaveAndClose(); }}>Save and exit</button>
+              <div className="console-editor-confirm-row">
+                <button data-testid="editor-discard-button" className="console-editor-confirm-danger"
+                  onClick={() => { setShowExitConfirm(false); close(); }}>Discard</button>
+                <button data-testid="editor-keep-editing-button" onClick={() => setShowExitConfirm(false)}>Keep editing</button>
               </div>
             </motion.div>
           </motion.div>

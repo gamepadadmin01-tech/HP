@@ -459,3 +459,27 @@
   .gp-shell :is(.calm-collapse, .calm-collapse[data-open='1'], .calm-seg-pill-ready, .calm-help-chevron, .calm-lay-chevron) { transition: none; }
   .gp-shell .calm-swap-in { animation: none; }
 }
+
+/* ── 21. Layout card ⋯ menu: one plain drop-down (2026-11-08) ────────────────────────────────────────────────────
+   One box in the app's colours, opening DOWN from the ⋯ button (top-right corner), text-only items, no lines
+   between them. Delete asks once inside the same box. Motion: motion.ts menuIn. */
+.gp-shell .calm-card-actions .calm-card-menu { position: absolute; top: calc(100% + 4px); right: 4px; bottom: auto; z-index: 50; width: 168px; padding: 6px; border-radius: 14px; background: var(--calm-soft); border: 0; box-shadow: 0 12px 32px rgba(0, 0, 0, .45); transform-origin: top right; display: flex; flex-direction: column; }
+.gp-shell .calm-card-menu button { display: flex; align-items: center; width: 100%; min-height: 44px; padding: 0 12px; border: 0; border-radius: 10px; background: transparent; color: var(--calm-ink); font-size: 15px; font-weight: 400; text-align: left; box-shadow: none; }
+.gp-shell .calm-card-menu button:active { background: rgba(255, 255, 255, .06); transform: none; }
+.gp-shell .calm-card-menu .calm-card-menu-danger { color: #ff7a6b; }
+.gp-shell .calm-card-menu-ask { margin: 0; padding: 8px 12px 4px; font-size: 14px; line-height: 1.35; color: var(--calm-muted); overflow-wrap: anywhere; }
+
+/* ── 22. Layout editor "Save changes?" box (2026-11-08) ──────────────────────────────────────────────────────────
+   Same look as the app's other pop-ups: warm dark card, big rounded corners, one orange pill for the main choice,
+   plain text for the others. The editor root is not inside .gp-shell, so the card carries .gp-shell itself. */
+.console-editor-confirm-scrim { background: rgba(10, 6, 5, .62); }
+.gp-shell.console-editor-confirm { width: 100%; max-width: 340px; padding: 24px 20px 14px; border-radius: 28px; background: var(--calm-surface); border: 0; color: var(--calm-ink); box-shadow: 0 18px 48px rgba(0, 0, 0, .5); font-family: var(--calm-body); text-align: center; }
+.gp-shell.console-editor-confirm h3 { margin: 0 0 8px; font: 500 20px/1.25 var(--calm-body); color: var(--calm-ink); }
+.gp-shell.console-editor-confirm p { margin: 0 0 20px; font-size: 14px; line-height: 1.5; color: var(--calm-muted); }
+.gp-shell.console-editor-confirm button { min-height: 44px; border: 0; border-radius: 999px; background: transparent; color: var(--calm-ink); font: 400 15px var(--calm-body); box-shadow: none; }
+.gp-shell.console-editor-confirm .console-editor-confirm-primary { width: 100%; min-height: 48px; background: var(--calm-accent); color: var(--calm-on-accent); font-weight: 500; }
+.gp-shell.console-editor-confirm .console-editor-confirm-primary:active { transform: scale(.98); }
+.gp-shell.console-editor-confirm .console-editor-confirm-row { display: flex; gap: 8px; margin-top: 6px; }
+.gp-shell.console-editor-confirm .console-editor-confirm-row button { flex: 1 1 0; }
+.gp-shell.console-editor-confirm .console-editor-confirm-row button:active { background: var(--calm-soft); }
+.gp-shell.console-editor-confirm .console-editor-confirm-danger { color: #ff7a6b; }

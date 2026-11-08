@@ -329,12 +329,12 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback, android.hardwa
             try {
                 val v = vib()
                 if (!v.hasVibrator()) return@runOnUiThread
-                // HALF STRENGTH (owner, 2026-11-08): every button haptic plays at about half the intensity
-                // it had. Predefined effects (TICK/CLICK/HEAVY_CLICK) have no strength setting, so each kind
-                // of motor gets its own half-strength version:
-                //   1. motors with composition primitives -> the same CLICK/TICK primitive at scale 0.5;
-                //   2. motors with amplitude control      -> a short one-shot at about half amplitude;
-                //   3. on/off motors (no amplitude)       -> shorter pulses, which feel weaker. The press
+                // 80% STRENGTH (owner, 2026-11-08: half was too weak, "increase the haptic vibration to 80
+                // percent"). Full strength was the predefined CLICK/TICK/HEAVY_CLICK, which have no strength
+                // setting, so each kind of motor gets its own 80% version:
+                //   1. motors with composition primitives -> the same CLICK/TICK primitive at scale 0.8;
+                //   2. motors with amplitude control      -> a short one-shot at about 80% amplitude;
+                //   3. on/off motors (no amplitude)       -> slightly shorter pulses (13 ms, full was 16). The press
                 //      stays ONE atomic effect, so the release tick cannot cancel it mid-play (Moto G84).
                 // USAGE_TOUCH (API 33+) keeps the phone's own touch-haptic strength setting on top of this.
                 val release = event == "tick" || event == "uiToggle" || event == "buttonRelease"
@@ -344,25 +344,25 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback, android.hardwa
                         android.os.VibrationEffect.Composition.PRIMITIVE_TICK)) {
                     val prim = if (release) android.os.VibrationEffect.Composition.PRIMITIVE_TICK
                                else android.os.VibrationEffect.Composition.PRIMITIVE_CLICK
-                    val scale = if (trigger) 0.6f else 0.5f
+                    val scale = if (trigger) 0.9f else 0.8f
                     vibrateTouch(v, android.os.VibrationEffect.startComposition().addPrimitive(prim, scale).compose())
                 } else if (android.os.Build.VERSION.SDK_INT >= 26 && v.hasAmplitudeControl()) {
                     val effect = when {
-                        release -> android.os.VibrationEffect.createOneShot(8, 80)
-                        trigger -> android.os.VibrationEffect.createOneShot(14, 135)
-                        else    -> android.os.VibrationEffect.createOneShot(12, 120)
+                        release -> android.os.VibrationEffect.createOneShot(8, 130)
+                        trigger -> android.os.VibrationEffect.createOneShot(14, 215)
+                        else    -> android.os.VibrationEffect.createOneShot(12, 205)
                     }
                     vibrateTouch(v, effect)
                 } else if (android.os.Build.VERSION.SDK_INT >= 26) {
                     val effect = when {
-                        release -> android.os.VibrationEffect.createOneShot(6, android.os.VibrationEffect.DEFAULT_AMPLITUDE)
-                        trigger -> android.os.VibrationEffect.createOneShot(10, android.os.VibrationEffect.DEFAULT_AMPLITUDE)
-                        else    -> android.os.VibrationEffect.createWaveform(longArrayOf(0, 9, 30, 9), -1)   // was 16 ms pulses
+                        release -> android.os.VibrationEffect.createOneShot(8, android.os.VibrationEffect.DEFAULT_AMPLITUDE)
+                        trigger -> android.os.VibrationEffect.createOneShot(13, android.os.VibrationEffect.DEFAULT_AMPLITUDE)
+                        else    -> android.os.VibrationEffect.createWaveform(longArrayOf(0, 13, 30, 13), -1)   // full strength was 16 ms pulses
                     }
                     vibrateTouch(v, effect)
                 } else {
-                    // API 24-25: plain on/off vibration, shorter and at half amplitude where honoured.
-                    doVibrate(if (release) 8 else 12, if (release) 75 else 128)
+                    // API 24-25: plain on/off vibration at about 80% (full was 22 ms / 255 and 14 ms / 150).
+                    doVibrate(if (release) 11 else 18, if (release) 120 else 204)
                 }
             } catch (e: Exception) { e.printStackTrace() }
         }

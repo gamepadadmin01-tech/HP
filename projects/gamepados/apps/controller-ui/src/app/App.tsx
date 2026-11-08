@@ -3,7 +3,7 @@ import { createTransportCoordinator, USB_CHOICE_EVENT, WIRELESS_CHOICE_EVENT, pr
 import React, { useState, useRef, useEffect, useCallback, useMemo, useSyncExternalStore } from "react";
 // @ts-ignore - Ignore missing declaration file error
 import { createPortal } from "react-dom";
-import { Home, Gamepad2, X, Settings, User, Plus, MoreHorizontal } from "lucide-react";
+import { Home, X, Settings, User, Plus, MoreHorizontal } from "lucide-react";
 import { QRScanOverlay } from "./components/Dialogs";
 import { PlaytimeLockout } from "./components/PlaytimeLockout";
 import { PlaytimeToast } from "./components/PlaytimeToast";
@@ -45,7 +45,7 @@ import {
 } from "./store/prefs";
 import { TabAccount, AppSupport } from "./components/TabAccount";
 import { getSession, onSessionChange, revalidate } from "./store/account";
-import { SPRING, SPRING_SNAP, FADE, EASE, cardIn, backdropIn, sheetIn, toastIn } from "./motion";
+import { SPRING, SPRING_SNAP, FADE, EASE, cardIn, backdropIn, sheetIn, toastIn, menuIn } from "./motion";
 
 const GAMEPAD_PRESETS: GamepadPreset[] = [
   // color drives THREE things on the Home card: the selected ring, the status
@@ -221,7 +221,7 @@ export function triggerHaptic(strength: number) {
   if (bridge && bridge.playHaptic) { try { bridge.playHaptic(event); return; } catch {} }
   // Fallbacks (older shell / browser): scale the oneshot duration by tier. Kept
   // SHORT on purpose — a haptic is a button-touch tick, not a vibration.
-  const ms = strength <= 30 ? 5 : strength <= 65 ? 7 : 9;   // half strength (2026-11-08): shorter = weaker
+  const ms = strength <= 30 ? 6 : strength <= 65 ? 10 : 13;   // 80% strength (2026-11-08; full was 8/12/16): shorter = weaker
   if (bridge && bridge.triggerHaptic) { bridge.triggerHaptic(ms); }
   else if (navigator.vibrate) { navigator.vibrate(ms); }
 }
@@ -2302,51 +2302,30 @@ function CustomPadSlot({ pad, active, onPlay, onEdit, onDelete, onDuplicate, onS
           <MoreHorizontal size={22} aria-hidden="true" />
         </button>
 
+        {/* The ⋯ menu (owner, 2026-11-08): ONE plain drop-down under the button, in the app's colours, text only, no
+            lines between items. Delete asks once, in the same box. Styles: redesign.css section 21 (.calm-card-menu). */}
         <AnimatePresence>
           {menuOpen && (
             <>
               {/* tap-away backdrop */}
               <div className="fixed inset-0 z-40" onClick={() => { setMenuOpen(false); setConfirmDel(false); }} />
               <motion.div
-                initial={{ opacity: 0, scale: 0.85 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }}
-                ref={menuRef} role="dialog" aria-label={`Actions for ${pad.name}`}
-                transition={SPRING_SNAP}
-                style={{ transformOrigin: "bottom right" }}
-                className="absolute right-2.5 bottom-12 z-50 w-36 rounded-xl overflow-hidden shadow-2xl calm-surface border border-white/12">
+                {...menuIn}
+                ref={menuRef} role="menu" aria-label={`Actions for ${pad.name}`}
+                className="calm-card-menu">
                 {!confirmDel ? (
                   <>
-                    <button onClick={() => { setMenuOpen(false); onEdit(); }}
-                      className="w-full flex items-center gap-2.5 px-3 py-2.5 text-xs font-semibold calm-ink hover:bg-white/8 active:bg-white/12 transition-colors">
-                      <span className="w-3.5 text-center text-primary">✎</span> Edit
-                    </button>
-                    <button onClick={() => { setMenuOpen(false); onDuplicate(); }}
-                      className="w-full flex items-center gap-2.5 px-3 py-2.5 text-xs font-semibold calm-ink hover:bg-white/8 active:bg-white/12 transition-colors border-t border-white/5">
-                      <span className="w-3.5 text-center calm-muted">◫</span> Duplicate
-                    </button>
-                    <button onClick={() => { setMenuOpen(false); onShare(); }}
-                      className="w-full flex items-center gap-2.5 px-3 py-2.5 text-xs font-semibold calm-ink hover:bg-white/8 active:bg-white/12 transition-colors border-t border-white/5">
-                      <span className="w-3.5 text-center text-primary">⤴</span> Share
-                    </button>
-                    <button onClick={() => setConfirmDel(true)}
-                      className="w-full flex items-center gap-2.5 px-3 py-2.5 text-xs font-semibold text-red-400 hover:bg-red-500/10 active:bg-red-500/15 transition-colors border-t border-white/5">
-                      <span className="w-3.5 text-center">🗑</span> Delete
-                    </button>
+                    <button role="menuitem" onClick={() => { setMenuOpen(false); onEdit(); }}>Edit</button>
+                    <button role="menuitem" onClick={() => { setMenuOpen(false); onDuplicate(); }}>Duplicate</button>
+                    <button role="menuitem" onClick={() => { setMenuOpen(false); onShare(); }}>Share</button>
+                    <button role="menuitem" className="calm-card-menu-danger" onClick={() => setConfirmDel(true)}>Delete</button>
                   </>
                 ) : (
-                  <div className="p-2.5">
-                    <p className="text-xs font-bold text-red-400 text-center mb-2 leading-snug">Delete &ldquo;{pad.name}&rdquo;?</p>
-                    <div className="flex gap-1.5">
-                      <button onClick={() => { setMenuOpen(false); setConfirmDel(false); onDelete(); }}
-                        className="flex-1 py-1.5 rounded-lg text-xs font-black bg-red-600 active:bg-red-700 calm-ink transition-all active:scale-95">
-                        DELETE
-                      </button>
-                      <button onClick={() => setConfirmDel(false)}
-                        className="flex-1 py-1.5 rounded-lg text-xs font-semibold calm-muted transition-all active:scale-95"
-                        style={{ background: "var(--calm-soft, #292f31)", border: "1px solid var(--calm-line, #343c3f)" }}>
-                        CANCEL
-                      </button>
-                    </div>
-                  </div>
+                  <>
+                    <p className="calm-card-menu-ask">Delete &ldquo;{pad.name}&rdquo;?</p>
+                    <button role="menuitem" className="calm-card-menu-danger" onClick={() => { setMenuOpen(false); setConfirmDel(false); onDelete(); }}>Delete</button>
+                    <button role="menuitem" onClick={() => setConfirmDel(false)}>Cancel</button>
+                  </>
                 )}
               </motion.div>
             </>
@@ -3499,19 +3478,8 @@ export default function App() {
             className="absolute inset-0 z-50 flex items-center justify-center"
             style={{ background: CONTROLLER.page }}
           >
-            <motion.div
-              initial={{ scale: 0.88, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              transition={SPRING}
-              className="flex flex-col items-center gap-3"
-            >
-              <div className="relative flex items-center justify-center">
-                {/* The controller's own colour (orange, themeVariant.ts), on the controller's page colour (was blue on blue-black). */}
-                <div className="absolute w-24 h-24 rounded-full" style={{ background: `radial-gradient(circle, rgba(${CONTROLLER.rgb},0.45), transparent 68%)`, filter: "blur(16px)" }} />
-                <Gamepad2 className="relative w-14 h-14 animate-pulse" strokeWidth={1.6} style={{ color: `rgb(${CONTROLLER.rgb})` }} />
-              </div>
-              <span className="text-[11px] font-bold tracking-[0.3em] text-white/70" style={{ fontFamily: "'Space Grotesk',sans-serif" }}>LOADING</span>
-            </motion.div>
+            {/* Plain cover only (owner, 2026-11-08: no opening animation for the controller). It hides the phone turning
+                sideways; there is no logo, no pulse and no LOADING text any more. */}
           </motion.div>
         )}
       </AnimatePresence>
@@ -3551,10 +3519,9 @@ export default function App() {
         {view === "controller" && (
           <motion.div
             key="controller"
-            initial={{ opacity: 0 }}
+            initial={false}                                   /* no opening animation (owner, 2026-11-08) */
             animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.34, ease: [0.16, 1, 0.3, 1] }}
+            exit={{ opacity: 0, transition: { duration: 0 } }}
             style={{ willChange: "transform, opacity", backfaceVisibility: "hidden" }}
             className="absolute inset-0 z-20"
           >
