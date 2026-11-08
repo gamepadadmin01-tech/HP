@@ -286,6 +286,7 @@ android {
         // AdMob test IDs by default; the release build type swaps in the live ones (see top of file).
         buildConfigField("String", "ADMOB_REWARDED_ID", "\"$admobTestRewardedId\"")
         manifestPlaceholders["admobAppId"] = admobTestAppId
+        manifestPlaceholders["appLabel"] = "GamepadOS"
 
         // Which ad network plays the rewarded ad: "admob" (playstore) or "unity" (direct, uptodown —
         // set in the flavours below, 2026-10-30). The Unity ids are public identifiers, not secrets.
@@ -454,6 +455,16 @@ android {
             }
         }
         release {
+            // Colour test builds only (owner, 2026-11-08): `-PthemeTest=warm` or `-PthemeTest=cool` makes an
+            // APK that installs BESIDE the real app (its own id and launcher name), for comparing colours on a
+            // phone. Normal builds never pass it and are unchanged. Google sign-in and Play billing do not
+            // work in these test apps (they are tied to the real app id); pairing with the PC does.
+            val themeTest = (findProperty("themeTest") ?: "").toString()
+            if (themeTest == "warm" || themeTest == "cool") {
+                applicationIdSuffix = ".$themeTest"
+                versionNameSuffix = "-$themeTest-test"
+                manifestPlaceholders["appLabel"] = "GamepadOS " + themeTest.replaceFirstChar { it.uppercase() }
+            }
             isMinifyEnabled = true
             isShrinkResources = true   // strip unused resources (smaller APK for users)
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")

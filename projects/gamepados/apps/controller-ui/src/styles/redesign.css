@@ -337,3 +337,19 @@
 .gp-shell .calm-form-message.calm-form-error { color: var(--calm-error); }
 .gp-shell .calm-google-button { width: auto; min-width: 60%; margin: 4px auto 0; padding: 0 24px; min-height: 48px; border-radius: 999px; font: 500 15px var(--calm-body); }
 .gp-shell .calm-auth-or { font-size: 13px; letter-spacing: 0; }
+
+/* ── 15. Colour test "cool": the app takes the controller's colours (owner, 2026-11-08) ────────────────────────
+   Only in a test build made with VITE_THEME_VARIANT=cool (themeVariant.ts marks <html data-variant="cool">).
+   Teal accent from the controller (#2CAABA) on a cool, very dark teal-grey page, not pure black (dark-theme
+   guidance: dark grey surfaces read better and keep depth; accents must keep 4.5:1 for text). Light mode uses a
+   deeper teal so text on white stays readable. */
+:root[data-variant='cool'] .gp-shell {
+  --calm-accent: #2caaba; --calm-on-accent: #031114; --calm-tint: #0f3439;
+  --calm-paper: #0b1214; --calm-surface: #132024; --calm-soft: #1b2c31; --calm-line: #24383d;
+  --calm-ink: #e8f3f4; --calm-muted: #9cb2b6; --calm-art: #050b0d;
+}
+:root[data-variant='cool'] .gp-shell[data-calm-theme='light'] {
+  --calm-accent: #0e7f8c; --calm-on-accent: #ffffff; --calm-tint: #d4f0f3;
+  --calm-paper: #f3f8f8; --calm-surface: #ffffff; --calm-soft: #e3eef0; --calm-line: #d2e2e5;
+  --calm-ink: #0f1d20; --calm-muted: #52676b;
+}

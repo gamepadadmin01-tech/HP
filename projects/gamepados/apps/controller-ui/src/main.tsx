@@ -3,6 +3,7 @@ import App from "./app/App.tsx";
 import "./styles/index.css";
 import { migrate } from "./app/store/storage";
 import { MotionConfig } from "framer-motion";
+import { applyThemeVariant } from "./app/themeVariant";
 
 // Bring stored data up to the current schema before anything reads it. React's
 // useState initialisers run during the first render, so this has to happen
@@ -10,4 +11,5 @@ import { MotionConfig } from "framer-motion";
 // read the old shape.
 migrate();
 
+applyThemeVariant();
 createRoot(document.getElementById("root")!).render(<MotionConfig reducedMotion="user"><App /></MotionConfig>);

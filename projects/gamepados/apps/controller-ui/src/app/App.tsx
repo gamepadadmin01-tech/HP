@@ -26,6 +26,7 @@ import { motion, AnimatePresence, useIsPresent, useReducedMotion } from "framer-
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 import { View, BtnId, DashTab, GamepadPreset, CustomPad, CustomBtnDef, WidgetType, WidgetShape, WidgetAnchor, BtnPosOverride, PosOverrideMap } from "./types";
+import { CONTROLLER } from "./themeVariant";
 import { CustomPadEditor } from "./components/CustomPadEditor";
 import { FeatureIntroOverlay, recordSessionEnd, noteControllerOpened, suppressIntroOnce, introRated } from "./FeatureIntroOverlay";
 import { FEEDBACK_URL, initFeedbackSync, markFeedbackSent } from "./feedback";
@@ -53,7 +54,7 @@ const GAMEPAD_PRESETS: GamepadPreset[] = [
   // --primary, so the most prominent control on Home belongs to the palette.
   // (CUSTOM_COLORS below is deliberately NOT retargeted: those are per-pad
   // identity swatches the user picks, and they are meant to differ.)
-  { id:"xbox", name:"Standard Controller", genre:"Full-size wireless controller layout", color:"#5D90CB", icon:"🟢",
+  { id:"xbox", name:"Standard Controller", genre:"Full-size wireless controller layout", color:CONTROLLER.thumb, icon:"🟢",
     // Display real controller button names, not game-action nicknames.
     mapping:{ A:"A",B:"B",X:"X",Y:"Y",LT:"LT",RT:"RT",LB:"LB",RB:"RB",up:"↑",down:"↓",left:"←",right:"→",lstick:"L3",rstick:"R3" } },
 ];
@@ -72,8 +73,8 @@ export const BTN_PALETTE_COLORS = [
 
 export function getTrueStandardLayout(): CustomBtnDef[] {
   // Match the exact same cyan/blue glassmorphic colors as TriggerPill (LT/RT)
-  const NORM = "rgba(79, 134, 198, 0.12)";
-  const HELD = "rgba(79, 134, 198, 0.85)";
+  const NORM = `rgba(${CONTROLLER.chip}, 0.12)`;
+  const HELD = `rgba(${CONTROLLER.chip}, 0.85)`;
   // Coordinates baked from the first GamepadOS app's canonical 1280×570
   // design space. All buttons scaled up to fill the controller more completely.
   //
@@ -1630,7 +1631,7 @@ function ControllerScreen({ onBack, isActive: screenActive, activeMapping, custo
 
 
   return (
-    <div className="fixed inset-0 overflow-hidden" style={{ background: "#000000", touchAction: "none" }}>
+    <div className="fixed inset-0 overflow-hidden" style={{ background: CONTROLLER.page, touchAction: "none" }}>
       <button onClick={onBack} data-nx="1"
         className="absolute z-10 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-white text-xs font-bold transition-all hover:bg-white/10 active:scale-95"
         style={{ 
@@ -1700,8 +1701,8 @@ function ControllerScreen({ onBack, isActive: screenActive, activeMapping, custo
             className="pointer-events-auto flex items-center gap-1 px-2 py-0.5 rounded-full text-[8px] font-bold tracking-wider uppercase active:scale-90 transition-transform"
             style={{
               color: gyroOn ? "#5D90CB" : "rgba(255,255,255,0.45)",
-              background: gyroOn ? "rgba(79,134,198,0.12)" : "rgba(255,255,255,0.05)",
-              border: gyroOn ? "1px solid rgba(79,134,198,0.5)" : "1px solid rgba(255,255,255,0.12)",
+              background: gyroOn ? `rgba(${CONTROLLER.chip},0.12)` : "rgba(255,255,255,0.05)",
+              border: gyroOn ? `1px solid rgba(${CONTROLLER.chip},0.5)` : "1px solid rgba(255,255,255,0.12)",
               touchAction: "manipulation",
               pointerEvents: "auto",
             }}>

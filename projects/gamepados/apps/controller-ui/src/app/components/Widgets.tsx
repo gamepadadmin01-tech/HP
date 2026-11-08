@@ -1,6 +1,7 @@
 import React, { useRef } from "react";
 import { BtnId } from "../types";
 import { stickMaxOffset } from "../stickFeel";
+import { CONTROLLER } from "../themeVariant";
 
 // Stick API shape — matches the object returned by useStick() in App.tsx.
 // Declared here so RightStick stays a pure component (no hook import).
@@ -19,7 +20,7 @@ export type StickApi = {
 // cannot resolve a CSS var() — only the style={{}} call sites could, and mixing
 // the two would leave half the pad on the old colour.
 // Matches --primary in the theme (Deep Teal #2CAABA).
-export const ACCENT_RGB = "44, 170, 186";
+export const ACCENT_RGB = CONTROLLER.rgb;   // teal 44,170,186 normally; orange in the "warm" colour test (themeVariant.ts)
 
 // NOTE: the RED_* names are historical — these have not been red for a long
 // time. Renaming would touch every widget call site, so the names stay and the
@@ -362,7 +363,7 @@ function BtnBase({ cx, cy, r, label, id, held, dn, up, fontSize, normColor = RED
       {isHeld && (
         <g clipPath={`url(#${clipId})`} style={{ pointerEvents: "none" }}>
           <ellipse cx={cx} cy={cy} rx={span * 0.9} ry={(isRect ? h! : r * 2) * 0.3}
-            fill="rgba(200,225,255,0.10)" style={{ filter: "blur(6px)" }}>
+            fill={`rgba(${CONTROLLER.shine},0.10)`} style={{ filter: "blur(6px)" }}>
             <animate attributeName="cx"
               values={`${cx - span};${cx + span};${cx - span}`}
               dur="1.6s" repeatCount="indefinite"
@@ -713,9 +714,9 @@ function TriggerPillBase({ x, y, w, h, rx, label, id, dn, up, fill, onFillChange
       {isHeld && (
         <g clipPath={`url(#${clipId})`} style={{ pointerEvents: "none" }}>
           <rect x={x} y={surfaceY - 2.5} width={w} height={6}
-            fill="rgba(150,190,240,0.28)" style={{ filter: "blur(3px)" }} />
+            fill={`rgba(${CONTROLLER.shineDeep},0.28)`} style={{ filter: "blur(3px)" }} />
           <ellipse cx={x + w / 2} cy={surfaceY} rx={w * 0.24} ry={4}
-            fill="rgba(200,225,255,0.34)" style={{ filter: "blur(4px)" }}>
+            fill={`rgba(${CONTROLLER.shine},0.34)`} style={{ filter: "blur(4px)" }}>
             <animate attributeName="cx"
               values={`${x + w * 0.22};${x + w * 0.78};${x + w * 0.22}`}
               dur="1.5s" repeatCount="indefinite"
