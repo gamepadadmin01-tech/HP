@@ -24,9 +24,9 @@ try {
  await click('[data-testid="create-layout-button"]');await back();assert.equal(await page.$('[role="dialog"][aria-label="Create or import a layout"]'),null);
  await page.$eval('button[aria-label^="Play "]',e=>e.click());await pause();await back();assert.ok(await page.$('[data-testid="home-heading"]'),'Controller Back returns to Play');
  await click('[data-testid="create-layout-button"]');
- await page.evaluate(()=>[...document.querySelectorAll('button')].find(e=>e.textContent.includes('Blank Canvas')).click());await pause();
+ await page.evaluate(()=>[...document.querySelectorAll('button')].find(e=>e.textContent.includes('Blank canvas')).click());await pause();
  await page.type('input[placeholder="My Custom Layout"]','Back test');
- await page.evaluate(()=>[...document.querySelectorAll('button')].find(e=>e.textContent.includes('CREATE & OPEN EDITOR')).click());await pause();
+ await page.evaluate(()=>[...document.querySelectorAll('button')].find(e=>e.textContent.includes('Create and open editor')).click());await pause();
  await page.waitForSelector('[data-testid="editor-back-button"]');await back();assert.equal(await page.$('[data-testid="editor-back-button"]'),null,'Unchanged editor closes without losing existing layouts');
  await click('[data-testid="connect-pc-button"]');await click('[data-testid="scan-qr-button"]');await back();assert.ok(await page.$('[data-testid="connect-heading"]'));await back();assert.ok(await page.$('[data-testid="home-heading"]'));
  await back();assert.equal(await page.evaluate(()=>window.exits),1,'Back on Home backgrounds app');assert.equal(await page.$('[data-testid="connect-heading"]'),null);
