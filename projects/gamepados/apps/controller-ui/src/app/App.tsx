@@ -58,6 +58,11 @@ const GAMEPAD_PRESETS: GamepadPreset[] = [
   { id:"xbox", name:"Standard Controller", genre:"Full-size wireless controller layout", color:CONTROLLER.thumb, icon:"🟢",
     // Display real controller button names, not game-action nicknames.
     mapping:{ A:"A",B:"B",X:"X",Y:"Y",LT:"LT",RT:"RT",LB:"LB",RB:"RB",up:"↑",down:"↓",left:"←",right:"→",lstick:"L3",rstick:"R3" } },
+  // The second built-in layout (owner, 2026-11-09: "we are having two standard controllers now"): Standard Racing,
+  // the owner's shared layout HS2EMN (getStandardRacingLayout). Shown on Play like Standard, and also offered in
+  // "Create a layout" as a starting point to customise, the same way Standard is.
+  { id:"racing", name:"Standard Racing Controller", genre:"Racing layout: brake, throttle and steering stick", color:CONTROLLER.thumb, icon:"🏁", layout:"racing",
+    mapping:{ A:"A",B:"B",X:"X",Y:"Y",LT:"LT",RT:"RT",LB:"LB",RB:"RB",up:"↑",down:"↓",left:"←",right:"→",lstick:"L3",rstick:"R3" } },
 ];
 
 // ─── Custom pad helpers ──────────────────────────────────────────────────────────────────────────────────
@@ -983,7 +988,7 @@ function ControllerScreen({ onBack, isActive: screenActive, activeMapping, custo
   onBack: () => void; isActive: boolean;
   activeMapping: Partial<Record<BtnId, string>>;
   customPad?: CustomPad;
-  controllerLayout?: "standard" | "mobile";
+  controllerLayout?: "standard" | "mobile" | "racing";
   gyroOn: boolean;
   setGyroOn: (v: boolean) => void;
   gyroMaxAngle: number;
@@ -1160,6 +1165,8 @@ function ControllerScreen({ onBack, isActive: screenActive, activeMapping, custo
   const isCustom = true;
   const activePad = useMemo(() => {
     if (customPad) return customPad;
+    // makeDefaultPad(padId, templateKey): the TEMPLATE is the second argument (the first is only an id).
+    if (controllerLayout === "racing") return makeDefaultPad("standardRacing", "standardRacing");
     return makeDefaultPad(controllerLayout === "mobile" ? "mobile" : "standard");
   }, [customPad, controllerLayout]);
 
@@ -2167,6 +2174,7 @@ function ScannerScreen({ onDashboard }: { onDashboard: () => void }) {
 // ─── Gamepad preset card ──────────────────────────────────────────────────────
 // Standard layout, rendered ONCE for the thumbnail (same shapes/names as gameplay).
 const STANDARD_LAYOUT_THUMB: CustomBtnDef[] = getTrueStandardLayout();
+const RACING_LAYOUT_THUMB: CustomBtnDef[] = getStandardRacingLayout();   // the Standard Racing card (2026-11-09)
 
 // Tap anywhere on a layout card to play it (owner, 2026-11-08); there is no separate Play button
 // or select step any more. The preview is the card's one real button and CSS stretches its tap area over the whole
@@ -2177,7 +2185,7 @@ function GamepadCard({ preset, active, onPlay }: {
   return <div className="calm-controller-card" data-selected={active}>
     <button data-no-shell-press className="calm-pad-preview" onClick={onPlay} aria-label={`Play ${preset.name}`}>
       <svg viewBox="0 0 1280 570" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
-        {STANDARD_LAYOUT_THUMB.map(b => <PadThumbWidget key={b.uid} b={b} accent={preset.color} />)}
+        {(preset.layout === "racing" ? RACING_LAYOUT_THUMB : STANDARD_LAYOUT_THUMB).map(b => <PadThumbWidget key={b.uid} b={b} accent={preset.color} />)}
       </svg>
     </button>
     <div className="calm-card-select"><strong className="calm-card-name">{preset.name}</strong></div>

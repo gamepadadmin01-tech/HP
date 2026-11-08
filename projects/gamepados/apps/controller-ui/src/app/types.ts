@@ -11,7 +11,7 @@ export type DashTab = "home" | "system" | "account";
 export type GamepadPreset = {
   id: string; name: string; genre: string; color: string; icon: string;
   displayName?: Partial<Record<BtnId, string>>;
-  layout?: "standard" | "mobile";
+  layout?: "standard" | "mobile" | "racing";
   mapping: Partial<Record<BtnId, string>>;
 };
 
