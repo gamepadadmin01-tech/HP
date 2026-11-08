@@ -1,22 +1,23 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
-import { Clock, ArrowLeft, CloudOff } from "lucide-react";
+import { Clock, CloudOff } from "lucide-react";
 import { motion, useReducedMotion } from "framer-motion";
-import { getPlans, type Catalogue, type PlanCode } from "../api/billing";
+import { getPlans, type Catalogue } from "../api/billing";
 import { getAppInfo, playSellsNothing } from "../platform/native";
 import { getSession, onSessionChange } from "../store/account";
 import { guestTrial } from "../store/guestTrial";
 import { formatDuration } from "../store/billing";
-import { AccountAuth } from "./AccountAuth";
+import { requestSignIn } from "../store/navIntent";
 import { PlanCard } from "./PlanPanel";
 import { getAdState, onAdChange } from "../store/rewardedAd";
 import { getAppConfig, onAppConfigChange, outOfTimeText } from "../store/appConfig";
 import { FreeCard, FreeDivider, freePlayAvailable } from "./FreePlay";
 
-/** Kept mounted across sign-in so the selected plan is not lost at checkout. */
+/** The plans a signed-out player sees. Choosing one opens the app's sign-in page (owner, 2026-11-08: the same
+ *  page as the account button, instead of a second sign-in form inside Plans); after signing in the player lands
+ *  on Account, where the same plan card buys it. */
 export function GuestPlans() {
   const session = useSyncExternalStore(onSessionChange, getSession, getSession);
   const [catalogue, setCatalogue] = useState<Catalogue | null>(null);
-  const [selected, setSelected] = useState<PlanCode | null>(null);
   const [error, setError] = useState("");
   const [attempt, setAttempt] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -37,11 +38,10 @@ export function GuestPlans() {
     return () => { cancelled = true; };
   }, [attempt, session?.token, playComingSoon]);
 
-  if (session && !selected) return null;
+  if (session) return null;
   const trial = guestTrial();
   const expired = trial.remainingSeconds <= 0;
   const offers = catalogue?.plans.filter(p => p.code !== "FREE" && p.purchasable) || [];
-  const chosen = offers.find(p => p.code === selected);
 
   // The Plans page order (owner, 2026-10-26): what you have, then Lifetime as the one big
   // choice, then "or keep playing free" with everything about free time in one card. Sign-in
@@ -60,18 +60,6 @@ export function GuestPlans() {
     <FreeCard />
   </section>;
 
-  if (selected) return <section className="guest-plans space-y-3">
-    <button className="guest-back" onClick={() => setSelected(null)}>
-      <ArrowLeft size={16} /> Back to plans
-    </button>
-    {!session ? <div className="guest-checkout">
-      <p className="mb-4 text-sm calm-muted">Sign in to attach this purchase to your account. You can review the plan again before paying.</p>
-      <AccountAuth />
-    </div> : chosen ? <div className="space-y-3">
-      <PlanCard plan={chosen} />
-      <p className="text-xs calm-muted">Payment is confirmed before access is added.</p>
-    </div> : null}
-  </section>;
 
   const plans = loading
     ? <div className="console-plans-loading" role="status" aria-label="Loading plans" data-testid="plans-loading"><motion.div animate={reduced ? {} : { opacity: [.4, 1, .4] }} transition={{ duration: 1.4, repeat: Infinity }}><i /><i /></motion.div></div>
@@ -79,7 +67,7 @@ export function GuestPlans() {
       ? <motion.div className="console-plans-error" initial={{ opacity: 0 }} animate={{ opacity: 1 }}><CloudOff size={26} /><p role="status" className="text-sm calm-muted">{error}</p><button data-testid="plans-retry-button" className="guest-back mt-2" onClick={() => setAttempt(a => a + 1)}>Try again</button></motion.div>
       : catalogue?.purchasable && offers.length
         ? <div className="space-y-2">
-          {offers.map(plan => <PlanCard key={plan.code} plan={plan} onChoose={p => setSelected(p.code)} />)}
+          {offers.map(plan => <PlanCard key={plan.code} plan={plan} onChoose={() => requestSignIn()} />)}
         </div>
         : null;
 

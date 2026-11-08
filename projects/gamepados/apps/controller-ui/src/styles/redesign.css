@@ -353,3 +353,14 @@
   --calm-paper: #f3f8f8; --calm-surface: #ffffff; --calm-soft: #e3eef0; --calm-line: #d2e2e5;
   --calm-ink: #0f1d20; --calm-muted: #52676b;
 }
+
+/* Google sign-in as one round button, centred under the main button, with a quiet "or" above it (2026-11-08).
+   White circle with Google's own coloured "G" (their branding allows a logo-only button). */
+.gp-shell .calm-auth-alt { display: flex; flex-direction: column; align-items: center; gap: 10px; margin-top: 18px; }
+.gp-shell .calm-auth-alt-label { font-size: 13px; color: var(--calm-muted); }
+.gp-shell .calm-google-circle { width: 56px; height: 56px; min-height: 56px !important; display: grid; place-items: center; border-radius: 50% !important; background: #ffffff; border: 1px solid var(--calm-line); box-shadow: 0 1px 3px rgba(0,0,0,.25); transition: transform .14s ease-out; }
+.gp-shell .calm-google-circle:active:not(:disabled) { transform: scale(.94); }
+.gp-shell .calm-google-circle:disabled { opacity: .7; }
+.gp-shell .calm-google-circle:focus-visible { outline: 2px solid var(--calm-accent); outline-offset: 3px; }
+.gp-shell .calm-google-circle svg { color: #3c4043; }
+@media (prefers-reduced-motion: reduce) { .gp-shell .calm-google-circle { transition: none; } .gp-shell .calm-google-circle:active { transform: none; } }

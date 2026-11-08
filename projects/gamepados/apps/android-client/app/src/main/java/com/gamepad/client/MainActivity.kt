@@ -531,13 +531,23 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback, android.hardwa
         try {
             val disp = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) display
                        else @Suppress("DEPRECATION") windowManager.defaultDisplay
-            val modes = disp?.supportedModes
+            // ONLY modes at the screen's CURRENT resolution (fixed 2026-11-08). Phones that offer the same
+            // refresh rate at two resolutions (FHD+ and QHD+) could get the other one; a resolution switch
+            // changes the screen density, which this activity does not handle in configChanges, so Android
+            // destroyed and recreated it right after launch -- the random "opens, closes, opens" flash on
+            // start (random because it only happened when the phone was not already in that mode).
+            val current = disp?.mode
+            val modes = disp?.supportedModes?.filter {
+                current == null || (it.physicalWidth == current.physicalWidth && it.physicalHeight == current.physicalHeight)
+            }
             (modes?.filter { it.refreshRate <= 121f }?.maxByOrNull { it.refreshRate }
                 ?: modes?.minByOrNull { it.refreshRate })?.let { best ->
-                val lp = window.attributes
-                lp.preferredDisplayModeId = best.modeId
-                lp.preferredRefreshRate = best.refreshRate
-                window.attributes = lp
+                if (best.modeId != current?.modeId) {      // already there: change nothing
+                    val lp = window.attributes
+                    lp.preferredDisplayModeId = best.modeId
+                    lp.preferredRefreshRate = best.refreshRate
+                    window.attributes = lp
+                }
             }
         } catch (e: Exception) {}
         // The manifest sets windowSoftInputMode="adjustNothing" so the immersive

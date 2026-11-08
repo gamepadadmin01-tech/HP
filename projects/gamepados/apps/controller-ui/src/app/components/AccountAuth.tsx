@@ -152,14 +152,7 @@ export function AccountAuth({ standalone = false }: { standalone?: boolean } = {
 
   return <motion.section key={mode} className="calm-auth" data-testid={`auth-${mode}-form`} initial={{ opacity: 0, x: reduced ? 0 : 8 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: reduced ? 0 : .18 }}>
     <div className="calm-auth-heading">{!standalone && <span className="console-eyebrow">YOUR PLAYER PROFILE</span>}<h2 data-testid="auth-heading">{title}</h2><p>{blurb}</p></div>
-    {mode !== "signin" && <button data-testid="auth-back-signin-button" className="calm-text-button" onClick={() => go("signin")}><ArrowLeft size={17} aria-hidden="true" />Back to sign in</button>}
-    {(mode === "signin" || mode === "create") && gAvailable && <>
-      <button data-testid="auth-google-button" type="button" className="calm-google-button" onClick={google} disabled={gBusy || busy}>
-        {gBusy ? <LoaderCircle size={18} className="animate-spin" aria-hidden="true" /> : <GoogleG />}
-        {gBusy ? "Opening Google…" : "Continue with Google"}
-      </button>
-      <div className="calm-auth-or" role="separator"><span>or use your email</span></div>
-    </>}
+    {mode !== "signin" && mode !== "create" && <button data-testid="auth-back-signin-button" className="calm-text-button" onClick={() => go("signin")}><ArrowLeft size={17} aria-hidden="true" />Back to sign in</button>}
     <form onSubmit={submit} className="calm-auth-form">
       {error && <Banner tone="error">{error}</Banner>}
       {notice && !error && <Banner tone="info">{notice}</Banner>}
@@ -177,6 +170,15 @@ export function AccountAuth({ standalone = false }: { standalone?: boolean } = {
         {busy && <LoaderCircle size={17} className="animate-spin" aria-hidden="true" />}
         {busy ? "Please wait…" : mode === "signin" ? "Sign in" : mode === "create" ? "Create account" : mode === "verify" ? "Confirm email" : mode === "forgot" ? "Send reset code" : "Change password"}
       </button>
+      {/* Google as one round button under the main button (owner, 2026-11-08): the page stays simple, and the
+          big "Continue with Google" button and its "or use your email" line are gone. Google's own "G". */}
+      {(mode === "signin" || mode === "create") && gAvailable && <div className="calm-auth-alt">
+        <span className="calm-auth-alt-label">or</span>
+        <button data-testid="auth-google-button" type="button" className="calm-google-circle" onClick={google} disabled={gBusy || busy}
+          aria-label={mode === "create" ? "Sign up with Google" : "Sign in with Google"} title="Continue with Google">
+          {gBusy ? <LoaderCircle size={22} className="animate-spin" aria-hidden="true" /> : <GoogleG size={24} />}
+        </button>
+      </div>}
     </form>
     <div className="calm-auth-links">
       {mode === "signin" && <><button data-testid="auth-forgot-password-button" className="calm-text-button" onClick={()=>go("forgot")}>Forgot your password?</button><button data-testid="auth-create-account-button" className="calm-text-button" onClick={()=>go("create")}>Create an account</button></>}
@@ -187,8 +189,8 @@ export function AccountAuth({ standalone = false }: { standalone?: boolean } = {
 }
 
 /** The Google "G", in Google's own colours (required by their branding rules for the button). */
-function GoogleG() {
-  return <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true">
+function GoogleG({ size = 18 }: { size?: number }) {
+  return <svg width={size} height={size} viewBox="0 0 48 48" aria-hidden="true">
     <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z" />
     <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z" />
     <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z" />
