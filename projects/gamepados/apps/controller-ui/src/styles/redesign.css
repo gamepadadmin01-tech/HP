@@ -255,3 +255,67 @@
 /* The ⋯ menu opens upward over the card, so the card must not clip it; the preview rounds its own top corners. */
 .gp-shell .calm-controller-card,.gp-shell .calm-controller-card[data-selected='true'] { overflow: visible; }
 .gp-shell .calm-pad-preview { border-radius: 11px 11px 0 0; overflow: hidden; }
+
+/* ── 11. Top bar like Remote Gamepad (2026-11-08) ────────────────────────────────────────────────────────────────
+   Three columns: a control on the left, the page name (or the logo on Play) centred, a control on the right. Shorter
+   than before (RG ~64 dp), no line under it. */
+.gp-shell .calm-header-centred { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 8px; min-height: 64px; padding-top: calc(var(--android-safe-top, env(safe-area-inset-top, 0px)) + 8px); padding-bottom: 8px; }
+.gp-shell .calm-header-centred > :first-child { justify-self: start; }
+.gp-shell .calm-header-centred > .calm-header-actions { justify-self: end; }
+.gp-shell .calm-header-title { margin: 0; font: 400 22px var(--calm-body); letter-spacing: 0; color: var(--calm-ink); white-space: nowrap; }
+.gp-shell .calm-header-centred .calm-brand { font-size: 20px; }
+.gp-shell .calm-header-centred .calm-mark { width: 28px; height: 28px; }
+.gp-shell .calm-header-centred .calm-icon-button { width: 44px; height: 44px; border: 0; background: transparent; color: var(--calm-ink); }
+.gp-shell .calm-header-centred .calm-account-shortcut { min-height: 40px; border-radius: 999px; }
+/* Connect: the back arrow now lives in the top bar, so the chips start right under it. */
+.gp-shell .console-connect-chrome { padding-top: 12px; }
+
+/* ── 12. Account page after sign-in, like Remote Gamepad (2026-11-08) ───────────────────────────────────────────
+   The profile sits on the page (no outer box); "Your plan" and the offers are accent headings; what you have is one
+   soft card; rows are plain with plain accent icons (no tinted icon squares); the ad button is an outlined pill. */
+.gp-shell .calm-account-card { gap: 24px; padding: 0; border: 0; border-radius: 0; background: transparent; }
+.gp-shell .calm-acc-avatar { width: 56px; height: 56px; border: 0 !important; background: var(--calm-tint) !important; color: var(--calm-accent) !important; font: 500 22px var(--calm-body); }
+.gp-shell .calm-acc-name { font: 500 22px var(--calm-body) !important; }
+.gp-shell .calm-acc-mail { font-size: 14px; margin-top: 4px; }
+.gp-shell .calm-incard-title { margin: 0 0 10px; font: 600 14px var(--calm-body) !important; letter-spacing: 0; text-transform: none; color: var(--calm-accent); }
+.gp-shell .calm-incard-panel { border-radius: 16px; background: var(--calm-surface); }
+.gp-shell .calm-incard-panel > * + * { border-top: 0; }
+.gp-shell .calm-incard-panel p.text-sm { font-size: 18px !important; font-weight: 500 !important; }
+.gp-shell .calm-incard-panel p.text-xs,.gp-shell .calm-incard-panel span.text-xs { font-size: 14px !important; }
+.gp-shell .calm-account .p-2\.5.rounded-xl { padding: 0 !important; background: transparent !important; }
+.gp-shell .calm-account .p-2\.5.rounded-xl > svg { width: 22px; height: 22px; }
+.gp-shell .calm-acc-row { padding: 6px 0 !important; background: transparent !important; border: 0 !important; }
+.gp-shell .calm-acc-row p.text-sm { font-size: 16px !important; font-weight: 400 !important; }
+.gp-shell .calm-acc-row p.text-xs { font-size: 14px !important; }
+.gp-shell .calm-account .calm-panel :is(p,span).text-sm { font-size: 16px !important; font-weight: 400 !important; }
+.gp-shell .calm-account .calm-panel :is(p,span).text-xs { font-size: 14px !important; }
+.gp-shell .calm-account .calm-panel > * > button:not([data-testid='privacy-policy-link']),.gp-shell .calm-account .calm-panel > button:not([data-testid='privacy-policy-link']) { padding-left: 0 !important; padding-right: 0 !important; min-height: 56px; }
+.gp-shell [data-testid='watch-ad-button'] { width: auto !important; min-width: 70%; margin: 0 auto; padding: 0 24px !important; min-height: 48px; border-radius: 999px !important; background: transparent !important; border-color: var(--calm-line) !important; color: var(--calm-ink) !important; font: 500 15px var(--calm-body) !important; }
+.gp-shell [data-testid='watch-ad-button'] svg { color: var(--calm-accent); }
+
+/* ── 13. Pop-ups (2026-11-08) ────────────────────────────────────────────────────────────────────────────────────
+   Share and Send feedback: round 28 dp corners, no outline, a plain close icon, sentence-size titles, outlined 8 dp
+   fields and centred pill buttons. (The notice / out-of-time sheets are restyled in AppControl.tsx itself.) */
+.gp-shell [role='dialog'][aria-label='Share controller layout'] { border-radius: 28px !important; border: 0 !important; padding: 24px !important; max-width: 340px !important; }
+.gp-shell [role='dialog'][aria-label='Share controller layout'] h3 { font: 500 20px var(--calm-body) !important; }
+.gp-shell [role='dialog'][aria-label='Share controller layout'] h3 + button { background: transparent !important; width: 44px !important; height: 44px !important; color: var(--calm-ink) !important; }
+.gp-shell [role='dialog'][aria-label='Share controller layout'] p { font-size: 14px !important; line-height: 1.5; }
+.gp-shell [role='dialog'][aria-label='Share controller layout'] button.w-full { display: block; width: auto !important; min-width: 60%; margin: 8px auto 0; padding: 0 24px !important; min-height: 44px; border-radius: 999px !important; font: 500 14px var(--calm-body) !important; }
+
+.gp-shell [role='dialog'][aria-label='Send feedback'] { border-radius: 28px 28px 0 0 !important; border: 0 !important; padding: 12px 20px 24px !important; }
+.gp-shell [role='dialog'][aria-label='Send feedback'] p.text-\[15px\] { font: 500 20px var(--calm-body) !important; }
+.gp-shell [role='dialog'][aria-label='Send feedback'] :is(input,textarea) { min-height: 56px; padding: 14px 16px !important; border-radius: 8px !important; background: transparent !important; border-color: var(--calm-line) !important; font-size: 16px !important; }
+.gp-shell [role='dialog'][aria-label='Send feedback'] :is(input,textarea):focus { border-color: var(--calm-accent) !important; }
+.gp-shell [role='dialog'][aria-label='Send feedback'] button.w-full { display: block; width: auto !important; min-width: 60%; margin: 4px auto 0; padding: 0 28px !important; min-height: 48px; border-radius: 999px !important; font: 500 15px var(--calm-body) !important; }
+.gp-shell [role='dialog'][aria-label='Send feedback'] .text-xs { font-size: 13px; }
+/* Sign-in page: the logo sits in the top bar; the page keeps its own heading (it changes to "Create your account"). */
+.gp-shell .console-signin .calm-auth-heading h2 { font: 500 28px var(--calm-body) !important; letter-spacing: 0 !important; }
+.gp-shell .console-signin .calm-auth-heading p { font-size: 14px; }
+.gp-shell .console-signin .calm-form-field input { min-height: 56px; border-radius: 8px; background: transparent; }
+.gp-shell .console-signin .calm-password-field button { height: 54px; }
+.gp-shell .console-signin .calm-primary { min-height: 48px; border-radius: 999px; }
+.gp-shell .console-signin .calm-auth-links .calm-text-button,.gp-shell .console-signin-footer .calm-text-button { font-size: 14px; }
+.gp-shell .console-signin .calm-auth-links .calm-text-button:last-child { color: var(--calm-accent); }
+.gp-shell .console-signin-footer { border-top: 0; }
+.gp-shell .console-signin-footer > span { font-size: 13px; }
+.gp-shell .console-signin .calm-back { font-size: 14px; }

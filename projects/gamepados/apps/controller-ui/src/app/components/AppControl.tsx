@@ -68,8 +68,8 @@ function Sheet({ open, onClose, children, label, z = 2000 }: {
               background: theme === "light" ? "rgba(24,24,26,0.5)" : "rgba(0,0,0,0.68)",
             }}>
             <motion.div {...cardIn} transition={SPRING} style={{
-              width: "100%", maxWidth: 380, maxHeight: "100%", overflowY: "auto", borderRadius: 16, padding: "22px 20px 18px",
-              background: CARD_BG, border: `1px solid ${CARD_LINE}`, boxShadow: "0 24px 60px rgba(0,0,0,0.35)", color: INK,
+              width: "100%", maxWidth: 380, maxHeight: "100%", overflowY: "auto", borderRadius: 28, padding: "24px 24px 22px",
+              background: CARD_BG, border: "none", boxShadow: "0 24px 60px rgba(0,0,0,0.35)", color: INK,
               fontFamily: "var(--calm-body)",
             }}>
               {children}
@@ -84,20 +84,21 @@ function Sheet({ open, onClose, children, label, z = 2000 }: {
 
 function PrimaryButton({ children, onClick, disabled }: { children: React.ReactNode; onClick: () => void; disabled?: boolean }) {
   return <button onClick={onClick} disabled={disabled} style={{
-    width: "100%", minHeight: 48, padding: "12px 16px", borderRadius: 12, border: "none", fontSize: 14, fontWeight: 600,
+    display: "block", margin: "0 auto", minWidth: "60%", minHeight: 48, padding: "12px 28px", borderRadius: 999, border: "none", fontSize: 15, fontWeight: 500,
     background: ACCENT, color: "var(--calm-on-accent)", opacity: disabled ? 0.5 : 1,
   }}>{children}</button>;
 }
 
 function QuietButton({ children, onClick }: { children: React.ReactNode; onClick: () => void }) {
   return <button onClick={onClick} style={{
-    width: "100%", minHeight: 48, padding: "12px 16px", borderRadius: 12, fontSize: 14, fontWeight: 600, marginTop: 8,
+    display: "block", margin: "8px auto 0", minWidth: "60%", minHeight: 48, padding: "12px 28px", borderRadius: 999, fontSize: 15, fontWeight: 500,
     background: "transparent", color: INK, border: `1px solid ${CARD_LINE}`,
   }}>{children}</button>;
 }
 
 function SheetIcon({ children, tint = "var(--calm-tint)", color = ACCENT }: { children: React.ReactNode; tint?: string; color?: string }) {
-  return <div style={{ width: 46, height: 46, borderRadius: 12, display: "grid", placeItems: "center", background: tint, color, marginBottom: 14 }}>{children}</div>;
+  void tint;   // the flat look has no tinted square behind the icon (2026-11-08); the colour stays
+  return <div style={{ display: "grid", placeItems: "center", color, marginBottom: 12 }}>{children}</div>;
 }
 
 // ── Plans screens: why ads are off ──────────────────────────────────────────
@@ -238,12 +239,12 @@ export function NoticeLine() {
   const text = cfg.notice.text;
   return <>
     <button data-testid="notice-line" onClick={() => setOpen(true)} style={{
-      width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 14, textAlign: "left",
-      background: CARD_BG, border: `1px solid ${CARD_LINE}`,
+      width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "6px 0", minHeight: 40, textAlign: "left",
+      background: "transparent", border: "none",
       color: INK, marginBottom: 14,
     }}>
       <Bell size={15} aria-hidden="true" style={{ flex: "none", color: ACCENT }} />
-      <span style={{ flex: 1, minWidth: 0, fontSize: 13, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{text}</span>
+      <span style={{ flex: 1, minWidth: 0, fontSize: 14, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{text}</span>
       <ChevronRight size={16} aria-hidden="true" style={{ flex: "none", color: MUTED }} />
     </button>
     <Sheet open={open} onClose={() => setOpen(false)} label="Notice">
@@ -251,7 +252,7 @@ export function NoticeLine() {
         <SheetIcon><Bell size={22} /></SheetIcon>
         <button aria-label="Close" onClick={() => setOpen(false)} style={{ background: "none", border: "none", color: SOFT, padding: 4 }}><X size={18} /></button>
       </div>
-      <div style={{ fontSize: 11, letterSpacing: "0.08em", textTransform: "uppercase", color: SOFT, marginBottom: 6 }}>From GamepadOS</div>
+      <div style={{ fontSize: 14, fontWeight: 600, color: ACCENT, marginBottom: 6 }}>From GamepadOS</div>
       <p style={{ fontSize: 15, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{text}</p>
       <div style={{ marginTop: 18 }}><PrimaryButton onClick={() => setOpen(false)}>Got it</PrimaryButton></div>
     </Sheet>

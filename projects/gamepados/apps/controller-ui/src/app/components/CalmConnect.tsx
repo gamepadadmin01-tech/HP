@@ -5,7 +5,7 @@ import { ShellMotion } from "./ShellMotion";
 import { getWiredPref, setWiredPref, type WiredPref } from "../store/prefs";
 import { linkState, type LinkTelemetry } from "../linkState";
 import { openUrl } from "../platform/native";
-import { AppearanceButton, CalmBrand, ConnectionSummary } from "./CalmShell";
+import { AppearanceButton, ConnectionSummary } from "./CalmShell";
 
 export function CalmConnect({ telemetry, appearance, onAppearance, onBack, onScan, onManual }: {
   telemetry: LinkTelemetry | null; appearance: "light" | "dark";
@@ -38,9 +38,13 @@ export function CalmConnect({ telemetry, appearance, onAppearance, onBack, onSca
 
   return <>
     <ShellMotion />
-    <header className="calm-header"><CalmBrand /><AppearanceButton appearance={appearance} onClick={onAppearance} /></header>
+    {/* Top bar like Remote Gamepad's connect page: back arrow on the left, the page name centred. */}
+    <header className="calm-header calm-header-centred">
+      <button data-testid="connect-back-button" className="calm-icon-button" onClick={onBack} aria-label="Back to Play"><ArrowLeft size={22} aria-hidden="true" /></button>
+      <p className="calm-header-title" aria-hidden="true">Connect to PC</p>
+      <div className="calm-header-actions"><AppearanceButton appearance={appearance} onClick={onAppearance} /></div>
+    </header>
       <div className="console-connect-chrome">
-        <button data-testid="connect-back-button" className="calm-back" onClick={onBack}><ArrowLeft size={18} aria-hidden="true" />Back to Play</button>
         <h1 className="sr-only" data-testid="connect-heading">Make the connection.</h1>
         <div className="calm-segment" aria-label="Connection method">
           <button data-testid="connection-wireless-button" aria-pressed={tab === "wireless"} onClick={() => { setTab("wireless"); setError(""); }}><Wifi size={18} aria-hidden="true" />Wi-Fi</button>

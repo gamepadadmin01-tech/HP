@@ -66,8 +66,8 @@ export function TabAccount({
       </section>
 
       {/* ── The user's own layouts ── */}
-      <Section title="Controller Library">
-        <div className="p-4 rounded-xl flex items-center gap-4"
+      <Section title="Controller library">
+        <div className="calm-acc-row p-4 rounded-xl flex items-center gap-4"
           style={{ background: "var(--calm-surface, #202527)", border: "1px solid var(--calm-line, #343c3f)" }}>
           <div className="p-2.5 rounded-xl" style={{ background: "rgba(79,134,198,0.10)", color: "var(--calm-accent, #abc8db)" }}>
             <Edit3 size={18} />

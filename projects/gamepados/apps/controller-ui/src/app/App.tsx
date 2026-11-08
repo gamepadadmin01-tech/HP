@@ -3456,10 +3456,12 @@ function DashboardScreen({
   return (
     <div className="gp-dashboard gp-shell flex flex-col h-full" data-calm-theme={appearance} style={{ pointerEvents: shellPresent ? 'auto' : 'none' }}>
       <ShellMotion />
-      <header className="calm-header">
-        <CalmBrand />
+      {/* Top bar like Remote Gamepad (2026-11-08): the page name centred (the logo on Play), the light/dark switch on
+          the left, the account button on the right. The visible title is decorative: each page keeps its own sr-only h1. */}
+      <header className="calm-header calm-header-centred">
+        <AppearanceButton appearance={appearance} onClick={toggle} />
+        {authOpen || tab === "home" ? <CalmBrand /> : <p className="calm-header-title" aria-hidden="true">{tab === "system" ? "Settings" : session ? "Account" : playSellsNothing() ? "Time" : "Plans"}</p>}
         <div className="calm-header-actions">
-          <AppearanceButton appearance={appearance} onClick={toggle} />
           <button ref={profileButtonRef} data-testid="profile-shortcut-button" className="calm-account-shortcut" onClick={openProfile} aria-label={session ? 'Open your profile' : 'Sign in to GamepadOS'}>
             <User size={18} aria-hidden="true" />{session && <span>{session.user.displayName}</span>}
           </button>
