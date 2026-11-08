@@ -126,7 +126,10 @@ memory claimed the old `F:` drive was Google Drive-synced — that was wrong, an
   refresh rate, removing the logo). Cause: an unused black `SurfaceView` under the transparent WebView in
   `MainActivity.setupHybridLayout` showed through until the page painted (brown → black → brown). Removed in
   test APK 16; the WebView is now brown except while the QR camera is on. Never put a surface layer under the
-  WebView again, and never make the WebView transparent outside the camera screen.
+  WebView again, and never make the WebView transparent outside the camera screen. Round 2 (APK 22): an
+  intermittent jitter at the splash hand-off. `setKeepOnScreenCondition` blocked drawing, so the page drew for the
+  first time mid-fade. Now the splash fades only after the WebView confirms the page is on screen
+  (`postVisualStateCallback`). Never go back to `setKeepOnScreenCondition`.
 - **2026-07-26 — `F:` was formatted.** The whole tree moved to `D:\AKHIL\HP`. Three guide files
   were lost. Every memory path was rewritten to `D:\` on 2026-08-13; any `F:\` you now see is
   deliberate history, not a live path.
