@@ -98,7 +98,7 @@ function AllowanceCard() {
   // The arrow keeps its test id so the UI tests that click it still reach the same handler.
   return <button type="button" className="calm-allowance" data-testid="daily-allowance" onClick={() => requestDashboardTab("account")}>
     <span className="console-allowance-icon"><Clock3 size={20} aria-hidden="true" /></span>
-    <span className="calm-grow"><span className="console-eyebrow">{session ? "Your membership" : "Time left"}</span>
+    <span className="calm-grow"><span className="console-eyebrow">{session ? "Your membership" : "Play time"}</span>
       <strong>{session ? "Your plan & playtime" : remaining > 0 ? <><span data-testid="remaining-playtime">{formatDuration(remaining)}</span></> : !cfg.ads.available ? "Get free time" : `Watch an ad for ${ruleWords().reward}`}</strong>
     </span>
     <span className="sr-only">{session ? "View account" : "View plans"}</span>

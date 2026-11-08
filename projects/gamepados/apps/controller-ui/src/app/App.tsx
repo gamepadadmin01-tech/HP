@@ -74,7 +74,7 @@ export function getTrueStandardLayout(): CustomBtnDef[] {
   // Match the exact same cyan/blue glassmorphic colors as TriggerPill (LT/RT)
   const NORM = "rgba(79, 134, 198, 0.12)";
   const HELD = "rgba(79, 134, 198, 0.85)";
-  // Coordinates baked from the original RemoteGamepad app's canonical 1280×570
+  // Coordinates baked from the first GamepadOS app's canonical 1280×570
   // design space. All buttons scaled up to fill the controller more completely.
   //
   // `anchor` reproduces the old app's responsive edge-spreading:
@@ -2177,7 +2177,7 @@ function ScannerScreen({ onDashboard }: { onDashboard: () => void }) {
 // Standard layout, rendered ONCE for the thumbnail (same shapes/names as gameplay).
 const STANDARD_LAYOUT_THUMB: CustomBtnDef[] = getTrueStandardLayout();
 
-// Tap anywhere on a layout card to play it, like Remote Gamepad (owner, 2026-11-08); there is no separate Play button
+// Tap anywhere on a layout card to play it (owner, 2026-11-08); there is no separate Play button
 // or select step any more. The preview is the card's one real button and CSS stretches its tap area over the whole
 // card (redesign.css, .calm-pad-preview::after). The ⋯ menu on custom layouts sits above that area.
 function GamepadCard({ preset, active, onPlay }: {
@@ -2840,7 +2840,7 @@ function TabHome({ realTelemetry, onLaunch, onConnect, onLaunchEditor, selectedP
       {/* One line from the server (admin portal → App control); tap for the whole message. */}
       <NoticeLine />
       <ConnectionSummary telemetry={realTelemetry} onClick={onConnect} />
-      <div className="calm-section-heading"><h2>Layouts</h2></div>
+      <div className="calm-section-heading"><h2>Your layouts</h2></div>
       <div className="calm-library" data-count={controllers.length}>
         {controllers.map(({ id, preset, pad }) => pad ? <CustomPadSlot key={id} pad={pad}
           active={selectedPresetId === id}
@@ -2851,7 +2851,7 @@ function TabHome({ realTelemetry, onLaunch, onConnect, onLaunchEditor, selectedP
               active={selectedPresetId === id} onPlay={() => { onSelectPreset(id); onLaunch(); }} />)}
       </div>
       <button className="calm-create-layout" data-testid="create-layout-button" onClick={onNewLayout}>
-        <Plus size={20} aria-hidden="true" /><span>New custom layout</span>
+        <Plus size={20} aria-hidden="true" /><span>Create a layout</span>
       </button>
       <DashboardAllowance />
       <LaunchNotice />
@@ -3456,7 +3456,7 @@ function DashboardScreen({
   return (
     <div className="gp-dashboard gp-shell flex flex-col h-full" data-calm-theme={appearance} style={{ pointerEvents: shellPresent ? 'auto' : 'none' }}>
       <ShellMotion />
-      {/* Top bar like Remote Gamepad (2026-11-08): the page name centred (the logo on Play), the light/dark switch on
+      {/* Top bar (2026-11-08): the page name centred (the logo on Play), the light/dark switch on
           the left, the account button on the right. The visible title is decorative: each page keeps its own sr-only h1. */}
       <header className="calm-header calm-header-centred">
         <AppearanceButton appearance={appearance} onClick={toggle} />

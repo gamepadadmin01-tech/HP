@@ -38,7 +38,7 @@ export function CalmConnect({ telemetry, appearance, onAppearance, onBack, onSca
 
   return <>
     <ShellMotion />
-    {/* Top bar like Remote Gamepad's connect page: back arrow on the left, the page name centred. */}
+    {/* Top bar: back arrow on the left, the page name centred. */}
     <header className="calm-header calm-header-centred">
       <button data-testid="connect-back-button" className="calm-icon-button" onClick={onBack} aria-label="Back to Play"><ArrowLeft size={22} aria-hidden="true" /></button>
       <p className="calm-header-title" aria-hidden="true">Connect to PC</p>

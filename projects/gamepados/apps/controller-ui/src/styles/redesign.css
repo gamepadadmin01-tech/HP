@@ -1,6 +1,6 @@
 /* ═══ Flat redesign (next update, started 2026-11-06) ═══════════════════════════════════════════════════════════════
    Loaded LAST (index.css), so it wins over calm-shell.css without editing it; delete this file and its import to undo.
-   Target sizes come from measuring Remote Gamepad on the same phone (427 dp wide): main text 16, second line 14, section
+   Target sizes for a 427 dp wide phone: main text 16, second line 14, section
    headings 14 in the accent colour, 16 dp side margins, no boxes or lines around settings, pill buttons and chips, a
    chunky slider, a solid pill behind the active tab, one warm accent on a warm dark background.
    NEVER restyle the controller screen (owner, 2026-11-06): nothing here targets the pad or its widgets. */
@@ -25,7 +25,7 @@
   --console-violet-fill: var(--calm-accent); --console-field: var(--calm-surface);
 }
 
-/* ── 2. Page margins: 16 dp, like Remote Gamepad ───────────────────────────────────────────────────────────────── */
+/* ── 2. Page margins: 16 dp ───────────────────────────────────────────────────────────────── */
 .gp-shell .calm-home-content,.gp-shell .calm-legacy-content { padding: 18px 16px 28px; }
 .gp-shell .calm-connect-scroll,.gp-shell .console-connect-chrome { padding-left: 16px; padding-right: 16px; }
 
@@ -96,9 +96,9 @@
 .gp-shell .calm-nav button[data-testid] .console-nav-active { background: var(--calm-accent); border-radius: 16px; }
 .gp-shell .calm-nav button[aria-current='page'] .console-nav-icon > svg { color: var(--calm-on-accent); }
 
-/* ── 7. Home (Play tab), like Remote Gamepad's home ─────────────────────────────────────────────────────────────
+/* ── 7. Home (Play tab)─────────────────────────────────────────────────────────────
    Top row: connection status on the left (green when connected), a pill "Connect to PC" on the right. Then an accent
-   "Layouts" heading, layout cards with the preview on top and the name under it, a "+ New custom layout" outlined
+   "Your layouts" heading, layout cards with the preview on top and the name under it, a "+ Create a layout" outlined
    pill, and play time as plain text instead of a coloured box. The previews are pictures of the controller; the
    controller screen itself is not touched. */
 .gp-shell .console-connect-entry { display: flex; flex-direction: row-reverse; align-items: center; justify-content: space-between; gap: 12px; margin: 0 0 26px; }
@@ -143,7 +143,7 @@
 .gp-shell .calm-launch-notice p { font-size: 14px; line-height: 1.5; }
 .gp-shell .calm-launch-notice button { margin-top: 6px; padding: 0 18px; min-height: 40px; border: 1px solid var(--calm-line); border-radius: 999px; font: 500 14px var(--calm-body); color: var(--calm-ink); }
 
-/* ── 8. Plans tab, like Remote Gamepad's Upgrade screen ─────────────────────────────────────────────────────────
+/* ── 8. Plans tab─────────────────────────────────────────────────────────
    Offers are soft cards (a lighter shade, no outline, round corners, roomy), with a big name, 16 dp bullet lines and
    a centred pill button. Everything else (status, headings, support) sits on the page with no box. Several of these
    elements carry inline styles from older code, hence the !important on colours and borders. */
@@ -185,17 +185,17 @@
 .gp-shell .calm-panel [data-testid='privacy-policy-link'] { border: 1px solid var(--calm-line) !important; }
 
 /* ── 9. Review fixes (owner, 2026-11-08) ────────────────────────────────────────────────────────────────────────
-   No coloured strip on top of the app, no orange line on top of pop-ups, no line under the header (Remote Gamepad
-   has none of these). */
+   No coloured strip on top of the app, no orange line on top of pop-ups, no line under the header
+   (none of them add anything). */
 .gp-shell .calm-header::before { display: none; }
 .gp-shell .calm-header { border-bottom: 0 !important; box-shadow: none; }
 .gp-shell .console-spectrum { display: none; }
 .gp-shell.calm-dialog [role='dialog'] { border-top: 1px solid var(--calm-line) !important; border-radius: 28px !important; }
 .gp-shell.calm-rating > div { border-top: 1px solid var(--calm-line) !important; border-radius: 28px !important; }
-/* Layout cards: a plain grey outline like Remote Gamepad; the chosen card shows the tick only. */
+/* Layout cards: a plain grey outline; the chosen card shows the tick only. */
 .gp-shell .calm-controller-card[data-selected='true'] { border-color: var(--calm-line); }
 
-/* Settings labels in regular weight, like Remote Gamepad (500 read as bold at 16). */
+/* Settings labels in regular weight (500 read as bold at 16). */
 .gp-shell .calm-setting-label,.gp-shell .calm-setting-detail h3,.gp-shell .calm-range label { font-weight: 400; }
 
 /* Connect: the status and the manual form sit on the page, not in boxes; outlined 56 dp fields; no line above help. */
@@ -216,7 +216,7 @@
 .gp-shell .calm-help summary { padding: 10px 0; }
 .gp-shell .calm-help p { font-size: 14px; line-height: 1.5; }
 
-/* New custom layout pop-up: a soft sheet with round corners, choices as plain rows (icon, 16 title, 14 line) instead
+/* Create-a-layout pop-up: a soft sheet with round corners, choices as plain rows (icon, 16 title, 14 line) instead
    of boxed tiles, a plain close/back icon, outlined fields and an orange pill button. */
 .gp-shell .calm-lay-card { border-radius: 28px; border: 0; }
 .gp-shell .calm-lay-step { padding: 24px 20px; }
@@ -256,9 +256,9 @@
 .gp-shell .calm-controller-card,.gp-shell .calm-controller-card[data-selected='true'] { overflow: visible; }
 .gp-shell .calm-pad-preview { border-radius: 11px 11px 0 0; overflow: hidden; }
 
-/* ── 11. Top bar like Remote Gamepad (2026-11-08) ────────────────────────────────────────────────────────────────
+/* ── 11. Top bar (2026-11-08) ────────────────────────────────────────────────────────────────
    Three columns: a control on the left, the page name (or the logo on Play) centred, a control on the right. Shorter
-   than before (RG ~64 dp), no line under it. */
+   than before (~64 dp), no line under it. */
 .gp-shell .calm-header-centred { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 8px; min-height: 64px; padding-top: calc(var(--android-safe-top, env(safe-area-inset-top, 0px)) + 8px); padding-bottom: 8px; }
 .gp-shell .calm-header-centred > :first-child { justify-self: start; }
 .gp-shell .calm-header-centred > .calm-header-actions { justify-self: end; }
@@ -270,7 +270,7 @@
 /* Connect: the back arrow now lives in the top bar, so the chips start right under it. */
 .gp-shell .console-connect-chrome { padding-top: 12px; }
 
-/* ── 12. Account page after sign-in, like Remote Gamepad (2026-11-08) ───────────────────────────────────────────
+/* ── 12. Account page after sign-in (2026-11-08) ───────────────────────────────────────────
    The profile sits on the page (no outer box); "Your plan" and the offers are accent headings; what you have is one
    soft card; rows are plain with plain accent icons (no tinted icon squares); the ad button is an outlined pill. */
 .gp-shell .calm-account-card { gap: 24px; padding: 0; border: 0; border-radius: 0; background: transparent; }
@@ -319,3 +319,21 @@
 .gp-shell .console-signin-footer { border-top: 0; }
 .gp-shell .console-signin-footer > span { font-size: 13px; }
 .gp-shell .console-signin .calm-back { font-size: 14px; }
+
+/* ── 14. Sign-in, create account, confirm email, reset password (2026-11-08) ─────────────────────────────────────
+   Same language as the rest of the app: 14 labels and links, outlined 56 dp fields, a centred orange pill, messages
+   as a soft card, the Google button as a pill, both "back" links the same size. */
+.gp-shell .console-signin-top .calm-text-button,
+.gp-shell .calm-auth .calm-text-button { font-size: 14px !important; font-weight: 500; min-height: 44px; gap: 8px; }
+.gp-shell .console-signin-top .calm-text-button { color: var(--calm-ink); }
+.gp-shell .calm-auth-heading { margin-bottom: 20px; }
+.gp-shell .calm-auth-heading .console-eyebrow { font: 600 14px var(--calm-body); letter-spacing: 0; text-transform: none; color: var(--calm-accent); }
+.gp-shell .calm-form-field { font-size: 14px; font-weight: 500; }
+.gp-shell .calm-form-field input { min-height: 56px; padding: 0 16px; border-radius: 8px; background: transparent; font-size: 16px; }
+.gp-shell .calm-form-field input:focus { border-color: var(--calm-accent); outline: 1px solid var(--calm-accent); }
+.gp-shell .calm-auth-form .calm-primary,.gp-shell .console-signin .calm-auth-form .calm-primary { display: flex; width: auto; min-width: 60%; margin: 8px auto 0; padding: 0 28px; min-height: 48px; border-radius: 999px; font: 500 15px var(--calm-body); }
+.gp-shell .calm-auth-form .calm-primary:disabled { opacity: .45; }
+.gp-shell .calm-form-message { padding: 14px 16px; border: 0; border-radius: 16px; background: var(--calm-surface); color: var(--calm-ink); font-size: 14px; line-height: 1.5; }
+.gp-shell .calm-form-message.calm-form-error { color: var(--calm-error); }
+.gp-shell .calm-google-button { width: auto; min-width: 60%; margin: 4px auto 0; padding: 0 24px; min-height: 48px; border-radius: 999px; font: 500 15px var(--calm-body); }
+.gp-shell .calm-auth-or { font-size: 13px; letter-spacing: 0; }

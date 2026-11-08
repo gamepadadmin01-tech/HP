@@ -9,7 +9,7 @@ try {
  await p.evaluateOnNewDocument(()=>{localStorage.setItem('custom_pads',JSON.stringify([{padId:'motion-fixture',name:'Motion layout',buttons:[],color:'#00bbff'}])); window.AndroidBridge={onUiReady(){},getNetworkTelemetryJson:()=>JSON.stringify({engineRunning:false,linkAlive:false}),getUsbBroadcastAddress:()=>'',stopEngine(){}};});
  await p.goto('http://127.0.0.1:5187/');await p.waitForSelector('.calm-controller-card');await wait(600);
  const geometry=()=>p.$$eval('.calm-card-name',es=>es.map(e=>{const r=e.getBoundingClientRect();return [r.x,r.y,r.width,r.height]}));
- // Tap the card to play, like Remote Gamepad (owner, 2026-11-08): no separate select step, the whole card is the Play
+ // Tap the card to play (owner, 2026-11-08): no separate select step, the whole card is the Play
  // button (the name row included), and the custom layout's menu button still gets its own taps.
  assert.equal(await p.$('[aria-label="Select Motion layout"]'),null,'Cards have no separate select step');
  const hitAt=(sel)=>p.$eval(sel,e=>{const r=e.getBoundingClientRect();const el=document.elementFromPoint(r.x+r.width/2,r.y+r.height/2);return el&&el.closest('button')?.getAttribute('aria-label')});

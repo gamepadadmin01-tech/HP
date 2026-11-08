@@ -319,7 +319,7 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback, android.hardwa
                 if (!v.hasVibrator()) return@runOnUiThread
                 if (android.os.Build.VERSION.SDK_INT >= 29) {
                     // OEM-TUNED PREDEFINED EFFECT played as a TOUCH haptic — exactly
-                    // what the system and the reference app (Remote Gamepad) use on LRA
+                    // what the Android system itself uses on LRA
                     // phones: a crisp "click" that scales with the user's haptic-strength
                     // setting, NOT a flat oneshot buzz. (Verified via dumpsys: the
                     // reference fires Prebaked=CLICK with usage=TOUCH.) Composition
