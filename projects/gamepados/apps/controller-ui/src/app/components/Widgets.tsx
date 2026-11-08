@@ -19,8 +19,8 @@ export type StickApi = {
 // Kept as a bare "r, g, b" string because SVG presentation attributes (fill=…)
 // cannot resolve a CSS var() — only the style={{}} call sites could, and mixing
 // the two would leave half the pad on the old colour.
-// Matches --primary in the theme (Deep Teal #2CAABA).
-export const ACCENT_RGB = CONTROLLER.rgb;   // teal 44,170,186 normally; orange in the "warm" colour test (themeVariant.ts)
+// The controller's glass tint (themeVariant.ts): the app's orange since 2026-11-08 (was Deep Teal #2CAABA).
+export const ACCENT_RGB = CONTROLLER.rgb;   // orange 255,104,38 normally; the old teal only in the "cool" test build
 
 // NOTE: the RED_* names are historical — these have not been red for a long
 // time. Renaming would touch every widget call site, so the names stay and the

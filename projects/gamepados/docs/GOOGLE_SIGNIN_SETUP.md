@@ -55,6 +55,18 @@ amazonstore, indusstore and apkpure builds have no Google libraries and always u
 Without the right SHA-1 the native chooser fails and the app quietly uses the browser instead.
 The Android clients live in the same project as the Web client; the Web client id stays the audience.
 
+**Checked 2026-11-08 — this step was never done, which is why the app goes to the browser.** The Web
+client `560255321477-n74e…apps.googleusercontent.com` (the one the server reports at
+`/api/account/google/config`) is in Cloud project **`gamepados-512310`**, under the THIRD Google account
+signed in to Chrome (authuser=2; not akhilpitchuka@, whose "GamepadOS" project `gamepados` only holds the
+billing service account, and not gamepadservices@). That project had ONE OAuth client (the Web one) and
+**no Android clients**. To fix, create two Android OAuth clients in `gamepados-512310`:
+- package `com.gamepad.client`, SHA-1 `70:88:DC:FE:59:6A:9D:EA:15:5C:22:FE:C7:D3:C7:D2:5B:20:61:EC`
+  (original key = Play's upload key; website + Uptodown builds)
+- package `com.gamepad.client`, SHA-1 `ED:D8:2B:B0:33:1E:80:25:D4:4F:D7:D2:49:92:5E:39:C5:19:56:26`
+  (Play App Signing key, read from Play Console → App integrity on 2026-11-08; installs from Google Play)
+No app or server change is needed after that: the in-app chooser starts working and the browser stops appearing.
+
 ## One-time setup (about 10 minutes, in your Google account)
 
 1. Open **https://console.cloud.google.com** and pick (or create) a project, e.g. *GamepadOS*.

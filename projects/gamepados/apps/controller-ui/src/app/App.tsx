@@ -15,7 +15,7 @@ import { CalmConnect } from "./components/CalmConnect";
 import { CalmSettings as TabSystem } from "./components/CalmSettings";
 import { useOverlayFocus, closeTopOverlay } from "./components/useOverlayFocus";
 import { LayoutDialog, openLayoutDialog, closeLayoutDialog, isLayoutDialogOpen, PAD_COLORS } from "./components/LayoutDialog";
-import { CalmBrand, AppearanceButton, ConnectionSummary, DashboardAllowance, useShellAppearance } from "./components/CalmShell";
+import { AppearanceButton, ConnectionSummary, DashboardAllowance, useShellAppearance } from "./components/CalmShell";
 
 import { ShellMotion } from "./components/ShellMotion";
 import { ShellScreenTransition } from "./components/ShellScreenTransition";
@@ -3457,11 +3457,11 @@ function DashboardScreen({
   return (
     <div className="gp-dashboard gp-shell flex flex-col h-full" data-calm-theme={appearance} style={{ pointerEvents: shellPresent ? 'auto' : 'none' }}>
       <ShellMotion />
-      {/* Top bar (2026-11-08): the page name centred (the logo on Play), the light/dark switch on
-          the left, the account button on the right. The visible title is decorative: each page keeps its own sr-only h1. */}
+      {/* Top bar (2026-11-08): the light/dark switch on the left, the account button on the right, nothing in the
+          middle (owner removed the page name and the logo the same day). Each page keeps its own sr-only h1. */}
       <header className="calm-header calm-header-centred">
         <AppearanceButton appearance={appearance} onClick={toggle} />
-        {authOpen || tab === "home" ? <CalmBrand /> : <p className="calm-header-title" aria-hidden="true">{tab === "system" ? "Settings" : session ? "Account" : playSellsNothing() ? "Time" : "Plans"}</p>}
+        <span aria-hidden="true" />{/* no title or logo in the middle (owner, 2026-11-08): just the two buttons */}
         <div className="calm-header-actions">
           <button ref={profileButtonRef} data-testid="profile-shortcut-button" className="calm-account-shortcut" onClick={openProfile} aria-label={session ? 'Open your profile' : 'Sign in to GamepadOS'}>
             <User size={18} aria-hidden="true" />{session && <span>{session.user.displayName}</span>}
