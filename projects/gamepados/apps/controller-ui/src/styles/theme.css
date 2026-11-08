@@ -13,7 +13,7 @@
   --card-foreground: #E2E8F0;
   --popover: #151A23;
   --popover-foreground: #E2E8F0;
-  --primary: #5D90CB;
+  --primary: #ff6826;   /* the app's orange (was blue #5D90CB until 2026-11-08) */
   --primary-foreground: #0B0E14;
   --secondary: #1B2230;
   --secondary-foreground: #93A2BB;
@@ -102,7 +102,7 @@ button:disabled {
   --card-foreground: #E2E8F0;
   --popover: #151A23;
   --popover-foreground: #E2E8F0;
-  --primary: #5D90CB;
+  --primary: #ff6826;   /* the app's orange (was blue #5D90CB until 2026-11-08) */
   --primary-foreground: #0B0E14;
   --secondary: #1B2230;
   --secondary-foreground: #93A2BB;

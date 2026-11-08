@@ -1701,7 +1701,7 @@ function ControllerScreen({ onBack, isActive: screenActive, activeMapping, custo
             onPointerDown={(e) => { e.stopPropagation(); setGyroOn(!gyroOn); }}
             className="pointer-events-auto flex items-center gap-1 px-2 py-0.5 rounded-full text-[8px] font-bold tracking-wider uppercase active:scale-90 transition-transform"
             style={{
-              color: gyroOn ? "#5D90CB" : "rgba(255,255,255,0.45)",
+              color: gyroOn ? `rgb(${CONTROLLER.chip})` : "rgba(255,255,255,0.45)",
               background: gyroOn ? `rgba(${CONTROLLER.chip},0.12)` : "rgba(255,255,255,0.05)",
               border: gyroOn ? `1px solid rgba(${CONTROLLER.chip},0.5)` : "1px solid rgba(255,255,255,0.12)",
               touchAction: "manipulation",
@@ -1711,8 +1711,8 @@ function ControllerScreen({ onBack, isActive: screenActive, activeMapping, custo
                 single word — the old "GYRO ON · TAP" was most of this button's width. */}
             <span style={{
               width: 4, height: 4, borderRadius: "50%",
-              background: gyroOn ? "#5D90CB" : "rgba(255,255,255,0.3)",
-              boxShadow: gyroOn ? "0 0 5px #5D90CB" : "none"
+              background: gyroOn ? `rgb(${CONTROLLER.chip})` : "rgba(255,255,255,0.3)",
+              boxShadow: gyroOn ? `0 0 5px rgb(${CONTROLLER.chip})` : "none"
             }} />
             GYRO
           </button>
@@ -3464,13 +3464,13 @@ function DashboardScreen({
   return (
     <div className="gp-dashboard gp-shell flex flex-col h-full" style={{ pointerEvents: shellPresent ? 'auto' : 'none' }}>
       <ShellMotion />
-      {/* Top bar (2026-11-08): only the account button, on the right. The page name, the logo and the light/dark
-          switch were removed the same day (the app is dark only). Each page keeps its own sr-only h1. */}
+      {/* Top bar (2026-11-08): the notification bell in the left corner, the account button in the right one.
+          The page name, the logo and the light/dark switch were removed the same day (the app is dark only).
+          Each page keeps its own sr-only h1. */}
       <header className="calm-header calm-header-centred">
-        <span aria-hidden="true" />
-        <span aria-hidden="true" />{/* no title or logo in the middle (owner, 2026-11-08): just the two buttons */}
+        <NoticeBell onAction={handleNoticeAction} />{/* bell in the LEFT corner (owner, 2026-11-08) */}
+        <span aria-hidden="true" />{/* nothing in the middle: no title, no logo */}
         <div className="calm-header-actions">
-          <NoticeBell onAction={handleNoticeAction} />
           <button ref={profileButtonRef} data-testid="profile-shortcut-button" className="calm-account-shortcut" onClick={openProfile} aria-label={session ? 'Open your profile' : 'Sign in to GamepadOS'}>
             <User size={18} aria-hidden="true" />{session && <span>{session.user.displayName}</span>}
           </button>
@@ -3952,7 +3952,7 @@ export default function App() {
             {...backdropIn}
             transition={FADE}
             className="absolute inset-0 z-50 flex items-center justify-center"
-            style={{ background: "#070910" }}
+            style={{ background: CONTROLLER.page }}
           >
             <motion.div
               initial={{ scale: 0.88, opacity: 0 }}
@@ -3961,8 +3961,9 @@ export default function App() {
               className="flex flex-col items-center gap-3"
             >
               <div className="relative flex items-center justify-center">
-                <div className="absolute w-24 h-24 rounded-full" style={{ background: "radial-gradient(circle, rgba(79,134,198,0.45), transparent 68%)", filter: "blur(16px)" }} />
-                <Gamepad2 className="relative w-14 h-14 text-primary animate-pulse" strokeWidth={1.6} />
+                {/* The controller's own colour (orange, themeVariant.ts), on the controller's page colour (was blue on blue-black). */}
+                <div className="absolute w-24 h-24 rounded-full" style={{ background: `radial-gradient(circle, rgba(${CONTROLLER.rgb},0.45), transparent 68%)`, filter: "blur(16px)" }} />
+                <Gamepad2 className="relative w-14 h-14 animate-pulse" strokeWidth={1.6} style={{ color: `rgb(${CONTROLLER.rgb})` }} />
               </div>
               <span className="text-[11px] font-bold tracking-[0.3em] text-white/70" style={{ fontFamily: "'Space Grotesk',sans-serif" }}>LOADING</span>
             </motion.div>

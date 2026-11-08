@@ -405,3 +405,5 @@
 .gp-shell .calm-notice-dot { position: absolute; top: 7px; right: 8px; width: 9px; height: 9px; border-radius: 50%; background: var(--calm-accent); box-shadow: 0 0 0 2px var(--calm-paper); }
 .gp-shell .calm-header-centred .calm-account-shortcut { min-width: 40px; height: 40px; }
 @media (prefers-reduced-motion: reduce) { .gp-shell .calm-notice-bell:active { transform: none; } }
+/* The old shared "primary" colour (theme.css, now orange) stays teal in the "cool" colour test build. */
+:root[data-variant='cool'] { --primary: #2caaba; }
