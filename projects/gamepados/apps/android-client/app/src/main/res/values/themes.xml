@@ -19,5 +19,10 @@
          Theme.AppCompat.NoActionBar has a grey window), so no frame at launch can ever be another colour. -->
     <style name="Theme.App.Main" parent="Theme.AppCompat.NoActionBar">
         <item name="android:windowBackground">@color/splash_bg</item>
+        <!-- The app draws behind the bars, so the bars themselves stay see-through. Without this the splash hand-off
+             switched them to the AppCompat default (black) on Android 12-14, a visible flick at the top and bottom. -->
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">false</item>
     </style>
 </resources>

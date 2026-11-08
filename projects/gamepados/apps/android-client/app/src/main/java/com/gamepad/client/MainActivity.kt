@@ -416,10 +416,15 @@ class MainActivity : AppCompatActivity(), android.hardware.SensorEventListener {
     // splash screen is kept on screen so the cold-start never shows a blank/black
     // window — it hands straight off to the JS splash.
     @Volatile private var uiReady = false
+    // The splash, once Android has handed it to us (see onCreate), until it has faded out.
+    private var splashProvider: androidx.core.splashscreen.SplashScreenViewProvider? = null
+    private var splashFading = false
 
     // UI State
     private var lastTopDp = 44f
     private var lastBottomDp = 24f
+    private var seenTopInset = false
+    private var seenBottomInset = false
     private var lastLeftDp = 0f
     private var lastRightDp = 0f
 
@@ -486,22 +491,27 @@ class MainActivity : AppCompatActivity(), android.hardware.SensorEventListener {
         // Keep it up until the WebView/React UI has actually painted (uiReady), then
         // cross-fade it out so it dissolves into the identical JS splash beneath it
         // (same #1A1210 bg as the page) = one continuous, smooth opening.
+        //
+        // THE LAUNCH JITTER (owner, 2026-11-09: "the jitter is between logo closing and app opening ... not every time",
+        // faster than a screen recording can catch). Three things happened in that gap, all timing-dependent:
+        //   1. setKeepOnScreenCondition BLOCKS the app from drawing while the logo is up. So the WebView drew for the
+        //      very first time at the moment the fade began, and on some launches its first frame or two were not
+        //      filled in yet: the page popped in mid-fade.
+        //   2. Removing the splash can reset the window's "draw behind the system bars" setting for a frame: the page
+        //      shrank below the status bar (and the header spacing fell back to 44 px), then snapped back.
+        //   3. At the hand-off the system bars take the app theme's colours (black on Android 12-14).
+        // Now: nothing blocks drawing. Android hands the splash over as soon as the app's first frame exists, we keep
+        // it on top while the page loads and paints UNDER it, and fade it only when the page is ready (onUiReady) AND
+        // the WebView confirms that state is on screen (postVisualStateCallback) plus one more frame. After removing
+        // it, edge-to-edge is re-applied in the same moment, the bar-height values ignore a transient zero, and the
+        // app theme's bars are transparent (themes.xml Theme.App.Main).
         val splashScreen = installSplashScreen()
-        splashScreen.setKeepOnScreenCondition { !uiReady }
         splashScreen.setOnExitAnimationListener { provider ->
-            // A single fade reveals the already-painted Home page. Do not zoom
-            // the icon separately or follow this with another page entrance.
-            val decel = android.view.animation.DecelerateInterpolator()
-            provider.view.animate()
-                .alpha(0f)
-                .setDuration(240L)   // the logo fades into the app (logo back 2026-11-09; 180 ms while there was none)
-                .setInterpolator(decel)
-                .withEndAction { provider.remove() }
-                .start()
+            splashProvider = provider
+            if (uiReady) fadeOutSplash()
         }
-        // Failsafe: if the JS side never signals (load failure), lift the splash
-        // anyway so the app can never hang on the logo.
-        mainHandler.postDelayed({ uiReady = true }, 4000)   // 3 s lifted the logo onto an unpainted page on slow cold starts
+        // Failsafe: if the JS side never signals (load failure), lift the splash anyway so the app never hangs on it.
+        mainHandler.postDelayed({ uiReady = true; fadeOutSplash() }, 4000)
 
         super.onCreate(savedInstanceState)
 
@@ -1297,6 +1307,7 @@ class MainActivity : AppCompatActivity(), android.hardware.SensorEventListener {
                 @android.webkit.JavascriptInterface
                 fun onUiReady() {
                     uiReady = true
+                    runOnUiThread { fadeOutSplash() }
                 }
 
                 // doVibrate / vib / the playHaptic body moved to MainActivity level
@@ -1641,8 +1652,12 @@ class MainActivity : AppCompatActivity(), android.hardware.SensorEventListener {
             val systemBars = insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars() or androidx.core.view.WindowInsetsCompat.Type.displayCutout())
             val displayMetrics = resources.displayMetrics
             
-            lastTopDp = if (systemBars.top > 0) systemBars.top / displayMetrics.density else 44f
-            lastBottomDp = if (systemBars.bottom > 0) systemBars.bottom / displayMetrics.density else 24f
+            // A real value, or keep the last real one: a transient zero (the splash hand-off can briefly stop the app
+            // drawing behind the bars) used to drop to 44 px for a frame and make the header jump (2026-11-09).
+            if (systemBars.top > 0) { lastTopDp = systemBars.top / displayMetrics.density; seenTopInset = true }
+            else if (!seenTopInset) lastTopDp = 44f
+            if (systemBars.bottom > 0) { lastBottomDp = systemBars.bottom / displayMetrics.density; seenBottomInset = true }
+            else if (!seenBottomInset) lastBottomDp = 24f
             lastLeftDp = if (systemBars.left > 0) systemBars.left / displayMetrics.density else 0f
             lastRightDp = if (systemBars.right > 0) systemBars.right / displayMetrics.density else 0f
             
@@ -1677,6 +1692,42 @@ class MainActivity : AppCompatActivity(), android.hardware.SensorEventListener {
     // is already established by WindowCompat.setDecorFitsSystemWindows(window, false)
     // in onCreate, so the controller.hide() below is all that's needed to also hide
     // the bars during gameplay.
+    /** Fade the splash out, but only once the page's ready state is really on screen under it (see onCreate). */
+    private fun fadeOutSplash() {
+        val provider = splashProvider ?: return            // not handed over yet: the exit listener calls this again
+        if (!uiReady || splashFading) return
+        splashFading = true
+        var started = false
+        val start = {
+            if (!started) {
+                started = true
+                provider.view.animate()
+                    .alpha(0f)
+                    .setDuration(240L)                      // the logo fades into the app
+                    .setInterpolator(android.view.animation.DecelerateInterpolator())
+                    .withEndAction {
+                        provider.remove()
+                        splashProvider = null
+                        // Removing the splash can reset this for a frame (the page jumps under the status bar).
+                        WindowCompat.setDecorFitsSystemWindows(window, false)
+                    }
+                    .start()
+            }
+        }
+        val wv = webView
+        if (wv != null && android.os.Build.VERSION.SDK_INT >= 23) {
+            // Called when the page as it is NOW will be drawn in the next frame; wait that frame too, then fade.
+            wv.postVisualStateCallback(1L, object : android.webkit.WebView.VisualStateCallback() {
+                override fun onComplete(requestId: Long) {
+                    android.view.Choreographer.getInstance().postFrameCallback {
+                        android.view.Choreographer.getInstance().postFrameCallback { start() }
+                    }
+                }
+            })
+            mainHandler.postDelayed({ start() }, 700)       // never wait longer than this
+        } else start()
+    }
+
     private fun hideSystemUI() {
         runOnUiThread {
             try {
