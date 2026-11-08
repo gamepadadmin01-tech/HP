@@ -9,8 +9,9 @@
 //   • its content is keyed per opening, so it always starts fresh and unmounts after it has animated out.
 // Looks come from the app's own tokens (".calm-lay-*" in calm-shell.css / redesign.css).
 //
-// 2026-11-08 (owner): one list, text only, full names — "Standard Controller", "Touchpad Camera Controller",
-// "Create custom pad", "Import from code" — and nothing else. Tapping a layout or "Create custom pad" goes
+// 2026-11-08 (owner): one list, text only, full names, and nothing else. Since 2026-11-09: "Standard Controller",
+// "Standard Racing Controller" (the owner's shared layout HS2EMN, built in), "Create custom pad", "Import from
+// code"; the Touchpad Camera layout is gone, there are no arrows on the rows, and the card is about half the size. Tapping a layout or "Create custom pad" goes
 // straight into the editor with that name (no name/colour step; it can be renamed in the editor's toolbar).
 // "Import from code" unfolds a code box under its row (the shared Collapse); a valid code adds the layout to
 // the list on Home and says "Added" here, and the pop-up stays open.
@@ -18,7 +19,7 @@
 import React, { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
-import { X, Check, ChevronRight } from "lucide-react";
+import { X, Check } from "lucide-react";
 import { SPRING_SNAP, EASE, cardIn, backdropIn } from "../motion";
 import { useOverlayFocus } from "./useOverlayFocus";
 import { Collapse } from "./Motion";
@@ -29,7 +30,7 @@ export const PAD_COLORS = ["#6366f1", "#e11d48", "#d97706", "#22c55e", "#64748B"
 /** What each row makes: the template it starts from and the name it opens with in the editor. */
 const LAYOUTS = [
   { key: "standard", name: "Standard Controller", color: PAD_COLORS[0] },
-  { key: "touchpad", name: "Touchpad Camera Controller", color: PAD_COLORS[1] },
+  { key: "standardRacing", name: "Standard Racing Controller", color: PAD_COLORS[1] },
 ];
 const CUSTOM = { key: "blank", name: "Custom Pad", color: PAD_COLORS[0] };
 
@@ -98,7 +99,6 @@ function Inner({ onCreate, onImport }: Props) {
     <button key={label} type="button" className="calm-lay-option" onClick={onClick}
       {...(expanded !== undefined ? { "aria-expanded": expanded, "aria-controls": "calm-lay-import" } : {})}>
       <strong>{label}</strong>
-      <ChevronRight className="calm-lay-chevron" size={18} aria-hidden="true" />
     </button>
   );
 

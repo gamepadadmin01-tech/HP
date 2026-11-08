@@ -526,6 +526,12 @@ class MainActivity : AppCompatActivity(), android.hardware.SensorEventListener {
         // so any handoff frame between the native splash and the React UI is invisible.
         window.decorView.setBackgroundColor(Color.parseColor("#1A1210"))   // = splash_bg = the app's page colour
         WindowCompat.setDecorFitsSystemWindows(window, false)
+        // Turning the screen (opening/closing the controller) CROSS-FADES instead of spinning a snapshot of the old
+        // screen (2026-11-09: the controller opens with no cover now, so the turn itself is what the player sees).
+        // Android uses it when this window is full-screen on top; otherwise it falls back to its usual turn.
+        window.attributes = window.attributes.apply {
+            rotationAnimation = WindowManager.LayoutParams.ROTATION_ANIMATION_CROSSFADE
+        }
 
         // Render at the display's highest refresh rate UP TO 120Hz instead of the default 60Hz, so the
         // WebView UI + animations are smooth on high-refresh phones. 120 is the cap (owner, 2026-11-02):

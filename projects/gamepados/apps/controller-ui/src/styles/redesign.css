@@ -483,3 +483,19 @@
 .gp-shell.console-editor-confirm .console-editor-confirm-row button { flex: 1 1 0; }
 .gp-shell.console-editor-confirm .console-editor-confirm-row button:active { background: var(--calm-soft); }
 .gp-shell.console-editor-confirm .console-editor-confirm-danger { color: #ff7a6b; }
+
+/* ── 23. Create a layout, compact (2026-11-09) ───────────────────────────────────────────────────────────────────
+   Owner: "the overlay has more free space, it can be almost halved, and the arrows can be removed". About half the
+   area of the 2026-11-08 card: narrower, tighter rows, smaller title and close button, no chevrons. */
+.gp-shell .calm-lay-card { max-width: 272px; border-radius: 22px; }
+.gp-shell .calm-lay-step { padding: 12px 8px 8px; }
+.gp-shell .calm-lay-head { min-height: 36px; margin-bottom: 2px; gap: 4px; }
+.gp-shell .calm-lay-headtext { padding-left: 10px; }
+.gp-shell .calm-lay-title { font: 500 17px var(--calm-body); }
+.gp-shell .calm-lay-iconbtn { width: 36px; height: 36px; }
+.gp-shell .calm-lay-option { min-height: 42px; padding: 0 10px; border-radius: 12px; }
+.gp-shell .calm-lay-option strong { font-size: 15px; }
+.gp-shell .calm-lay-import { padding: 2px 6px 4px; }
+.gp-shell .calm-lay-import-row .calm-lay-input { min-height: 42px; padding: 0 10px; font-size: 15px; letter-spacing: .12em; }
+.gp-shell .calm-lay-import-row .calm-lay-primary { min-height: 42px; padding: 0 14px; font-size: 14px; }
+.gp-shell .calm-lay-added, .gp-shell .calm-lay-import .calm-lay-error { font-size: 13px; }

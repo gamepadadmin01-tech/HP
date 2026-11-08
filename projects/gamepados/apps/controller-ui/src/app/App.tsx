@@ -2,7 +2,7 @@ import { savedPc, connectionMode, rememberMode, pendingWireless, confirmWireless
 import { createTransportCoordinator, USB_CHOICE_EVENT, WIRELESS_CHOICE_EVENT, prepareWirelessConnection } from "./transportCoordinator";
 import React, { useState, useRef, useEffect, useCallback, useMemo, useSyncExternalStore } from "react";
 // @ts-ignore - Ignore missing declaration file error
-import { createPortal } from "react-dom";
+import { createPortal, flushSync } from "react-dom";
 import { Home, X, Settings, User, Plus, MoreHorizontal } from "lucide-react";
 import { QRScanOverlay } from "./components/Dialogs";
 import { PlaytimeLockout } from "./components/PlaytimeLockout";
@@ -113,6 +113,46 @@ export function getTrueStandardLayout(): CustomBtnDef[] {
   ];
 }
 
+// ── STANDARD RACING (owner, 2026-11-09) ─────────────────────────────────────────────────────────────────────
+// The second built-in layout, offered in "Create a layout" next to the Standard one. It is the layout the owner
+// shared as code HS2EMN, baked in here (same 1280×570 canvas and anchors) so it works offline and never changes.
+// Its buttons use the controller's own colours like the Standard layout (the shared copy still had the old blue).
+export function getStandardRacingLayout(): CustomBtnDef[] {
+  const NORM = `rgba(${CONTROLLER.chip}, 0.12)`;
+  const HELD = `rgba(${CONTROLLER.chip}, 0.85)`;
+  const w = (
+    type: WidgetType, label: string, x: number, y: number, r: number,
+    anchor?: WidgetAnchor, shape: WidgetShape = "circle",
+    extra?: { w?: number; h?: number; rxFactor?: number; analogTrigger?: boolean }
+  ): CustomBtnDef => {
+    const btn: CustomBtnDef = { uid: mkUid(), type, shape, opacity: 1, haptic: 60, macroBits: [], label, x, y, r, normColor: NORM, heldColor: HELD };
+    if (anchor) btn.anchor = anchor;
+    if (extra?.w != null) btn.w = extra.w;
+    if (extra?.h != null) btn.h = extra.h;
+    if (extra?.rxFactor != null) btn.rxFactor = extra.rxFactor;
+    if (extra?.analogTrigger != null) btn.analogTrigger = extra.analogTrigger;
+    return btn;
+  };
+  return [
+    // LEFT: shoulder bumpers, and the face buttons as four separate buttons (X/A big, Y/B beside them)
+    w("button", "LB", 114, 76, 74, "left"),
+    w("button", "RB", 313, 77, 75, "left"),
+    w("button", "X", 116, 260, 96),
+    w("button", "A", 120, 468, 98),
+    w("button", "Y", 315, 255, 82),
+    w("button", "B", 315, 423, 56),
+    // CENTER: D-pad and the system buttons (view / home / menu)
+    w("dpad", "DPAD", 565, 326, 149, "center"),
+    w("button", "view", 511, 110, 40, "center"),
+    w("button", "home", 623, 111, 40, "center"),
+    w("button", "menu", 734, 110, 40, "center"),
+    // RIGHT: steering stick, then the brake (digital LT) and the throttle (analog RT)
+    w("thumbstick", "RS", 836, 326, 110),
+    w("trigger", "LT", 1032, 282, 105, "right", "rect", { w: 147, h: 529, rxFactor: 0.43, analogTrigger: false }),
+    w("trigger", "RT", 1186, 284, 105, "right", "rect", { w: 143, h: 530, rxFactor: 0.46, analogTrigger: true }),
+  ];
+}
+
 // splitLegacyLtrt moved to store/pads.ts — pad shape migrations belong with the
 // repository that loads them, so every read is normalised the same way.
 
@@ -173,25 +213,8 @@ function makeDefaultPad(padId: string, templateKey: string = "standard", name?: 
       btn("MAP",   560,  90, 34),
       btn("MENU",  700,  90, 34),
     ];
-  } else if (templateKey === "touchpad") {
-    // "Touchpad Camera": the sample pad that shows what the Touchpad widget is for. Movement on the
-    // left thumb, camera on the right thumb as a trackpad (recommended settings: speed + instant),
-    // buttons round the edges. The pad's own idle animation (breathing ring, nudging arrows, "RIGHT
-    // STICK") is the how-to, so there is no separate tutorial to dismiss.
-    const sized = (b: CustomBtnDef, w: number, h: number): CustomBtnDef => ({ ...b, w, h });
-    buttonsList = [
-      btn("LS", 210, 420, 80, "thumbstick"),
-      btn("DPAD", 330, 165, 80, "dpad"),
-      btn("ABXY", 1000, 140, 85, "abxy"),
-      sized(btn("LT", 70, 330, 48, "trigger", "rect"), 90, 200),
-      sized(btn("RT", 1210, 330, 48, "trigger", "rect"), 90, 200),
-      btn("LB", 190, 80, 44),
-      btn("RB", 1170, 80, 44),
-      btn("view", 480, 60, 32),
-      btn("home", 640, 60, 32),
-      btn("menu", 800, 60, 32),
-      sized(btn("Touchpad", 880, 400, 100, "touchpad", "rect"), 440, 260),
-    ];
+  } else if (templateKey === "standardRacing") {
+    buttonsList = getStandardRacingLayout();
   } else if (templateKey === "blank") {
     buttonsList = [];
   } else {
@@ -200,7 +223,7 @@ function makeDefaultPad(padId: string, templateKey: string = "standard", name?: 
   
   return {
     padId,
-    name: name || (templateKey === "fps" ? "FPS Pro Layout" : templateKey === "fighter" ? "Fighter Arcade" : templateKey === "racing" ? "Racing Layout" : templateKey === "rpg" ? "RPG Adventure" : templateKey === "touchpad" ? "Touchpad Camera" : templateKey === "blank" ? "Blank Canvas" : "My Custom Pad"),
+    name: name || (templateKey === "fps" ? "FPS Pro Layout" : templateKey === "fighter" ? "Fighter Arcade" : templateKey === "racing" ? "Racing Layout" : templateKey === "rpg" ? "RPG Adventure" : templateKey === "standardRacing" ? "Standard Racing Controller" : templateKey === "blank" ? "Blank Canvas" : "My Custom Pad"),
     color: CUSTOM_COLORS[Math.floor(Math.random() * CUSTOM_COLORS.length)],
     buttons: buttonsList
   };
@@ -3246,24 +3269,50 @@ export default function App() {
     };
   }, []);
 
+  // Home <-> controller (owner, 2026-11-09: "open directly the controller with smooth animation, no blank screen").
+  // There is no cover any more. The phone is asked to turn first, Home stays on screen while it turns, and the
+  // controller is put on screen IN THE SAME FRAME the window becomes landscape (flushSync inside the resize event),
+  // so no frame ever shows a squeezed controller or an empty page. The controller then fades in over the leaving
+  // Home in 0.14 s, and Android cross-fades the turn itself (MainActivity: ROTATION_ANIMATION_CROSSFADE). If the
+  // window is already the right shape (desktop, or the phone is already sideways) the switch is immediate, and a
+  // phone that never reports the turn is switched after 600 ms anyway.
+  const turnSwitch = useRef<(() => void) | null>(null);
+  const fromControllerRef = useRef(false);
+  function switchWithTurn(target: View) {
+    turnSwitch.current?.();                                   // a second tap mid-turn finishes the first one
+    const bridge = (window as any).AndroidBridge;
+    const toController = target === "controller";
+    const rightShape = () => (toController ? window.innerWidth > window.innerHeight : window.innerHeight >= window.innerWidth);
+    let done = false;
+    let timer = 0;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      window.removeEventListener("resize", onResize);
+      window.clearTimeout(timer);
+      turnSwitch.current = null;
+      fromControllerRef.current = !toController;
+      flushSync(() => { setView(target); });
+      viewRef.current = target;
+    };
+    const onResize = () => { if (rightShape()) finish(); };
+    try { bridge?.setScreenOrientation?.(toController ? "landscape-locked" : "portrait"); } catch (e) { console.error(e); }
+    if (!bridge?.setScreenOrientation || rightShape()) { finish(); return; }
+    turnSwitch.current = finish;
+    window.addEventListener("resize", onResize);
+    timer = window.setTimeout(finish, 600);
+  }
+
   function navigateTo(target: View) {
     if (target === "controller") noteControllerOpened();   // starts the session clock; opening the controller never asks for a rating
     if ((view === "dashboard" && target === "controller") || (view === "controller" && target === "dashboard")) {
-      runCurtainSequence(() => {
-        const bridge = (window as any).AndroidBridge;
-        if (bridge && bridge.setScreenOrientation) {
-          try {
-            bridge.setScreenOrientation(target === "controller" ? "landscape-locked" : "portrait");
-          } catch (e) { console.error(e); }
-        }
-        setView(target);
-        viewRef.current = target;
-      });
+      switchWithTurn(target);
       // #3: a Controller<->Dashboard move is the paced trigger for the
       // feature-intro rating prompt (no-op once rated).
       // Only when the player CLOSES the controller after a real session, and a moment after the curtain, never during it.
       if (target === "dashboard" && recordSessionEnd()) window.setTimeout(() => { if (viewRef.current === "dashboard") setShowIntro(true); }, 1200);
     } else {
+      fromControllerRef.current = false;
       setView(target);
       viewRef.current = target;
       const bridge = (window as any).AndroidBridge;
@@ -3492,7 +3541,7 @@ export default function App() {
         )}
 
         {view === "dashboard" && (
-          <ShellScreenTransition key="dashboard" direction={1} skipEntrance={firstRoute.current && !!(window as any).AndroidBridge?.onUiReady} className="absolute inset-0 z-10">
+          <ShellScreenTransition key="dashboard" direction={1} skipEntrance={(firstRoute.current && !!(window as any).AndroidBridge?.onUiReady) || fromControllerRef.current} className="absolute inset-0 z-10">
             <DashboardScreen
               onLaunch={() => navigateTo("controller")}
               onBack={() => navigateTo("scanner")}
@@ -3516,11 +3565,17 @@ export default function App() {
           </ShellScreenTransition>
         )}
 
+      </AnimatePresence>
+
+      {/* The controller has its OWN presence group (2026-11-09): in the group above, a new screen waits for the old
+          one to finish leaving, which left an empty page between Home and the controller. Here it comes in at once,
+          over Home while Home leaves, with a quick fade (no blank, no cover). */}
+      <AnimatePresence>
         {view === "controller" && (
           <motion.div
             key="controller"
-            initial={false}                                   /* no opening animation (owner, 2026-11-08) */
-            animate={{ opacity: 1 }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1, transition: { duration: 0.14, ease: EASE } }}
             exit={{ opacity: 0, transition: { duration: 0 } }}
             style={{ willChange: "transform, opacity", backfaceVisibility: "hidden" }}
             className="absolute inset-0 z-20"
