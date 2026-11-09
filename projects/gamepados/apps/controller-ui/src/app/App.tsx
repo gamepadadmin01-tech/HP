@@ -983,6 +983,36 @@ function useGyro(maxAngle: number = 45, deadzone: number = 0, onGyroChange?: () 
 }
 
 // ─── Controller Screen ────────────────────────────────────────────────────────
+// ─── Controller opening (owner, 2026-11-09: "it just opens like a sudden laggy one ... keep an animation which is
+// small and fast and will have an opening feeling") ───────────────────────────────────────────────────────────
+// The pad used to fade in 0.14 s on the SAME frame it was built, and that heavy first frame ate the fade, so it just
+// appeared. Now the screen shows the controller's own background at once, the pad is built underneath while still
+// invisible, and two frames later (once that heavy frame is done) it OPENS: a small zoom from 95% into place with a
+// fade, 0.28 s, run by the phone's graphics engine (CSS, transform + opacity) so it stays smooth while the app is
+// busy. Styles: redesign.css section 26.
+//
+// The native touch layer reads every button's position once, from the pad's on-screen matrix (getScreenCTM). Read
+// during the zoom, those positions would be 5% too small, so while the pad is opening `window.__ctlOpening` is true
+// and ControllerScreen waits; "gp-controller-opened" tells it to send them at full size. Taps in that quarter
+// second still work through the normal JS path.
+function ControllerOpening({ children }: { children: React.ReactNode }) {
+  const [go, setGo] = useState(() => { (window as any).__ctlOpening = true; return false; });
+  const opened = useCallback(() => {
+    if (!(window as any).__ctlOpening) return;
+    (window as any).__ctlOpening = false;
+    window.dispatchEvent(new Event("gp-controller-opened"));
+  }, []);
+  useEffect(() => {
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) { setGo(true); opened(); return; }
+    let b = 0;
+    const a = requestAnimationFrame(() => { b = requestAnimationFrame(() => setGo(true)); });
+    const failsafe = window.setTimeout(opened, 900);       // never hold the touch layer back longer than this
+    return () => { cancelAnimationFrame(a); cancelAnimationFrame(b); window.clearTimeout(failsafe); opened(); };
+  }, [opened]);
+  return <div className={`gp-ctl-stage${go ? " gp-ctl-open" : ""}`} onAnimationEnd={(e) => { if (e.target === e.currentTarget) opened(); }}>
+    {children}
+  </div>;
+}
 function ControllerScreen({ onBack, isActive: screenActive, activeMapping, customPad, controllerLayout, gyroOn, setGyroOn, gyroMaxAngle, gyroWheel, gyroMode, gyroDeadzone, gyroHaptic, gyroThrottle, gyroIdleDetect, rumbleOn }: {
   onBack: () => void; isActive: boolean;
   activeMapping: Partial<Record<BtnId, string>>;
@@ -1517,6 +1547,7 @@ function ControllerScreen({ onBack, isActive: screenActive, activeMapping, custo
     };
     const tryActivate = () => {
       if (cancelled || usbWS.isOpen()) return;
+      if ((window as any).__ctlOpening) return;        // still zooming open: positions would be 5% off (ControllerOpening)
       const svg = svgRef.current;
       const m = svg && svg.getScreenCTM();
       if (!m) return;
@@ -1531,6 +1562,7 @@ function ControllerScreen({ onBack, isActive: screenActive, activeMapping, custo
     };
     // Double-rAF so the svg's CTM is read after layout has settled.
     raf1 = requestAnimationFrame(() => { raf2 = requestAnimationFrame(tryActivate); });
+    window.addEventListener("gp-controller-opened", tryActivate);   // the opening zoom has finished
     const transportPoll = setInterval(() => {
       if (cancelled) return;
       if (usbWS.isOpen()) deactivate();
@@ -1539,6 +1571,7 @@ function ControllerScreen({ onBack, isActive: screenActive, activeMapping, custo
     return () => {
       cancelled = true;
       cancelAnimationFrame(raf1); cancelAnimationFrame(raf2);
+      window.removeEventListener("gp-controller-opened", tryActivate);
       clearInterval(transportPoll);
       deactivate();
     };
@@ -3584,12 +3617,12 @@ export default function App() {
         {view === "controller" && (
           <motion.div
             key="controller"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1, transition: { duration: 0.14, ease: EASE } }}
+            initial={false}
             exit={{ opacity: 0, transition: { duration: 0 } }}
-            style={{ willChange: "transform, opacity", backfaceVisibility: "hidden" }}
+            style={{ background: CONTROLLER.page }}           /* the controller's background shows at once */
             className="absolute inset-0 z-20"
           >
+            <ControllerOpening>
             <ControllerScreen
               onBack={() => navigateTo("dashboard")}
               isActive={view === "controller"}
@@ -3606,6 +3639,7 @@ export default function App() {
               gyroIdleDetect={gyroIdleDetect}
               rumbleOn={rumbleOn}
             />
+            </ControllerOpening>
           </motion.div>
         )}
       </AnimatePresence>
