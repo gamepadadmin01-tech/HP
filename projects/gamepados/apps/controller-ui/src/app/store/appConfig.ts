@@ -18,7 +18,7 @@
 
 import { API_ORIGIN } from "../api/account";
 import { getInstallId } from "../feedback";
-import { adNetwork, getAppInfo, nativeSetGuestRules } from "../platform/native";
+import { adNetwork, canSwitchAdNetwork, getAppInfo, nativeSetAdNetwork, nativeSetGuestRules } from "../platform/native";
 
 export type FreeTimeConfig = {
   enabled: boolean;
@@ -35,7 +35,7 @@ export type NoticeAction = { kind: NoticeActionKind; label: string; url?: string
 const NOTICE_KINDS: NoticeActionKind[] = ["link", "plans", "connect", "settings", "signin", "layout"];
 
 export type AppConfig = {
-  ads: { available: boolean; message: string };
+  ads: { available: boolean; message: string; network: "" | "admob" | "unity" };
   guest: { welcomeSeconds: number; adRewardSeconds: number; adCapSeconds: number; freeTime: FreeTimeConfig };
   notice: { id: string; text: string; action?: NoticeAction } | null;
   kill: { message: string; storeUrl: string } | null;
@@ -43,7 +43,7 @@ export type AppConfig = {
 
 const MIN = 60;
 export const DEFAULT_CONFIG: AppConfig = {
-  ads: { available: true, message: "" },
+  ads: { available: true, message: "", network: "" },
   guest: {
     welcomeSeconds: 20 * MIN,   // 2026-11-09: 20 minutes free at the start (was 30)
     adRewardSeconds: 30 * MIN,
@@ -90,6 +90,8 @@ function sanitize(raw: any): AppConfig {
     ads: {
       available: raw?.ads?.available !== false,
       message: str(raw?.ads?.message, 600),
+      // Play build only: which ad network the portal chose for it (2026-11-09). "" = keep what it has.
+      network: raw?.ads?.network === "admob" || raw?.ads?.network === "unity" ? raw.ads.network : "",
     },
     guest: {
       welcomeSeconds: num(g.welcomeSeconds, 0, 120 * MIN, d.guest.welcomeSeconds),
@@ -136,6 +138,8 @@ export function onAppConfigChange(fn: () => void): () => void {
 /** Hand the guest numbers to the phone's own clock (GuestTrial.kt clamps them again). */
 function applyNative(c: AppConfig) {
   try { nativeSetGuestRules(c.guest.welcomeSeconds, c.guest.adRewardSeconds, c.guest.adCapSeconds); } catch { /* old APK */ }
+  // The portal's ad network for the Play build (AdMob or Unity); every other build ignores it.
+  try { if (c.ads.network) nativeSetAdNetwork(c.ads.network); } catch { /* old APK */ }
 }
 
 let inflight = false;
@@ -152,6 +156,8 @@ export async function refreshAppConfig(): Promise<void> {
     const net = adNetwork();   // which ad network this build plays, so the server picks the right switch
     const q = `?channel=${encodeURIComponent(info.channel || "direct")}&versionCode=${encodeURIComponent(String(info.build || 0))}`
       + (net ? `&network=${encodeURIComponent(net)}` : "")
+      // A Play build that can switch networks: the server answers with the network the portal chose for it.
+      + (canSwitchAdNetwork() ? "&switchable=1" : "")
       // The app's random install id, so the portal can count active players (stored scrambled, once a day).
       + `&installId=${encodeURIComponent(getInstallId())}`;
     const res = await fetch(`${API_ORIGIN}/api/app-config${q}`, { cache: "no-store", signal: ctrl?.signal });

@@ -53,8 +53,9 @@ import org.json.JSONObject
 //
 // ## Which network plays the ad
 //
-// BuildConfig.AD_NETWORK: "admob" in the playstore build (everything above), "unity" in direct and
-// uptodown (UnityRewarded, from 2026-10-30). With Unity a signed-in player's finished ad is reported
+// BuildConfig.AD_NETWORK is the starting network: "unity" in direct and uptodown (UnityRewarded, from 2026-10-30)
+// and in the playstore build since 2026-11-01. The playstore build can be switched between "admob" (everything
+// above) and "unity" from the admin portal since 2026-11-09 (setAdNetwork). With Unity a signed-in player's finished ad is reported
 // with a one-time `claim` id and the page asks the server to credit it (/api/ads/unity/claim).
 //
 // Results reach JS as window.onRewardedAdResult(json), json = { status, network, message?, guest?, claim?,
@@ -71,8 +72,16 @@ open class AdsBridge(activity: MainActivity) : UpdaterBridgeBase(activity) {
 
     private val consent: ConsentInformation by lazy { UserMessagingPlatform.getConsentInformation(activity) }
 
-    /** direct and uptodown play Unity's rewarded ad; playstore stays on AdMob (build.gradle.kts). */
-    private val useUnity = BuildConfig.AD_NETWORK == "unity"
+    /** Which network plays the ad. direct and uptodown: always Unity (build.gradle.kts). The Play build starts on
+     *  BuildConfig.AD_NETWORK, but since 2026-11-09 the admin portal can SWITCH it between AdMob and Unity
+     *  (owner: "if AdMob fails again we can switch it to Unity"), via setAdNetwork from the page. The choice is
+     *  remembered, so an offline launch keeps the last one. */
+    private val canSwitch = BuildConfig.DISTRIBUTION_CHANNEL == "playstore"
+    private val prefs by lazy { activity.getSharedPreferences("gamepad_prefs", android.content.Context.MODE_PRIVATE) }
+    @Volatile private var network: String =
+        if (canSwitch) (prefs.getString("playAdNetwork", null)?.takeIf { it == "admob" || it == "unity" } ?: BuildConfig.AD_NETWORK)
+        else BuildConfig.AD_NETWORK
+    private val useUnity get() = network == "unity"
     private val unity by lazy { UnityRewarded(activity) }
 
     @JavascriptInterface
@@ -81,7 +90,19 @@ open class AdsBridge(activity: MainActivity) : UpdaterBridgeBase(activity) {
     /** "admob" or "unity": the page tells the server, so the portal's switch and messages for THIS
      *  network are the ones this build follows (the Play build moved to Unity on 2026-11-01). */
     @JavascriptInterface
-    fun adNetwork(): String = BuildConfig.AD_NETWORK
+    fun adNetwork(): String = network
+
+    /** The portal's choice for the Play build ("admob" or "unity"). Ignored by every other build, and by an
+     *  unknown name. Returns the network now in use. A ready AdMob ad is dropped on a switch, so the next tap
+     *  loads from the network that was chosen. */
+    @JavascriptInterface
+    fun setAdNetwork(name: String): String {
+        if (!canSwitch || (name != "admob" && name != "unity") || name == network) return network
+        network = name
+        prefs.edit().putString("playAdNetwork", name).apply()
+        activity.runOnUiThread { ad = null; waitingUser = null }
+        return name
+    }
 
     /** Tap: ask for consent if needed, then show an ad (loading one first if none is ready). */
     @JavascriptInterface
@@ -308,7 +329,7 @@ open class AdsBridge(activity: MainActivity) : UpdaterBridgeBase(activity) {
     private fun report(status: String, message: String?, guest: Boolean = false, claim: String? = null,
                        kind: String? = null, code: String? = null) {
         // "network" says which ad network this build plays, so the page can count every tap per network.
-        val json = JSONObject().put("status", status).put("guest", guest).put("network", BuildConfig.AD_NETWORK)
+        val json = JSONObject().put("status", status).put("guest", guest).put("network", network)
         if (message != null) json.put("message", message)
         if (claim != null) json.put("claim", claim)
         if (kind != null) json.put("kind", kind)

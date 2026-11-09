@@ -94,6 +94,8 @@ export interface AndroidBridge {
   adsAvailable?(): boolean;
   /** "admob" | "unity" -- which ad network this build plays (1.4.13+); absent in older builds. */
   adNetwork?(): string;
+  /** Play build only (1.4.17+): the portal's choice of ad network, "admob" | "unity". Returns the one in use. */
+  setAdNetwork?(name: string): string;
   showRewardedAd?(userId: string): void;
   preloadRewardedAd?(): void;
   adPrivacyOptionsRequired?(): boolean;
@@ -236,6 +238,17 @@ export function adsSupported(): boolean {
  *  older build). The server uses it to pick the right ads switch and messages. */
 export function adNetwork(): string {
   return call("adNetwork", (b) => String(b.adNetwork!() || ""), "");
+}
+
+/** Can this build be switched between ad networks from the portal? Only the Play build (2026-11-09). */
+export function canSwitchAdNetwork(): boolean {
+  return getAppInfo().channel === "playstore" && call("setAdNetwork", () => true, false);
+}
+
+/** Tell the Play build which ad network the portal chose ("admob" | "unity"). Other builds ignore it. */
+export function nativeSetAdNetwork(name: string): void {
+  if (!canSwitchAdNetwork()) return;
+  call("setAdNetwork", (b) => b.setAdNetwork!(name), "");
 }
 
 /** Show a rewarded ad (loading one first if needed). False = this build has no
