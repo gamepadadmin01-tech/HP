@@ -2,8 +2,8 @@ import { savedPc, connectionMode, rememberMode, pendingWireless, confirmWireless
 import { createTransportCoordinator, USB_CHOICE_EVENT, WIRELESS_CHOICE_EVENT, prepareWirelessConnection } from "./transportCoordinator";
 import React, { useState, useRef, useEffect, useCallback, useMemo, useSyncExternalStore } from "react";
 // @ts-ignore - Ignore missing declaration file error
-import { createPortal, flushSync } from "react-dom";
-import { Home, X, Settings, User, Plus, MoreHorizontal, Download } from "lucide-react";
+import { createPortal } from "react-dom";
+import { Home, Gamepad2, X, Settings, User, Plus, MoreHorizontal, Download } from "lucide-react";
 import { QRScanOverlay } from "./components/Dialogs";
 import { PlaytimeLockout } from "./components/PlaytimeLockout";
 import { PlaytimeToast } from "./components/PlaytimeToast";
@@ -983,36 +983,6 @@ function useGyro(maxAngle: number = 45, deadzone: number = 0, onGyroChange?: () 
 }
 
 // ─── Controller Screen ────────────────────────────────────────────────────────
-// ─── Controller opening (owner, 2026-11-09: "it just opens like a sudden laggy one ... keep an animation which is
-// small and fast and will have an opening feeling") ───────────────────────────────────────────────────────────
-// The pad used to fade in 0.14 s on the SAME frame it was built, and that heavy first frame ate the fade, so it just
-// appeared. Now the screen shows the controller's own background at once, the pad is built underneath while still
-// invisible, and two frames later (once that heavy frame is done) it OPENS: a small zoom from 95% into place with a
-// fade, 0.28 s, run by the phone's graphics engine (CSS, transform + opacity) so it stays smooth while the app is
-// busy. Styles: redesign.css section 26.
-//
-// The native touch layer reads every button's position once, from the pad's on-screen matrix (getScreenCTM). Read
-// during the zoom, those positions would be 5% too small, so while the pad is opening `window.__ctlOpening` is true
-// and ControllerScreen waits; "gp-controller-opened" tells it to send them at full size. Taps in that quarter
-// second still work through the normal JS path.
-function ControllerOpening({ children }: { children: React.ReactNode }) {
-  const [go, setGo] = useState(() => { (window as any).__ctlOpening = true; return false; });
-  const opened = useCallback(() => {
-    if (!(window as any).__ctlOpening) return;
-    (window as any).__ctlOpening = false;
-    window.dispatchEvent(new Event("gp-controller-opened"));
-  }, []);
-  useEffect(() => {
-    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) { setGo(true); opened(); return; }
-    let b = 0;
-    const a = requestAnimationFrame(() => { b = requestAnimationFrame(() => setGo(true)); });
-    const failsafe = window.setTimeout(opened, 900);       // never hold the touch layer back longer than this
-    return () => { cancelAnimationFrame(a); cancelAnimationFrame(b); window.clearTimeout(failsafe); opened(); };
-  }, [opened]);
-  return <div className={`gp-ctl-stage${go ? " gp-ctl-open" : ""}`} onAnimationEnd={(e) => { if (e.target === e.currentTarget) opened(); }}>
-    {children}
-  </div>;
-}
 function ControllerScreen({ onBack, isActive: screenActive, activeMapping, customPad, controllerLayout, gyroOn, setGyroOn, gyroMaxAngle, gyroWheel, gyroMode, gyroDeadzone, gyroHaptic, gyroThrottle, gyroIdleDetect, rumbleOn }: {
   onBack: () => void; isActive: boolean;
   activeMapping: Partial<Record<BtnId, string>>;
@@ -1547,7 +1517,6 @@ function ControllerScreen({ onBack, isActive: screenActive, activeMapping, custo
     };
     const tryActivate = () => {
       if (cancelled || usbWS.isOpen()) return;
-      if ((window as any).__ctlOpening) return;        // still zooming open: positions would be 5% off (ControllerOpening)
       const svg = svgRef.current;
       const m = svg && svg.getScreenCTM();
       if (!m) return;
@@ -1562,7 +1531,6 @@ function ControllerScreen({ onBack, isActive: screenActive, activeMapping, custo
     };
     // Double-rAF so the svg's CTM is read after layout has settled.
     raf1 = requestAnimationFrame(() => { raf2 = requestAnimationFrame(tryActivate); });
-    window.addEventListener("gp-controller-opened", tryActivate);   // the opening zoom has finished
     const transportPoll = setInterval(() => {
       if (cancelled) return;
       if (usbWS.isOpen()) deactivate();
@@ -1571,7 +1539,6 @@ function ControllerScreen({ onBack, isActive: screenActive, activeMapping, custo
     return () => {
       cancelled = true;
       cancelAnimationFrame(raf1); cancelAnimationFrame(raf2);
-      window.removeEventListener("gp-controller-opened", tryActivate);
       clearInterval(transportPoll);
       deactivate();
     };
@@ -3312,50 +3279,26 @@ export default function App() {
     };
   }, []);
 
-  // Home <-> controller (owner, 2026-11-09: "open directly the controller with smooth animation, no blank screen").
-  // There is no cover any more. The phone is asked to turn first, Home stays on screen while it turns, and the
-  // controller is put on screen IN THE SAME FRAME the window becomes landscape (flushSync inside the resize event),
-  // so no frame ever shows a squeezed controller or an empty page. The controller then fades in over the leaving
-  // Home in 0.14 s, and Android cross-fades the turn itself (MainActivity: ROTATION_ANIMATION_CROSSFADE). If the
-  // window is already the right shape (desktop, or the phone is already sideways) the switch is immediate, and a
-  // phone that never reports the turn is switched after 600 ms anyway.
-  const turnSwitch = useRef<(() => void) | null>(null);
-  const fromControllerRef = useRef(false);
-  function switchWithTurn(target: View) {
-    turnSwitch.current?.();                                   // a second tap mid-turn finishes the first one
-    const bridge = (window as any).AndroidBridge;
-    const toController = target === "controller";
-    const rightShape = () => (toController ? window.innerWidth > window.innerHeight : window.innerHeight >= window.innerWidth);
-    let done = false;
-    let timer = 0;
-    const finish = () => {
-      if (done) return;
-      done = true;
-      window.removeEventListener("resize", onResize);
-      window.clearTimeout(timer);
-      turnSwitch.current = null;
-      fromControllerRef.current = !toController;
-      flushSync(() => { setView(target); });
-      viewRef.current = target;
-    };
-    const onResize = () => { if (rightShape()) finish(); };
-    try { bridge?.setScreenOrientation?.(toController ? "landscape-locked" : "portrait"); } catch (e) { console.error(e); }
-    if (!bridge?.setScreenOrientation || rightShape()) { finish(); return; }
-    turnSwitch.current = finish;
-    window.addEventListener("resize", onResize);
-    timer = window.setTimeout(finish, 600);
-  }
-
   function navigateTo(target: View) {
     if (target === "controller") noteControllerOpened();   // starts the session clock; opening the controller never asks for a rating
     if ((view === "dashboard" && target === "controller") || (view === "controller" && target === "dashboard")) {
-      switchWithTurn(target);
+      // As in 1.4.16 and earlier (owner, 2026-11-09: "make the controller open like previous versions"): the cover
+      // fades in with the pulsing gamepad and LOADING, the phone turns behind it, and the controller fades in.
+      runCurtainSequence(() => {
+        const bridge = (window as any).AndroidBridge;
+        if (bridge && bridge.setScreenOrientation) {
+          try {
+            bridge.setScreenOrientation(target === "controller" ? "landscape-locked" : "portrait");
+          } catch (e) { console.error(e); }
+        }
+        setView(target);
+        viewRef.current = target;
+      });
       // #3: a Controller<->Dashboard move is the paced trigger for the
       // feature-intro rating prompt (no-op once rated).
       // Only when the player CLOSES the controller after a real session, and a moment after the curtain, never during it.
       if (target === "dashboard" && recordSessionEnd()) window.setTimeout(() => { if (viewRef.current === "dashboard") setShowIntro(true); }, 1200);
     } else {
-      fromControllerRef.current = false;
       setView(target);
       viewRef.current = target;
       const bridge = (window as any).AndroidBridge;
@@ -3570,8 +3513,19 @@ export default function App() {
             className="absolute inset-0 z-50 flex items-center justify-center"
             style={{ background: CONTROLLER.page }}
           >
-            {/* Plain cover only (owner, 2026-11-08: no opening animation for the controller). It hides the phone turning
-                sideways; there is no logo, no pulse and no LOADING text any more. */}
+            {/* As in previous versions (back 2026-11-09): the pulsing gamepad and LOADING, in the controller's colours. */}
+            <motion.div
+              initial={{ scale: 0.88, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={SPRING}
+              className="flex flex-col items-center gap-3"
+            >
+              <div className="relative flex items-center justify-center">
+                <div className="absolute w-24 h-24 rounded-full" style={{ background: `radial-gradient(circle, rgba(${CONTROLLER.rgb},0.45), transparent 68%)`, filter: "blur(16px)" }} />
+                <Gamepad2 className="relative w-14 h-14 animate-pulse" strokeWidth={1.6} style={{ color: `rgb(${CONTROLLER.rgb})` }} />
+              </div>
+              <span className="text-[11px] font-bold tracking-[0.3em] text-white/70" style={{ fontFamily: "'Space Grotesk',sans-serif" }}>LOADING</span>
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
@@ -3584,7 +3538,7 @@ export default function App() {
         )}
 
         {view === "dashboard" && (
-          <ShellScreenTransition key="dashboard" direction={1} skipEntrance={(firstRoute.current && !!(window as any).AndroidBridge?.onUiReady) || fromControllerRef.current} className="absolute inset-0 z-10">
+          <ShellScreenTransition key="dashboard" direction={1} skipEntrance={firstRoute.current && !!(window as any).AndroidBridge?.onUiReady} className="absolute inset-0 z-10">
             <DashboardScreen
               onLaunch={() => navigateTo("controller")}
               onBack={() => navigateTo("scanner")}
@@ -3617,12 +3571,13 @@ export default function App() {
         {view === "controller" && (
           <motion.div
             key="controller"
-            initial={false}
-            exit={{ opacity: 0, transition: { duration: 0 } }}
-            style={{ background: CONTROLLER.page }}           /* the controller's background shows at once */
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.34, ease: [0.16, 1, 0.3, 1] }}   /* as in 1.4.16 */
+            style={{ willChange: "transform, opacity", backfaceVisibility: "hidden" }}
             className="absolute inset-0 z-20"
           >
-            <ControllerOpening>
             <ControllerScreen
               onBack={() => navigateTo("dashboard")}
               isActive={view === "controller"}
@@ -3639,7 +3594,6 @@ export default function App() {
               gyroIdleDetect={gyroIdleDetect}
               rumbleOn={rumbleOn}
             />
-            </ControllerOpening>
           </motion.div>
         )}
       </AnimatePresence>

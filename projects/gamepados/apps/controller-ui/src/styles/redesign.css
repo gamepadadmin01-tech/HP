@@ -517,11 +517,3 @@
 .gp-shell .calm-update-link:active:not(:disabled) { opacity: .7; }
 .gp-shell .calm-update-link:disabled { opacity: 1; }
 @media (prefers-reduced-motion: reduce) { .gp-shell .calm-update-under { animation: none; } }
-
-/* ── 26. Controller opening (2026-11-09) ─────────────────────────────────────────────────────────────────────────
-   App.tsx ControllerOpening. The pad waits invisible for its first (heavy) frame, then opens: a small zoom from 95%
-   into place with a fade, 0.28 s on the app's ease. Transform + opacity only, so the graphics engine runs it. */
-.gp-ctl-stage { position: absolute; inset: 0; opacity: 0; transform: scale(.95); }
-.gp-ctl-stage.gp-ctl-open { animation: gp-ctl-open .28s cubic-bezier(.16, 1, .3, 1) forwards; will-change: transform, opacity; }
-@keyframes gp-ctl-open { from { opacity: 0; transform: scale(.95); } to { opacity: 1; transform: none; } }
-@media (prefers-reduced-motion: reduce) { .gp-ctl-stage, .gp-ctl-stage.gp-ctl-open { animation: none; opacity: 1; transform: none; } }
