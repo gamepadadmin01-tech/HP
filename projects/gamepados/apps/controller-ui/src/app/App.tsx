@@ -1003,9 +1003,19 @@ let coverNow: Cover = null;
 const coverSubs = new Set<() => void>();
 function setCover(c: Cover) { coverNow = c; coverSubs.forEach((f) => f()); }
 const subscribeCover = (f: () => void) => { coverSubs.add(f); return () => { coverSubs.delete(f); }; };
+// Called once when the cover has REALLY finished fading in (its animationend), so the next screen is built only under
+// a solid cover, however slow the phone is. A timer cannot know that: on a busy phone the fade starts late.
+let onCoverSolid: (() => void) | null = null;
+function whenCoverSolid(fn: () => void, maxMs: number) {
+  let done = false;
+  const run = () => { if (done) return; done = true; onCoverSolid = null; fn(); };
+  onCoverSolid = run;
+  window.setTimeout(run, maxMs);                             // never wait longer than this
+}
 function CoverLayer() {
   const cover = useSyncExternalStore(subscribeCover, () => coverNow, () => coverNow);
-  return cover ? <div className={`gp-cover gp-cover-${cover}`} style={{ background: COVER_COLOR }} aria-hidden="true" /> : null;
+  return cover ? <div className={`gp-cover gp-cover-${cover}`} style={{ background: COVER_COLOR }} aria-hidden="true"
+    onAnimationEnd={() => { if (cover === "in") onCoverSolid?.(); }} /> : null;
 }
 
 function ControllerScreen({ onBack, isActive: screenActive, activeMapping, customPad, controllerLayout, gyroOn, setGyroOn, gyroMaxAngle, gyroWheel, gyroMode, gyroDeadzone, gyroHaptic, gyroThrottle, gyroIdleDetect, rumbleOn }: {
@@ -1659,7 +1669,7 @@ function ControllerScreen({ onBack, isActive: screenActive, activeMapping, custo
 
 
   return (
-    <div className="fixed inset-0 overflow-hidden" style={{ background: CONTROLLER.page, touchAction: "none" }}>
+    <div className="fixed inset-0 overflow-hidden" data-screen="pad" style={{ background: CONTROLLER.page, touchAction: "none" }}>
       <button onClick={onBack} data-nx="1"
         className="absolute z-10 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-white text-xs font-bold transition-all hover:bg-white/10 active:scale-95"
         style={{ 
@@ -1825,7 +1835,7 @@ function ControllerScreen({ onBack, isActive: screenActive, activeMapping, custo
           occlude the indicator; the HUD toggle stays above both at z-10. */}
       <div className="absolute inset-0 z-[5] flex items-center justify-center"
            style={svgTransform}>
-        <svg ref={svgRef} viewBox={`0 0 ${W} 570`} className="w-full h-full max-h-full gp-pad-svg gp-nav"
+        <svg ref={svgRef} viewBox={`0 0 ${W} 570`} className="w-full h-full max-h-full gp-pad-svg"
           style={{ touchAction: "none", userSelect: "none" }}>
         <defs>
           <clipPath id="clip-LT"><rect x={LT.x} y={LT.y} width={LT.w} height={LT.h} rx={LT.rx} /></clipPath>
@@ -3351,33 +3361,48 @@ export default function App() {
   // one move in the SAME direction on the same curve, so the eye reads a single push forward (opening) or pull back
   // (closing) instead of separate steps. It is the standard "fade through / shared axis" screen change from Google's
   // Material motion guidance: the old screen fades out quickly while moving on, the new one fades in growing from
-  // 92% to 100%. `html[data-nav]` tells the screens which half is playing (redesign.css section 27).
+  // 92% to 100%. html[data-nav-dir / data-nav-out / data-nav-in] name the direction, the leaving screen and the
+  // arriving screen (each screen carries data-screen="home" | "pad" | "editor"), so ONLY those two move: a screen
+  // left underneath (Home under the editor) stays still and hidden. redesign.css section 27.
   const COVER_MS = 100;
   const after2Frames = (fn: () => void) => requestAnimationFrame(() => requestAnimationFrame(fn));
-  const setNav = (v: string | null) => { if (v) document.documentElement.dataset.nav = v; else delete document.documentElement.dataset.nav; };
-  function coverThrough(dir: "fwd" | "back", orientation: string, landscape: boolean, swap: () => void, onReveal?: () => void) {
+  type Screen = "home" | "pad" | "editor";
+  // `wait`: the screen that will arrive. Hidden until its turn: when it is already there underneath (Home under the
+  // editor) it would otherwise show through while the old screen fades, then appear a second time.
+  const setNav = (dir: "fwd" | "back" | null, out?: Screen, inn?: Screen, wait?: Screen) => {
+    const d = document.documentElement.dataset;
+    if (!dir) { delete d.navDir; delete d.navOut; delete d.navIn; delete d.navWait; return; }
+    d.navDir = dir;
+    if (out) d.navOut = out; else delete d.navOut;
+    if (inn) d.navIn = inn; else delete d.navIn;
+    if (wait) d.navWait = wait; else delete d.navWait;
+  };
+  function coverThrough(dir: "fwd" | "back", from: Screen, to: Screen, orientation: string, landscape: boolean,
+                        swap: () => void, onReveal?: () => void) {
     transitioningRef.current = true;
     coverTimers.current.forEach(clearTimeout); coverTimers.current = [];
-    const t0 = performance.now();
-    setNav(dir + "-out");                                      // the old screen moves on and fades
+    setNav(dir, from, undefined, to);                          // the old screen moves on and fades; the new one waits
     setCover("in");
     turn(orientation);
-    later(COVER_MS, () => { try { swap(); } catch (e) { console.error(e); } });
-    later(COVER_MS + 10, () => whenShape(landscape, 700, () => {
-      later(Math.max(0, COVER_MS + 10 - (performance.now() - t0)), () => after2Frames(() => {
+    // Build the next screen only once the cover is fully solid (and the old screen has finished fading), so the
+    // heavy first draw of the controller is never on a visible frame. Then wait for the turn, then two drawn frames.
+    whenCoverSolid(() => {
+      setNav(dir, from);                                       // cover solid: the new screen may draw underneath it now
+      try { swap(); } catch (e) { console.error(e); }
+      whenShape(landscape, 700, () => after2Frames(() => {
         onReveal?.();
-        setNav(dir + "-in");                                   // the new screen arrives from the same direction
+        setNav(dir, from, to);                                 // the new one arrives the same way; the old stays hidden
         setCover("out");
         transitioningRef.current = false;                      // the new screen is visible: Back works from here on
         later(140, () => setCover(null));
         later(250, () => setNav(null));
       }));
-    }));
+    }, 400);
     later(2500, () => { setCover(null); setPad(null); setNav(null); transitioningRef.current = false; });   // never stuck
   }
   function openController() {
     setPad("hold");                                            // the controller waits, invisible, behind the cover
-    coverThrough("fwd", "landscape-locked", true, () => {
+    coverThrough("fwd", "home", "pad", "landscape-locked", true, () => {
       fromControllerRef.current = false;
       setView("controller"); viewRef.current = "controller";
     }, () => {
@@ -3387,14 +3412,14 @@ export default function App() {
   }
   function closeController() {
     setPad("out");                                             // leaving: the touch layer stops reading positions
-    coverThrough("back", "portrait", false, () => {
+    coverThrough("back", "pad", "home", "portrait", false, () => {
       fromControllerRef.current = true;
       setView("dashboard"); viewRef.current = "dashboard";
     }, () => setPad(null));
   }
   /** The same cover for the layout editor (open and close). */
-  function coverSwap(dir: "fwd" | "back", orientation: string, landscape: boolean, swap: () => void) {
-    coverThrough(dir, orientation, landscape, swap);
+  function coverSwap(dir: "fwd" | "back", from: Screen, to: Screen, orientation: string, landscape: boolean, swap: () => void) {
+    coverThrough(dir, from, to, orientation, landscape, swap);
   }
   const reducedMotionNow = () => !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 
@@ -3448,7 +3473,7 @@ export default function App() {
   // curtain fades in first and hides the device's physical rotation, instead of
   // the editor visibly CSS-spinning while Android rotates underneath it.
   function openEditor(pad: CustomPad) {
-    if (!reducedMotionNow()) { if (!transitioningRef.current) coverSwap("fwd", "landscape", true, () => setEditingPad(pad)); return; }
+    if (!reducedMotionNow()) { if (!transitioningRef.current) coverSwap("fwd", viewRef.current === "controller" ? "pad" : "home", "editor", "landscape", true, () => setEditingPad(pad)); return; }
     runCurtainSequence(() => {
       const bridge = (window as any).AndroidBridge;
       try { bridge?.setScreenOrientation?.("landscape"); } catch (e) {}
@@ -3458,7 +3483,7 @@ export default function App() {
   function closeEditor() {
     if (!reducedMotionNow()) {
       const toController = viewRef.current === "controller";
-      if (!transitioningRef.current) coverSwap("back", toController ? "landscape-locked" : "portrait", toController, () => setEditingPad(null));
+      if (!transitioningRef.current) coverSwap("back", "editor", toController ? "pad" : "home", toController ? "landscape-locked" : "portrait", toController, () => setEditingPad(null));
       return;
     }
     runCurtainSequence(() => {
@@ -3615,7 +3640,7 @@ export default function App() {
   const controllerLayout = activePreset?.layout ?? "standard";
 
   return (
-    <div className={`fixed inset-0 w-full h-full overflow-hidden ${view === "scanner" ? "bg-transparent" : "bg-black"}`}>
+    <div className={`fixed inset-0 w-full h-full overflow-hidden ${view === "scanner" ? "bg-transparent" : "bg-[#1a1210]"}`}>
 
       {/* USB auto-connect toast */}
       <AnimatePresence>
@@ -3670,7 +3695,7 @@ export default function App() {
         )}
 
         {view === "dashboard" && (
-          <ShellScreenTransition key="dashboard" direction={1} skipEntrance={(firstRoute.current && !!(window as any).AndroidBridge?.onUiReady) || fromControllerRef.current} className="absolute inset-0 z-10 gp-nav">
+          <ShellScreenTransition key="dashboard" direction={1} skipEntrance={(firstRoute.current && !!(window as any).AndroidBridge?.onUiReady) || fromControllerRef.current} className="absolute inset-0 z-10" screen="home">
             <DashboardScreen
               onLaunch={() => navigateTo("controller")}
               onBack={() => navigateTo("scanner")}

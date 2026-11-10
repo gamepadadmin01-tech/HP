@@ -3,8 +3,10 @@ import { motion, useIsPresent, useReducedMotion } from 'framer-motion';
 
 /** One short fade-through per route. The root waits for exit before entry;
  * nested content must not replay its own entrance when the route mounts. */
-export function ShellScreenTransition({ children, direction, className, skipEntrance = false }: {
+export function ShellScreenTransition({ children, direction, className, skipEntrance = false, screen }: {
   children: ReactNode; direction: -1 | 1; className: string; skipEntrance?: boolean;
+  /** data-screen for the Home <-> controller / editor motion (App.tsx coverThrough, redesign.css section 27). */
+  screen?: string;
 }) {
   const present = useIsPresent();
   const reduced = useReducedMotion();
@@ -20,7 +22,7 @@ export function ShellScreenTransition({ children, direction, className, skipEntr
     exit="leaving"
     transition={normalTransition}
     style={{ pointerEvents: present ? 'auto' : 'none', backfaceVisibility: 'hidden' }}
-    className={className}>
+    className={className} data-screen={screen}>
     {children}
   </motion.div>;
 }

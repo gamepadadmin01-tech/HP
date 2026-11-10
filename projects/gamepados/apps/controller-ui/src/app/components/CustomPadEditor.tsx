@@ -647,12 +647,10 @@ export function CustomPadEditor({
 
   return (
     <motion.div
-      initial={{ opacity: 0, scale: 0.98 }}
-      animate={{ opacity: 1, scale: 1 }}
-      exit={{ opacity: 0, scale: 0.98, transition: EXIT }}
-      transition={{ duration: 0.34, ease: [0.16, 1, 0.3, 1] }}
-      style={{ willChange: "transform, opacity", backfaceVisibility: "hidden" }}
-      data-testid="layout-editor-screen" className="fixed inset-0 z-50 bg-[#070910] overflow-hidden touch-none select-none gp-nav"
+      initial={false}                                        /* App.tsx coverThrough animates it in (one motion with the screen it replaces) */
+      exit={{ opacity: 0, transition: { duration: 0 } }}     /* it leaves under the cover */
+      style={{ backfaceVisibility: "hidden" }}
+      data-testid="layout-editor-screen" data-screen="editor" className="fixed inset-0 z-50 bg-[#070910] overflow-hidden touch-none select-none"
     >
       <ShellMotion />
       {/* Rotation layer — auto-rotates the whole editor (canvas + overlays) into
