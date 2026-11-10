@@ -503,49 +503,16 @@
 .gp-shell .calm-update-link:disabled { opacity: 1; }
 @media (prefers-reduced-motion: reduce) { .gp-shell .calm-update-under { animation: none; } }
 
-/* ── 27. Controller / editor open and close: ONE motion (2026-11-10) ─────────────────────────────────────────────
-   App.tsx coverThrough + html[data-nav]. Opening is one push FORWARD: the old screen grows a little and fades
-   (0.1 s), the new one arrives from the same direction, growing from 92% to 100% while fading in (0.22 s).
-   Closing is the same pull BACK. Both halves share one pair of curves, so it reads as a single movement; the cover
-   only hides the moment the phone turns. Whole layers, transform + opacity only (the graphics chip runs it).
-   [data-screen] = the three screens that take part: Home, the controller, the layout editor. */
+/* ── 27. Controller / editor open and close: one basic fade (2026-11-11) ─────────────────────────────────────────
+   App.tsx CoverLayer + coverThrough. The screen fades to the controller's colour (0.16 s), the phone turns and the
+   next screen is built behind it, and the screen fades back in (0.24 s). Nothing else moves. Opacity only, on one
+   full-screen layer, so the graphics chip runs it on its own. */
 .gp-cover { position: fixed; inset: 0; z-index: 60; will-change: opacity; }
-.gp-cover-in { animation: gp-cover-in .1s ease-out both; }
-.gp-cover-out { animation: gp-cover-out .12s ease-in both; pointer-events: none; }
+.gp-cover-in { animation: gp-cover-in .16s ease-out both; }
+.gp-cover-out { animation: gp-cover-out .24s ease-in-out both; pointer-events: none; }
 @keyframes gp-cover-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes gp-cover-out { from { opacity: 1; } to { opacity: 0; } }
-/* The arriving screen is NOT hidden while it waits: it draws under the solid cover, so when the motion starts the
-   phone only has to move a picture it already has (hiding it with opacity 0 made the phone skip drawing it, and the
-   whole pad was then drawn on the first visible frame of the motion: a stutter, measured 2026-11-11). */
-/* The screen that will ARRIVE stays hidden while the cover fades in (it may already be there underneath, like Home
-   under the editor, and must not show through the fading old screen). Once the cover is solid it is shown again
-   UNDER the cover, so the phone draws it before the motion starts. !important: Home's own fade sets its opacity on
-   the element itself. */
-html[data-nav-wait='home'] [data-screen='home'],
-html[data-nav-wait='pad'] [data-screen='pad'],
-html[data-nav-wait='editor'] [data-screen='editor'] { opacity: 0 !important; }
-/* The LEAVING screen (stays hidden until the whole change is over, so it never pops back underneath). */
-html[data-nav-dir='fwd'][data-nav-out='home'] [data-screen='home'],
-html[data-nav-dir='fwd'][data-nav-out='pad'] [data-screen='pad'],
-html[data-nav-dir='fwd'][data-nav-out='editor'] [data-screen='editor'] { animation: gp-out-fwd .1s cubic-bezier(.3, 0, .8, .15) both; }
-html[data-nav-dir='back'][data-nav-out='home'] [data-screen='home'],
-html[data-nav-dir='back'][data-nav-out='pad'] [data-screen='pad'],
-html[data-nav-dir='back'][data-nav-out='editor'] [data-screen='editor'] { animation: gp-out-back .1s cubic-bezier(.3, 0, .8, .15) both; }
-/* The ARRIVING screen, from the same direction, on the decelerating curve. */
-html[data-nav-dir='fwd'][data-nav-in='home'] [data-screen='home'],
-html[data-nav-dir='fwd'][data-nav-in='pad'] [data-screen='pad'],
-html[data-nav-dir='fwd'][data-nav-in='editor'] [data-screen='editor'] { animation: gp-in-fwd .22s cubic-bezier(.05, .7, .1, 1) both; }
-html[data-nav-dir='back'][data-nav-in='home'] [data-screen='home'],
-html[data-nav-dir='back'][data-nav-in='pad'] [data-screen='pad'],
-html[data-nav-dir='back'][data-nav-in='editor'] [data-screen='editor'] { animation: gp-in-back .22s cubic-bezier(.05, .7, .1, 1) both; }
-html[data-nav-dir] [data-screen] { will-change: transform, opacity; }
-@keyframes gp-out-fwd { to { opacity: 0; transform: scale(1.06); } }
-@keyframes gp-in-fwd { from { opacity: 0; transform: scale(.92); } to { opacity: 1; transform: none; } }
-@keyframes gp-out-back { to { opacity: 0; transform: scale(.94); } }
-@keyframes gp-in-back { from { opacity: 0; transform: scale(1.06); } to { opacity: 1; transform: none; } }
-@media (prefers-reduced-motion: reduce) {
-  .gp-cover-in, .gp-cover-out, html[data-nav-dir] [data-screen] { animation: none !important; }
-}
+@media (prefers-reduced-motion: reduce) { .gp-cover-in, .gp-cover-out { animation: none; } }
 
 /* ── 28. Controller: fill-up while a button is held (2026-11-10, replaces the ring) ──────────────────────────────
    Widgets.tsx BtnBase. A layer of the controller colour, clipped to the button, rises from the bottom while the

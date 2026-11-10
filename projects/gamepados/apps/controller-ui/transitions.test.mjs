@@ -1,6 +1,6 @@
 // Run: node transitions.test.mjs   (vite on 127.0.0.1:5187; ROUNDS=10 for the long version)
 // Thorough check of the controller / editor open-close motion (owner, 2026-11-11: "check 1 to 10 times").
-// Added after the motion was rebuilt as ONE fade-through move under a cover (App.tsx coverThrough). Phone-like: CPU 4x slower, the screen "turns"
+// The motion is one basic fade under a cover (App.tsx coverThrough, 2026-11-11). Phone-like: CPU 4x slower, the screen "turns"
 // 220 ms after the app asks. Every frame is sampled in the page. Checks, per run:
 //   - no blank frame: at every frame either the cover or the expected screen is (nearly) fully visible, or the two
 //     together cover the screen (cover + screen opacity >= 0.9);
@@ -36,7 +36,8 @@ await (async () => {
         // The controller sits on its own static background (the wrapper, same colour family as the cover): while the
         // pad itself fades in, that background is what shows, which is not a blank frame.
         const shown = Math.max(home, pad, editor, op(".gp-ctl-wrap"));
-        window.__f.push({ t: performance.now() - t0, cover, home, pad, editor, shown, nav: document.documentElement.dataset.navDir || "", land: innerWidth > innerHeight });
+        // "nav" = a change is in progress (the cover is on screen).
+        window.__f.push({ t: performance.now() - t0, cover, home, pad, editor, shown, nav: document.querySelector(".gp-cover") ? "on" : "", land: innerWidth > innerHeight });
         if (performance.now() - t0 < 1400) requestAnimationFrame(tick);
       };
       requestAnimationFrame(tick);
@@ -63,7 +64,7 @@ await (async () => {
     }
     if (worst > 60 && process.env.WHERE) { const fr = (x) => `${Math.round(x.t)}ms cover=${x.cover.toFixed(2)} home=${x.home.toFixed(2)} pad=${x.pad.toFixed(2)} ed=${x.editor.toFixed(2)} nav=${x.nav}`; console.log(`    [${label}] slow frame between: ${fr(f[wi - 1])}  ->  ${fr(f[wi])}`); }
     const settled = f.find((x, i) => i > 3 && !x.nav && x.cover === 0 && x.shown > 0.99 && f.slice(0, i).some((y) => y.nav));
-    const state = await page.evaluate(() => ({ cover: !!document.querySelector(".gp-cover"), nav: document.documentElement.dataset.navDir || "", pad: document.documentElement.dataset.pad || "",
+    const state = await page.evaluate(() => ({ cover: !!document.querySelector(".gp-cover"), nav: "", pad: "",
       home: !!document.querySelector('[data-testid="home-heading"]'), ctl: !!document.querySelector('[data-screen="pad"]'), editor: !!document.querySelector('[data-screen="editor"]') }));
     const atEnd = endScreen === "home" ? state.home && !state.ctl : endScreen === "pad" ? state.ctl : state.editor;
     check(blank.length === 0, `${label}: no blank frame${blank.length ? " (" + blank.length + " blank, first at " + Math.round(blank[0].t) + "ms)" : ""}`);
@@ -109,13 +110,15 @@ await (async () => {
   await page.evaluate(() => window.__arm());
   await page.evaluate(() => [...document.querySelectorAll(".calm-lay-option")].find((b) => b.textContent.includes("Standard Controller")).click());
   const ed = await analyse("editor open", "editor");
-  const homeDuringEditorIn = ed.frames.filter((x) => x.nav && x.cover < 0.98 && x.home > 0.05 && x.editor > 0).length;
-  check(homeDuringEditorIn === 0, `editor open: Home stays hidden underneath while the editor arrives (${homeDuringEditorIn} frames visible)`);
+  // Under a plain fade the editor must be fully solid whenever the cover is not (it hides Home completely).
+  const edThin = ed.frames.filter((x) => x.cover < 0.98 && x.editor > 0 && x.editor < 0.99).length;
+  check(edThin === 0, `editor open: the editor is fully solid while the fade lifts (${edThin} see-through frames)`);
   await page.evaluate(() => window.__arm());
   await page.click('[data-testid="editor-back-button"]');
   const ec = await analyse("editor close", "home");
-  const early = ec.frames.filter((x) => x.nav && x.editor > 0.02 && x.home > 0.02 && x.cover < 0.98).length;
-  check(early === 0, `editor close: Home does not show through the fading editor (${early} frames)`);
+  const fadeStart = ec.frames.findIndex((x) => x.nav);
+  const edLeft = ec.frames.slice(Math.max(0, fadeStart)).filter((x) => x.cover < 0.98 && x.editor > 0 && !x.nav).length;
+  check(edLeft === 0, `editor close: the editor is gone before the fade lifts (${edLeft} frames)`);
 
   await cdp.send("Emulation.setCPUThrottlingRate", { rate: 1 });
   check(errors.length === 0, `no page errors (${errors.length})`);
