@@ -983,6 +983,32 @@ function useGyro(maxAngle: number = 45, deadzone: number = 0, onGyroChange?: () 
 }
 
 // ─── Controller Screen ────────────────────────────────────────────────────────
+/** A tab's content: fades up when the tab is opened (CSS, run by the graphics engine, so building the new page in the
+ *  same frame cannot eat it). Whether to animate is decided ONCE, when it appears, so a later re-render never
+ *  replays it. */
+function TabFade({ animate, children }: { animate: boolean; children: React.ReactNode }) {
+  const [cls] = useState(animate ? "calm-swap-in" : undefined);
+  return <div className={cls}>{children}</div>;
+}
+
+// ─── Controller open / close: CIRCLE BURST + POP-IN (owner, 2026-11-10) ─────────────────────────────────────
+// Opening: a circle in the controller's colour bursts out from where the player tapped (0.24 s) and fills the screen,
+// the phone turns behind it, then the circle fades while the pad's controls pop into place one after another
+// (redesign.css section 27, `html[data-pad]`). Closing plays it backwards: the controls pop out, the circle covers
+// the screen, the phone turns back, and the circle shrinks into the layout's card on Home.
+// The circle is one element scaled with `transform` (graphics engine, no repaint), sized to the screen's diagonal so
+// it still covers everything after the turn. Each control is animated on its own <g>, never the whole <svg>, so the
+// native touch layer (which reads the svg's on-screen matrix) always gets exact positions.
+const BURST_COLOR = CONTROLLER.page.startsWith("#") ? CONTROLLER.page : "#170d09";
+type Burst = { phase: "grow" | "full" | "shrink" | "fade"; x: number; y: number };
+function BurstCover({ burst }: { burst: Burst }) {
+  const R = Math.ceil(Math.hypot(window.innerWidth, window.innerHeight)) + 8;
+  return <div className="gp-burst" aria-hidden="true">
+    <div className={`gp-burst-circle gp-burst-${burst.phase}`}
+      style={{ left: burst.x - R, top: burst.y - R, width: R * 2, height: R * 2, background: BURST_COLOR }} />
+  </div>;
+}
+
 function ControllerScreen({ onBack, isActive: screenActive, activeMapping, customPad, controllerLayout, gyroOn, setGyroOn, gyroMaxAngle, gyroWheel, gyroMode, gyroDeadzone, gyroHaptic, gyroThrottle, gyroIdleDetect, rumbleOn }: {
   onBack: () => void; isActive: boolean;
   activeMapping: Partial<Record<BtnId, string>>;
@@ -1784,7 +1810,7 @@ function ControllerScreen({ onBack, isActive: screenActive, activeMapping, custo
           occlude the indicator; the HUD toggle stays above both at z-10. */}
       <div className="absolute inset-0 z-[5] flex items-center justify-center"
            style={svgTransform}>
-        <svg ref={svgRef} viewBox={`0 0 ${W} 570`} className="w-full h-full max-h-full"
+        <svg ref={svgRef} viewBox={`0 0 ${W} 570`} className="w-full h-full max-h-full gp-pad-svg"
           style={{ touchAction: "none", userSelect: "none" }}>
         <defs>
           <clipPath id="clip-LT"><rect x={LT.x} y={LT.y} width={LT.w} height={LT.h} rx={LT.rx} /></clipPath>
@@ -3070,7 +3096,7 @@ function DashboardScreen({
           {/* Update banner. Renders nothing unless an update is actually
               available. Shown on every tab since 1.4.11: Settings no longer has its
               own "App" block with the full update section. */}
-          <motion.div key={authOpen ? 'sign-in' : tab} initial={reduceShellMotion || !dashboardEntered.current ? false : { opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: reduceShellMotion ? 0 : .18, ease: [.22, 1, .36, 1] }}>
+          <TabFade key={authOpen ? 'sign-in' : tab} animate={!(reduceShellMotion || !dashboardEntered.current)}>
             {authOpen ? <SignInScreen onBack={closeSignIn} /> : <>
             {tab === "home"   && <TabHome realTelemetry={realTelemetry} onLaunch={onLaunch} onConnect={onBack}
               onLaunchEditor={onLaunchEditor}
@@ -3091,7 +3117,7 @@ function DashboardScreen({
               />
             )}
             </>}
-          </motion.div>
+          </TabFade>
         </div>
       </main>
 
@@ -3161,6 +3187,16 @@ export default function App() {
 
   const viewRef = useRef<View>(view);
   const [isCurtainDown, setIsCurtainDown] = useState(false);
+  // The circle burst for Home <-> controller (BurstCover). `fromControllerRef`: Home skips its own fade-in when it
+  // comes back from the controller, so it is already there when the circle shrinks away.
+  const [burst, setBurst] = useState<Burst | null>(null);
+  const fromControllerRef = useRef(false);
+  const lastTapRef = useRef<{ x: number; y: number; t: number }>({ x: 0, y: 0, t: 0 });
+  useEffect(() => {
+    const onDown = (e: PointerEvent) => { lastTapRef.current = { x: e.clientX, y: e.clientY, t: Date.now() }; };
+    window.addEventListener("pointerdown", onDown, true);
+    return () => window.removeEventListener("pointerdown", onDown, true);
+  }, []);
   // Curtain transition driver. Tracks its timers and guards re-entrancy so a fast
   // double-tap or Android-back mid-transition can't wedge the screen black or leave
   // a view/orientation mismatch. A 1.2s failsafe always lifts the curtain.
@@ -3279,12 +3315,100 @@ export default function App() {
     };
   }, []);
 
+  // Timers of the running open/close, so a new one (or the failsafe) can clear them.
+  const burstTimers = useRef<number[]>([]);
+  const later = (ms: number, fn: () => void) => { burstTimers.current.push(window.setTimeout(fn, ms)); };
+  const setPad = (v: "hold" | "go" | "out" | null) => {
+    if (v) document.documentElement.dataset.pad = v; else delete document.documentElement.dataset.pad;
+  };
+  /** Run `fn` once the window has the shape for `landscape` (the phone finished turning), or after `ms` anyway. */
+  const whenShape = (landscape: boolean, ms: number, fn: () => void) => {
+    let done = false;
+    const ok = () => (landscape ? window.innerWidth > window.innerHeight : window.innerHeight >= window.innerWidth);
+    const go = () => { if (done) return; done = true; window.removeEventListener("resize", onResize); fn(); };
+    const onResize = () => { if (ok()) go(); };
+    // Nothing can turn the screen here (a browser, or an old app shell): do not wait for a turn that never comes.
+    if (ok() || !(window as any).AndroidBridge?.setScreenOrientation) { go(); return; }
+    window.addEventListener("resize", onResize);
+    later(ms, go);
+  };
+  const turn = (to: string) => {
+    try { (window as any).AndroidBridge?.setScreenOrientation?.(to); } catch (e) { console.error(e); }
+  };
+  function burstToController() {
+    transitioningRef.current = true;
+    burstTimers.current.forEach(clearTimeout); burstTimers.current = [];
+    const tap = lastTapRef.current;
+    const recent = Date.now() - tap.t < 1500;
+    setPad("hold");                                            // the controls wait, invisible, until the circle lifts
+    setBurst({ phase: "grow", x: recent ? tap.x : window.innerWidth / 2, y: recent ? tap.y : window.innerHeight / 2 });
+    later(240, () => {                                         // screen covered: turn and swap behind the circle
+      turn("landscape-locked");
+      fromControllerRef.current = false;
+      setView("controller"); viewRef.current = "controller";
+      whenShape(true, 650, () => later(70, () => {             // one painted frame of the pad under the circle
+        setBurst((b) => (b ? { ...b, phase: "fade" } : b));
+        setPad("go");                                          // controls pop in, one after another
+        transitioningRef.current = false;                      // the pad is visible: Back works from here on
+        later(220, () => setBurst(null));
+        later(620, () => setPad(null));
+      }));
+    });
+    later(2500, () => { setBurst(null); setPad(null); transitioningRef.current = false; });   // never stuck
+  }
+  function burstToHome() {
+    transitioningRef.current = true;
+    burstTimers.current.forEach(clearTimeout); burstTimers.current = [];
+    setPad("out");                                             // controls pop out
+    later(170, () => {
+      setBurst({ phase: "full", x: window.innerWidth / 2, y: window.innerHeight / 2 });   // same colour: invisible
+      turn("portrait");
+      fromControllerRef.current = true;
+      setView("dashboard"); viewRef.current = "dashboard";
+      setPad(null);
+      whenShape(false, 650, () => later(70, () => {
+        const card = document.querySelector('.calm-controller-card[data-selected="true"]');
+        const r = card ? card.getBoundingClientRect() : null;
+        const x = r ? r.left + r.width / 2 : window.innerWidth / 2, y = r ? r.top + r.height / 2 : window.innerHeight / 2;
+        setBurst({ phase: "shrink", x, y });                   // the circle shrinks into the layout's card
+        later(280, () => { setBurst(null); transitioningRef.current = false; });
+      }));
+    });
+    later(2500, () => { setBurst(null); setPad(null); transitioningRef.current = false; });
+  }
+
+  /** The same circle burst for the layout editor (open and close): the circle grows from the tap, the screen turns
+   *  and `swap` runs behind it, then the circle fades. */
+  function burstSwap(orientation: string, landscape: boolean, swap: () => void) {
+    transitioningRef.current = true;
+    burstTimers.current.forEach(clearTimeout); burstTimers.current = [];
+    const tap = lastTapRef.current;
+    const recent = Date.now() - tap.t < 1500;
+    setBurst({ phase: "grow", x: recent ? tap.x : window.innerWidth / 2, y: recent ? tap.y : window.innerHeight / 2 });
+    later(240, () => {
+      turn(orientation);
+      try { swap(); } catch (e) { console.error(e); }
+      whenShape(landscape, 650, () => later(70, () => {
+        setBurst((b) => (b ? { ...b, phase: "fade" } : b));
+        transitioningRef.current = false;
+        later(220, () => setBurst(null));
+      }));
+    });
+    later(2500, () => { setBurst(null); transitioningRef.current = false; });
+  }
+  const reducedMotionNow = () => !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+
   function navigateTo(target: View) {
     if (target === "controller") noteControllerOpened();   // starts the session clock; opening the controller never asks for a rating
-    if ((view === "dashboard" && target === "controller") || (view === "controller" && target === "dashboard")) {
-      // As in 1.4.16 and earlier (owner, 2026-11-09: "make the controller open like previous versions"): the cover
-      // fades in with the pulsing gamepad and LOADING, the phone turns behind it, and the controller fades in.
-      runCurtainSequence(() => {
+    // The CURRENT screen, read live: the Android back button keeps the first render's navigateTo, whose `view` is
+    // forever "dashboard", so system Back from the controller used to skip the animation (2026-11-10).
+    const from = viewRef.current;
+    if ((from === "dashboard" && target === "controller") || (from === "controller" && target === "dashboard")) {
+      // Circle burst + pop-in (owner, 2026-11-10); reduced motion keeps the plain LOADING cover.
+      const reducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+      if (!reducedMotion) {
+        if (!transitioningRef.current) (target === "controller" ? burstToController : burstToHome)();
+      } else runCurtainSequence(() => {
         const bridge = (window as any).AndroidBridge;
         if (bridge && bridge.setScreenOrientation) {
           try {
@@ -3299,6 +3423,7 @@ export default function App() {
       // Only when the player CLOSES the controller after a real session, and a moment after the curtain, never during it.
       if (target === "dashboard" && recordSessionEnd()) window.setTimeout(() => { if (viewRef.current === "dashboard") setShowIntro(true); }, 1200);
     } else {
+      fromControllerRef.current = false;
       setView(target);
       viewRef.current = target;
       const bridge = (window as any).AndroidBridge;
@@ -3323,6 +3448,7 @@ export default function App() {
   // curtain fades in first and hides the device's physical rotation, instead of
   // the editor visibly CSS-spinning while Android rotates underneath it.
   function openEditor(pad: CustomPad) {
+    if (!reducedMotionNow()) { if (!transitioningRef.current) burstSwap("landscape", true, () => setEditingPad(pad)); return; }
     runCurtainSequence(() => {
       const bridge = (window as any).AndroidBridge;
       try { bridge?.setScreenOrientation?.("landscape"); } catch (e) {}
@@ -3330,6 +3456,11 @@ export default function App() {
     });
   }
   function closeEditor() {
+    if (!reducedMotionNow()) {
+      const toController = viewRef.current === "controller";
+      if (!transitioningRef.current) burstSwap(toController ? "landscape-locked" : "portrait", toController, () => setEditingPad(null));
+      return;
+    }
     runCurtainSequence(() => {
       const bridge = (window as any).AndroidBridge;
       try { bridge?.setScreenOrientation?.(viewRef.current === "controller" ? "landscape-locked" : "portrait"); } catch (e) {}
@@ -3504,6 +3635,7 @@ export default function App() {
         )}
       </AnimatePresence>
 
+      {burst && <BurstCover burst={burst} />}
       {/* Black Curtain for Orientation Transitions */}
       <AnimatePresence>
         {isCurtainDown && (
@@ -3538,7 +3670,7 @@ export default function App() {
         )}
 
         {view === "dashboard" && (
-          <ShellScreenTransition key="dashboard" direction={1} skipEntrance={firstRoute.current && !!(window as any).AndroidBridge?.onUiReady} className="absolute inset-0 z-10">
+          <ShellScreenTransition key="dashboard" direction={1} skipEntrance={(firstRoute.current && !!(window as any).AndroidBridge?.onUiReady) || fromControllerRef.current} className="absolute inset-0 z-10">
             <DashboardScreen
               onLaunch={() => navigateTo("controller")}
               onBack={() => navigateTo("scanner")}
@@ -3571,11 +3703,9 @@ export default function App() {
         {view === "controller" && (
           <motion.div
             key="controller"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.34, ease: [0.16, 1, 0.3, 1] }}   /* as in 1.4.16 */
-            style={{ willChange: "transform, opacity", backfaceVisibility: "hidden" }}
+            initial={false}                                   /* revealed by the circle burst; controls pop in (BurstCover) */
+            exit={{ opacity: 0, transition: { duration: 0 } }}
+            style={{ background: CONTROLLER.page }}
             className="absolute inset-0 z-20"
           >
             <ControllerScreen

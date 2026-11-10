@@ -419,6 +419,20 @@ class MainActivity : AppCompatActivity(), android.hardware.SensorEventListener {
     // The splash, once Android has handed it to us (see onCreate), until it has faded out.
     private var splashProvider: androidx.core.splashscreen.SplashScreenViewProvider? = null
     private var splashFading = false
+    // Heavy start-up work that is NOT needed to show the app (warming an ad) waits until the launch has settled:
+    // half a second after the logo has gone. Started during the fade it stalled the phone's main thread and the
+    // opening stuttered, but only for players who had watched an ad before, hence "sometimes" (2026-11-10).
+    private var launchSettled = false
+    private val afterLaunch = ArrayList<() -> Unit>()
+    internal fun runAfterLaunch(block: () -> Unit) {
+        runOnUiThread { if (launchSettled) block() else afterLaunch.add(block) }
+    }
+    private fun settleLaunch() {
+        if (launchSettled) return
+        launchSettled = true
+        val queued = ArrayList(afterLaunch); afterLaunch.clear()
+        queued.forEach { try { it() } catch (e: Exception) { e.printStackTrace() } }
+    }
 
     // UI State
     private var lastTopDp = 44f
@@ -512,6 +526,7 @@ class MainActivity : AppCompatActivity(), android.hardware.SensorEventListener {
         }
         // Failsafe: if the JS side never signals (load failure), lift the splash anyway so the app never hangs on it.
         mainHandler.postDelayed({ uiReady = true; fadeOutSplash() }, 4000)
+        mainHandler.postDelayed({ settleLaunch() }, 6000)          // whatever happens to the splash
 
         super.onCreate(savedInstanceState)
 
@@ -1710,6 +1725,7 @@ class MainActivity : AppCompatActivity(), android.hardware.SensorEventListener {
                         splashProvider = null
                         // Removing the splash can reset this for a frame (the page jumps under the status bar).
                         WindowCompat.setDecorFitsSystemWindows(window, false)
+                        mainHandler.postDelayed({ settleLaunch() }, 500)   // now the held-back start-up work may run
                     }
                     .start()
             }

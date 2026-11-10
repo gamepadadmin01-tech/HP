@@ -149,18 +149,23 @@ export function PadGlassDefs() {
         <stop offset="55%"  stopColor="#100a07" />
         <stop offset="100%" stopColor="#030202" />
       </linearGradient>
-      {/* Shine: 0.42 -> 0.25 at the crown (2026-11-09), so the dark glass stays dark; still clearly glass. */}
+      {/* Shine (2026-11-10, owner: "glass, more contrast"): a brighter crown that falls off quickly, so it reads as a
+          sharp reflection on glass instead of a milky wash; the body under it stays dark. */}
       <linearGradient id="padSpec" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0%"   stopColor="#ffffff" stopOpacity="0.25" />
-        <stop offset="42%"  stopColor="#ffffff" stopOpacity="0.04" />
+        <stop offset="0%"   stopColor="#ffffff" stopOpacity="0.44" />
+        <stop offset="16%"  stopColor="#ffffff" stopOpacity="0.20" />
+        <stop offset="38%"  stopColor="#ffffff" stopOpacity="0.03" />
         <stop offset="100%" stopColor="#ffffff" stopOpacity="0" />
       </linearGradient>
       {/* Rim: a bright top edge with a warm glint of the controller colour, falling to a dark lower edge. */}
+      {/* Rim (2026-11-10): a bright top edge with a warm glint, a dark middle-bottom, and a thin light glint at the very
+          bottom, the way light runs round the edge of real glass. Stronger than before so every control pops. */}
       <linearGradient id="padRim" x1="0" y1="0" x2="0.4" y2="1">
-        <stop offset="0%"   stopColor="#ffffff" stopOpacity="0.62" />
-        <stop offset="28%"  stopColor={`rgb(${ACCENT_RGB})`} stopOpacity="0.5" />
-        <stop offset="60%"  stopColor="#ffffff" stopOpacity="0.04" />
-        <stop offset="100%" stopColor="#000000" stopOpacity="0.45" />
+        <stop offset="0%"   stopColor="#ffffff" stopOpacity="0.88" />
+        <stop offset="22%"  stopColor={`rgb(${ACCENT_RGB})`} stopOpacity="0.6" />
+        <stop offset="52%"  stopColor="#ffffff" stopOpacity="0.05" />
+        <stop offset="80%"  stopColor="#000000" stopOpacity="0.5" />
+        <stop offset="100%" stopColor="#ffffff" stopOpacity="0.22" />
       </linearGradient>
       <radialGradient id="padUnder" cx="0.5" cy="0.5" r="0.5">
         <stop offset="55%"  stopColor="#000000" stopOpacity="0.34" />
@@ -239,10 +244,10 @@ function BtnBase({ cx, cy, r, label, id, held, dn, up, fontSize, normColor = RED
           a gentle bloom, not a hard flash. */}
       {isRect ? (
         <rect x={cx - w! / 2 - 6} y={cy - h! / 2 - 6} width={w! + 12} height={h! + 12} rx={rx + 6}
-          fill={heldColor} className={isHeld ? "gp-hold-glow" : undefined}
+          fill={heldColor}
           style={{ pointerEvents: "none", filter: "blur(12px)", opacity: isHeld ? 0.06 : 0, transition: "opacity 0.2s ease-out" }} />
       ) : (
-        <circle cx={cx} cy={cy} r={r + 14} fill={heldColor} className={isHeld ? "gp-hold-glow" : undefined}
+        <circle cx={cx} cy={cy} r={r + 14} fill={heldColor}
           style={{ pointerEvents: "none", filter: "blur(12px)", opacity: isHeld ? 0.06 : 0, transition: "opacity 0.2s ease-out" }} />
       )}
       <g style={{
@@ -315,6 +320,14 @@ function BtnBase({ cx, cy, r, label, id, held, dn, up, fontSize, normColor = RED
           <circle cx={cx} cy={cy} r={r}
             style={{ fill: heldColor, pointerEvents: "none", opacity: isHeld ? 0.14 : 0, transition: "opacity 0.16s ease-out" }} />
         )}
+        {/* FILL-UP WHILE HELD (owner, 2026-11-10: replaces the ring). The controller colour rises from the bottom of the
+            button while it is held (starting after 0.18 s, so a quick tap shows nothing) and drains quickly when it is
+            let go. Always mounted so the drain can animate; CSS transform only (redesign.css section 28). */}
+        <g clipPath={`url(#${clipId})`} style={{ pointerEvents: "none" }}>
+          {isRect
+            ? <rect x={cx - w! / 2} y={cy - h! / 2} width={w!} height={h!} className={`gp-fill${isHeld ? " on" : ""}`} fill={heldColor} fillOpacity={0.34} />
+            : <rect x={cx - r} y={cy - r} width={r * 2} height={r * 2} className={`gp-fill${isHeld ? " on" : ""}`} fill={heldColor} fillOpacity={0.34} />}
+        </g>
         {/* SPECULAR CAP — replaces the old flat 10%-white ellipse. A gradient
             that is bright at the crown and gone by ~45% down reads as light
             landing on a curved surface; a flat ellipse reads as a painted dot.
@@ -335,12 +348,12 @@ function BtnBase({ cx, cy, r, label, id, held, dn, up, fontSize, normColor = RED
         {isRect ? (
           <rect x={cx - w! / 2} y={cy - h! / 2} width={w!} height={h!} rx={rx}
             fill="none" stroke="url(#padRim)"
-            style={{ pointerEvents: "none", strokeWidth: isHeld ? "2px" : "1.5px",
+            style={{ pointerEvents: "none", strokeWidth: isHeld ? "2.6px" : "2px",
                      transition: "stroke-width 0.16s ease-out" }} />
         ) : (
           <circle cx={cx} cy={cy} r={r}
             fill="none" stroke="url(#padRim)"
-            style={{ pointerEvents: "none", strokeWidth: isHeld ? "2px" : "1.5px",
+            style={{ pointerEvents: "none", strokeWidth: isHeld ? "2.6px" : "2px",
                      transition: "stroke-width 0.16s ease-out" }} />
         )}
         {typeof label === "string" || typeof label === "number" || (React.isValidElement(label) && (label.type === "tspan" || label.type === React.Fragment)) ? (
@@ -355,13 +368,11 @@ function BtnBase({ cx, cy, r, label, id, held, dn, up, fontSize, normColor = RED
           </g>
         )}
       </g>
-      {(isHeld || ripples.length > 0) && (
-        <clipPath id={clipId}>
-          {isRect
-            ? <rect x={cx - w! / 2} y={cy - h! / 2} width={w!} height={h!} rx={rx} />
-            : <circle cx={cx} cy={cy} r={r} />}
-        </clipPath>
-      )}
+      <clipPath id={clipId}>
+        {isRect
+          ? <rect x={cx - w! / 2} y={cy - h! / 2} width={w!} height={h!} rx={rx} />
+          : <circle cx={cx} cy={cy} r={r} />}
+      </clipPath>
       {/* Wave shimmer while held — a soft blurred light sweeping across the button,
           matching the LT/RT trigger's wave crest. Low opacity = dim, clipped to the
           button shape, gentle SMIL side-to-side travel. */}
@@ -381,19 +392,6 @@ function BtnBase({ cx, cy, r, label, id, held, dn, up, fontSize, normColor = RED
           {rippleCircles(ripples, cx, cy, coverBase)}
         </g>
       )}
-      {/* LONG PRESS (owner, 2026-11-09: "make the button animation interactive when long pressed"). A quick tap looks
-          as before; keep holding and, after a moment, a thin ring of the controller colour charges round the button
-          from the top, then it and the soft glow above breathe for as long as the button is held. Mounted only while
-          held, animated by CSS (redesign.css section 24), so a resting pad costs nothing. */}
-      {isHeld && (isRect ? (
-        <rect x={cx - w! / 2 - 5} y={cy - h! / 2 - 5} width={w! + 10} height={h! + 10} rx={rx + 5}
-          pathLength={1} className="gp-hold-ring" fill="none" stroke={`rgb(${ACCENT_RGB})`} strokeWidth={3}
-          strokeLinecap="round" style={{ pointerEvents: "none" }} />
-      ) : (
-        <circle cx={cx} cy={cy} r={r + 5} transform={`rotate(-90 ${cx} ${cy})`}
-          pathLength={1} className="gp-hold-ring" fill="none" stroke={`rgb(${ACCENT_RGB})`} strokeWidth={3}
-          strokeLinecap="round" style={{ pointerEvents: "none" }} />
-      ))}
     </g>
   );
 }
@@ -497,7 +495,7 @@ function DpadBase({ cx, cy, r, held, dn, up, dirIds }: {
         style={{ transition: "stroke 0.12s ease-out" }} />
       <ellipse cx={cx} cy={cy - r * 0.30} rx={r * 0.78} ry={r * 0.50}
         fill="url(#padSpec)" style={{ pointerEvents: "none" }} />
-      <circle cx={cx} cy={cy} r={r} fill="none" stroke="url(#padRim)" strokeWidth={1.5}
+      <circle cx={cx} cy={cy} r={r} fill="none" stroke="url(#padRim)" strokeWidth={2}
         style={{ pointerEvents: "none" }} />
       {dirs.map(({ id, angle }) => (
         // Always rendered so the highlight can FADE in/out (a transition can't
@@ -597,7 +595,7 @@ function RightStickBase({ cx, cy, outerR, innerR, stick, id, held, dn, up, tag }
         style={{ pointerEvents: "all", transition: "stroke 0.12s ease-out" }} />
       <ellipse cx={cx} cy={cy - outerR * 0.30} rx={outerR * 0.80} ry={outerR * 0.50}
         fill="url(#padSpec)" style={{ pointerEvents: "none" }} />
-      <circle cx={cx} cy={cy} r={outerR} fill="none" stroke="url(#padRim)" strokeWidth={1.5}
+      <circle cx={cx} cy={cy} r={outerR} fill="none" stroke="url(#padRim)" strokeWidth={2}
         style={{ pointerEvents: "none" }} />
       {ripples.length > 0 && (
         <>
@@ -750,7 +748,7 @@ function TriggerPillBase({ x, y, w, h, rx, label, id, dn, up, fill, onFillChange
           style={{ stroke: "rgba(255,255,255,0.06)", strokeWidth: "1px", pointerEvents: "none" }} />
       ))}
       <rect x={x} y={y} width={w} height={h} rx={rx} fill="none" stroke="url(#padRim)"
-        style={{ pointerEvents: "none", strokeWidth: "1.5px" }} />
+        style={{ pointerEvents: "none", strokeWidth: "2px" }} />
       {/* Top gloss — a centered ellipse to match the highlight on every other
           button (was an off-center rounded rect that read as a stray square). */}
       {/* Specular cap — a gradient over the top of the pill instead of the old

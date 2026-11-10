@@ -123,11 +123,12 @@ open class AdsBridge(activity: MainActivity) : UpdaterBridgeBase(activity) {
      *  merely opening a screen must never pop a consent form. */
     @JavascriptInterface
     fun preloadRewardedAd() {
-        activity.runOnUiThread {
-            if (!consent.canRequestAds()) return@runOnUiThread
+        // Not during launch: starting an ad network on the main thread while the logo fades made the opening stutter.
+        activity.runAfterLaunch {
+            if (!consent.canRequestAds()) return@runAfterLaunch
             if (useUnity) {
                 unity.start(personalisedAds()) { problem -> if (problem == null) unity.loadThen { } }
-                return@runOnUiThread
+                return@runAfterLaunch
             }
             startSdk()
             if (ad == null) load()
