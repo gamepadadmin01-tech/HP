@@ -991,40 +991,21 @@ function TabFade({ animate, children }: { animate: boolean; children: React.Reac
   return <div className={cls}>{children}</div>;
 }
 
-// ─── Controller open / close: CIRCLE BURST + POP-IN (owner, 2026-11-10) ─────────────────────────────────────
-// Opening: a circle in the controller's colour bursts out from where the player tapped (0.24 s) and fills the screen,
-// the phone turns behind it, then the circle fades while the pad's controls pop into place one after another
-// (redesign.css section 27, `html[data-pad]`). Closing plays it backwards: the controls pop out, the circle covers
-// the screen, the phone turns back, and the circle shrinks into the layout's card on Home.
-// The circle is one element scaled with `transform` (graphics engine, no repaint), sized to the screen's diagonal so
-// it still covers everything after the turn. Each control is animated on its own <g>, never the whole <svg>, so the
-// native touch layer (which reads the svg's on-screen matrix) always gets exact positions.
-const BURST_COLOR = CONTROLLER.page.startsWith("#") ? CONTROLLER.page : "#170d09";
-type Burst = { phase: "grow" | "full" | "shrink" | "fade"; x: number; y: number };
-// The burst lives OUTSIDE React's App state (a tiny store, like the layout dialog's): starting it must not redraw
-// the whole app first. On the owner's phone that redraw put about 0.14 s between the tap and the first frame of
-// the circle (2026-11-10). Only <BurstLayer /> re-renders when it changes.
-let burstNow: Burst | null = null;
-const burstSubs = new Set<() => void>();
-function setBurst(b: Burst | null) { burstNow = b; burstSubs.forEach((f) => f()); }
-const subscribeBurst = (f: () => void) => { burstSubs.add(f); return () => { burstSubs.delete(f); }; };
-function BurstLayer() {
-  const burst = useSyncExternalStore(subscribeBurst, () => burstNow, () => burstNow);
-  return burst ? <BurstCover burst={burst} /> : null;
-}
-function BurstCover({ burst }: { burst: Burst }) {
-  // A SMALL disc (96 px) scaled up to cover the screen, not a disc drawn bigger than the screen: the first version
-  // made the graphics chip handle a picture of about 5000 x 5000 pixels on a phone, which is why it ran at low
-  // frames (2026-11-10). A flat colour scales up perfectly, and its edge is off-screen by the end.
-  const BASE = 96;
-  const R = Math.ceil(Math.hypot(window.innerWidth, window.innerHeight)) + 8;
-  const box = { left: burst.x - BASE / 2, top: burst.y - BASE / 2, width: BASE, height: BASE, ["--s" as any]: (R * 2) / BASE };
-  return <div className="gp-burst" aria-hidden="true">
-    <div className={`gp-burst-circle gp-burst-${burst.phase}`} style={{ ...box, background: BURST_COLOR }} />
-    {/* A thin ring of the controller colour rides out with the burst, and again from the centre when the pad pops in. */}
-    {(burst.phase === "grow" || burst.phase === "fade") &&
-      <div key={burst.phase} className="gp-burst-ring" style={{ ...box, borderColor: `rgb(${CONTROLLER.rgb})` }} />}
-  </div>;
+// ─── Controller open / close: a plain fade (owner, 2026-11-10: "keep it simple as much as possible") ───────────
+// One full-screen layer in the controller's colour fades in (0.12 s), the phone turns and the next screen is built
+// behind it, and it fades out (0.15 s) while the pad zooms in a little (redesign.css section 27). No circle, no
+// rings, nothing measured. The one rule that matters (from the owner's screen recording): the turn and the build
+// happen WHILE the cover is on, never after it, because Android needs about 0.2 s to turn the screen.
+// It lives outside React's App state (a tiny store) so that starting it never redraws the whole app first.
+const COVER_COLOR = CONTROLLER.page.startsWith("#") ? CONTROLLER.page : "#170d09";
+type Cover = "in" | "out" | null;
+let coverNow: Cover = null;
+const coverSubs = new Set<() => void>();
+function setCover(c: Cover) { coverNow = c; coverSubs.forEach((f) => f()); }
+const subscribeCover = (f: () => void) => { coverSubs.add(f); return () => { coverSubs.delete(f); }; };
+function CoverLayer() {
+  const cover = useSyncExternalStore(subscribeCover, () => coverNow, () => coverNow);
+  return cover ? <div className={`gp-cover gp-cover-${cover}`} style={{ background: COVER_COLOR }} aria-hidden="true" /> : null;
 }
 
 function ControllerScreen({ onBack, isActive: screenActive, activeMapping, customPad, controllerLayout, gyroOn, setGyroOn, gyroMaxAngle, gyroWheel, gyroMode, gyroDeadzone, gyroHaptic, gyroThrottle, gyroIdleDetect, rumbleOn }: {
@@ -3221,15 +3202,8 @@ export default function App() {
 
   const viewRef = useRef<View>(view);
   const [isCurtainDown, setIsCurtainDown] = useState(false);
-  // The circle burst for Home <-> controller (BurstCover). `fromControllerRef`: Home skips its own fade-in when it
-  // comes back from the controller, so it is already there when the circle shrinks away.
+  // Home skips its own fade-in when it comes back from the controller, so it is already there when the cover lifts.
   const fromControllerRef = useRef(false);
-  const lastTapRef = useRef<{ x: number; y: number; t: number }>({ x: 0, y: 0, t: 0 });
-  useEffect(() => {
-    const onDown = (e: PointerEvent) => { lastTapRef.current = { x: e.clientX, y: e.clientY, t: Date.now() }; };
-    window.addEventListener("pointerdown", onDown, true);
-    return () => window.removeEventListener("pointerdown", onDown, true);
-  }, []);
   // Curtain transition driver. Tracks its timers and guards re-entrancy so a fast
   // double-tap or Android-back mid-transition can't wedge the screen black or leave
   // a view/orientation mismatch. A 1.2s failsafe always lifts the curtain.
@@ -3349,8 +3323,8 @@ export default function App() {
   }, []);
 
   // Timers of the running open/close, so a new one (or the failsafe) can clear them.
-  const burstTimers = useRef<number[]>([]);
-  const later = (ms: number, fn: () => void) => { burstTimers.current.push(window.setTimeout(fn, ms)); };
+  const coverTimers = useRef<number[]>([]);
+  const later = (ms: number, fn: () => void) => { coverTimers.current.push(window.setTimeout(fn, ms)); };
   const setPad = (v: "hold" | "go" | "out" | null) => {
     if (v) document.documentElement.dataset.pad = v; else delete document.documentElement.dataset.pad;
     // The pad is at its true size again: the native touch layer may read its position now (ControllerScreen).
@@ -3370,65 +3344,47 @@ export default function App() {
   const turn = (to: string) => {
     try { (window as any).AndroidBridge?.setScreenOrientation?.(to); } catch (e) { console.error(e); }
   };
-  // MEASURED ON THE OWNER'S PHONE (screen recording, 2026-11-10): Android needs about 0.2-0.25 s to turn the screen
-  // and the old sequence did everything one after another (burst, THEN turn, THEN build, THEN reveal), so about
-  // 0.4 s of every opening was an empty screen and the animation itself was only a few frames. Now the three overlap:
-  // the turn is requested and the next screen is built WHILE the circle bursts (0.2 s, fully visible), and the reveal
-  // starts the moment both the burst and the turn are done. `after2Frames`: the new screen has been drawn once.
-  const BURST_MS = 200;
+  // Cover on -> turn the screen and build the next screen behind it -> cover off. The turn is asked for at once and
+  // the next screen is built as soon as the cover is solid, so Android's 0.2 s is spent under the cover, not after it.
+  const COVER_MS = 120;
   const after2Frames = (fn: () => void) => requestAnimationFrame(() => requestAnimationFrame(fn));
-  const tapPoint = () => {
-    const tap = lastTapRef.current;
-    return Date.now() - tap.t < 1500 ? { x: tap.x, y: tap.y } : { x: window.innerWidth / 2, y: window.innerHeight / 2 };
-  };
-  /** Start the burst, turn the screen and run `swap` behind it; call `reveal` when the burst AND the turn are done. */
-  function burstThrough(orientation: string, landscape: boolean, swap: () => void, reveal: () => void) {
+  function coverThrough(orientation: string, landscape: boolean, swap: () => void, onReveal?: () => void) {
     transitioningRef.current = true;
-    burstTimers.current.forEach(clearTimeout); burstTimers.current = [];
+    coverTimers.current.forEach(clearTimeout); coverTimers.current = [];
     const t0 = performance.now();
-    setBurst({ phase: "grow", ...tapPoint() });
-    later(40, () => turn(orientation));                        // Android's 0.2 s is spent during the burst
-    later(90, () => { try { swap(); } catch (e) { console.error(e); } });   // built hidden behind the circle
-    later(100, () => whenShape(landscape, 700, () => {
-      later(Math.max(0, BURST_MS + 10 - (performance.now() - t0)), () => after2Frames(reveal));
+    setCover("in");
+    turn(orientation);
+    later(COVER_MS, () => { try { swap(); } catch (e) { console.error(e); } });
+    later(COVER_MS + 10, () => whenShape(landscape, 700, () => {
+      later(Math.max(0, COVER_MS + 10 - (performance.now() - t0)), () => after2Frames(() => {
+        onReveal?.();
+        setCover("out");
+        transitioningRef.current = false;                      // the new screen is visible: Back works from here on
+        later(170, () => setCover(null));
+      }));
     }));
-    later(2500, () => { setBurst(null); setPad(null); transitioningRef.current = false; });   // never stuck
+    later(2500, () => { setCover(null); setPad(null); transitioningRef.current = false; });   // never stuck
   }
-  const fadeBurst = () => {
-    setBurst({ phase: "fade", x: window.innerWidth / 2, y: window.innerHeight / 2 });
-    transitioningRef.current = false;                          // the new screen is visible: Back works from here on
-    later(150, () => setBurst(null));
-  };
-  function burstToController() {
-    setPad("hold");                                            // the controller waits, invisible, behind the circle
-    burstThrough("landscape-locked", true, () => {
+  function openController() {
+    setPad("hold");                                            // the controller waits, invisible, behind the cover
+    coverThrough("landscape-locked", true, () => {
       fromControllerRef.current = false;
       setView("controller"); viewRef.current = "controller";
     }, () => {
-      fadeBurst();
-      setPad("go");                                            // the pad pops in as ONE layer (graphics chip)
-      later(270, () => setPad(null));
+      setPad("go");                                            // the pad zooms in a little as the cover lifts
+      later(230, () => setPad(null));
     });
   }
-  function burstToHome() {
-    setPad("out");                                             // the pad pops out while the circle closes in
-    burstThrough("portrait", false, () => {
+  function closeController() {
+    setPad("out");                                             // the pad fades out as the cover comes on
+    coverThrough("portrait", false, () => {
       fromControllerRef.current = true;
       setView("dashboard"); viewRef.current = "dashboard";
-      // "out" stays set until Home is revealed: clearing it here showed the pad again for a frame before it was removed.
-    }, () => {
-      setPad(null);
-      const card = document.querySelector('.calm-controller-card[data-selected="true"]');
-      const r = card ? card.getBoundingClientRect() : null;
-      const x = r ? r.left + r.width / 2 : window.innerWidth / 2, y = r ? r.top + r.height / 2 : window.innerHeight / 2;
-      setBurst({ phase: "shrink", x, y });                     // the circle shrinks into the layout's card
-      later(240, () => { setBurst(null); transitioningRef.current = false; });
-    });
+    }, () => setPad(null));
   }
-
-  /** The same burst for the layout editor (open and close). */
-  function burstSwap(orientation: string, landscape: boolean, swap: () => void) {
-    burstThrough(orientation, landscape, swap, fadeBurst);
+  /** The same cover for the layout editor (open and close). */
+  function coverSwap(orientation: string, landscape: boolean, swap: () => void) {
+    coverThrough(orientation, landscape, swap);
   }
   const reducedMotionNow = () => !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 
@@ -3438,10 +3394,10 @@ export default function App() {
     // forever "dashboard", so system Back from the controller used to skip the animation (2026-11-10).
     const from = viewRef.current;
     if ((from === "dashboard" && target === "controller") || (from === "controller" && target === "dashboard")) {
-      // Circle burst + pop-in (owner, 2026-11-10); reduced motion keeps the plain LOADING cover.
+      // A plain fade cover (owner, 2026-11-10: keep it simple); reduced motion keeps the LOADING cover.
       const reducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
       if (!reducedMotion) {
-        if (!transitioningRef.current) (target === "controller" ? burstToController : burstToHome)();
+        if (!transitioningRef.current) (target === "controller" ? openController : closeController)();
       } else runCurtainSequence(() => {
         const bridge = (window as any).AndroidBridge;
         if (bridge && bridge.setScreenOrientation) {
@@ -3482,7 +3438,7 @@ export default function App() {
   // curtain fades in first and hides the device's physical rotation, instead of
   // the editor visibly CSS-spinning while Android rotates underneath it.
   function openEditor(pad: CustomPad) {
-    if (!reducedMotionNow()) { if (!transitioningRef.current) burstSwap("landscape", true, () => setEditingPad(pad)); return; }
+    if (!reducedMotionNow()) { if (!transitioningRef.current) coverSwap("landscape", true, () => setEditingPad(pad)); return; }
     runCurtainSequence(() => {
       const bridge = (window as any).AndroidBridge;
       try { bridge?.setScreenOrientation?.("landscape"); } catch (e) {}
@@ -3492,7 +3448,7 @@ export default function App() {
   function closeEditor() {
     if (!reducedMotionNow()) {
       const toController = viewRef.current === "controller";
-      if (!transitioningRef.current) burstSwap(toController ? "landscape-locked" : "portrait", toController, () => setEditingPad(null));
+      if (!transitioningRef.current) coverSwap(toController ? "landscape-locked" : "portrait", toController, () => setEditingPad(null));
       return;
     }
     runCurtainSequence(() => {
@@ -3669,7 +3625,7 @@ export default function App() {
         )}
       </AnimatePresence>
 
-      <BurstLayer />
+      <CoverLayer />
       {/* Black Curtain for Orientation Transitions */}
       <AnimatePresence>
         {isCurtainDown && (
@@ -3737,7 +3693,7 @@ export default function App() {
         {view === "controller" && (
           <motion.div
             key="controller"
-            initial={false}                                   /* revealed by the circle burst; the pad pops in (BurstCover) */
+            initial={false}                                   /* revealed when the cover lifts; the pad zooms in (CoverLayer) */
             exit={{ opacity: 0, transition: { duration: 0 } }}
             style={{ background: CONTROLLER.page }}
             className="absolute inset-0 z-20 gp-ctl-wrap"

@@ -503,33 +503,22 @@
 .gp-shell .calm-update-link:disabled { opacity: 1; }
 @media (prefers-reduced-motion: reduce) { .gp-shell .calm-update-under { animation: none; } }
 
-/* ── 27. Controller open / close: circle burst + pop-in (2026-11-10) ─────────────────────────────────────────────
-   App.tsx BurstCover + html[data-pad]. Every moving thing is ONE layer moved by the graphics chip (transform and
-   opacity only), so it runs at the screen's full rate:
-   - the circle is a small 96 px disc scaled up by --s; a thin ring of the controller colour rides out with it and
-     again from the centre when the pad pops in;
-   - the pad pops in as a whole (the <svg> element) with a small overshoot; controls inside one drawing cannot be
-     moved separately by the graphics chip.
-   The burst is 0.2 s on purpose: Android needs that long to turn the screen, and the turn happens DURING it. */
-.gp-burst { position: fixed; inset: 0; z-index: 60; overflow: hidden; pointer-events: auto; contain: strict; }
-.gp-burst-circle, .gp-burst-ring { position: absolute; border-radius: 50%; will-change: transform, opacity; }
-.gp-burst-grow { animation: gp-burst-grow .2s cubic-bezier(.45, 0, .25, 1) both; }
-.gp-burst-full { transform: scale(var(--s)); }
-.gp-burst-shrink { animation: gp-burst-shrink .23s cubic-bezier(.5, 0, .3, 1) both; }
-.gp-burst-fade { transform: scale(var(--s)); animation: gp-burst-fade .13s linear both; }
-.gp-burst-ring { box-sizing: border-box; border: 1.5px solid; opacity: 0; animation: gp-burst-ring .38s cubic-bezier(.2, .7, .3, 1) both; }
-@keyframes gp-burst-grow { from { transform: scale(0); } to { transform: scale(var(--s)); } }
-@keyframes gp-burst-shrink { from { transform: scale(var(--s)); } to { transform: scale(0); } }
-@keyframes gp-burst-fade { from { opacity: 1; } to { opacity: 0; } }
-@keyframes gp-burst-ring { from { transform: scale(0); opacity: .95; } to { transform: scale(calc(var(--s) * .6)); opacity: 0; } }
-html[data-pad='hold'] .gp-ctl-wrap { opacity: 0; }
-html[data-pad='hold'] .gp-pad-svg { opacity: 0; }
-html[data-pad='go'] .gp-pad-svg { animation: gp-pad-in .26s cubic-bezier(.2, 1.25, .35, 1) both; will-change: transform, opacity; }
-html[data-pad='out'] .gp-pad-svg { animation: gp-pad-out .12s cubic-bezier(.4, 0, 1, 1) both; will-change: transform, opacity; }
-@keyframes gp-pad-in { from { opacity: 0; transform: scale(.84); } 45% { opacity: 1; } to { opacity: 1; transform: none; } }
-@keyframes gp-pad-out { to { opacity: 0; transform: scale(.9); } }
+/* ── 27. Controller open / close: a plain fade (2026-11-10, "keep it simple") ───────────────────────────────────
+   App.tsx CoverLayer + html[data-pad]. A full-screen layer in the controller's colour fades in, the phone turns
+   behind it, it fades out, and the pad zooms in a little. Opacity and transform on whole layers only, so the
+   graphics chip runs it at the screen's full rate. */
+.gp-cover { position: fixed; inset: 0; z-index: 60; will-change: opacity; }
+.gp-cover-in { animation: gp-cover-in .12s ease-out both; }
+.gp-cover-out { animation: gp-cover-out .15s ease-in both; pointer-events: none; }
+@keyframes gp-cover-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes gp-cover-out { from { opacity: 1; } to { opacity: 0; } }
+html[data-pad='hold'] :is(.gp-ctl-wrap, .gp-pad-svg) { opacity: 0; }
+html[data-pad='go'] .gp-pad-svg { animation: gp-pad-in .2s cubic-bezier(.2, .8, .3, 1) both; will-change: transform, opacity; }
+html[data-pad='out'] .gp-pad-svg { animation: gp-pad-out .1s ease-in both; will-change: transform, opacity; }
+@keyframes gp-pad-in { from { opacity: 0; transform: scale(.94); } to { opacity: 1; transform: none; } }
+@keyframes gp-pad-out { to { opacity: 0; transform: scale(.97); } }
 @media (prefers-reduced-motion: reduce) {
-  .gp-burst-grow, .gp-burst-shrink, .gp-burst-fade, .gp-burst-ring { animation: none; }
+  .gp-cover-in, .gp-cover-out { animation: none; }
   html[data-pad] .gp-pad-svg { animation: none !important; opacity: 1 !important; }
 }
 
