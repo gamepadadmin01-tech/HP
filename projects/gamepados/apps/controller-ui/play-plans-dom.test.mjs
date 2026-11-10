@@ -102,7 +102,7 @@ try {
     assert.match(t, /Price shown by\s+Google Play/, "says where the price will appear");
     assert.match(t, /Buy with Google Play/);
     assert.doesNotMatch(t, /₹|\$/, "and shows no guessed price");
-    assert.match(t, /Watch an ad|Ads come back/i, "the free-time and ads card is still there beside it (a new player holds 30 free minutes, so it says when ads come back)");
+    assert.match(t, /Watch an ad|Ads are available/i, "the free-time and ads card is still there beside it (a new player holds 30 free minutes, so it says when ads come back)");
     await p.close();
   }
   // (b) an older Play build (no billing code): no plan, no purchase

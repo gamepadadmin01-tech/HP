@@ -504,55 +504,28 @@
 @media (prefers-reduced-motion: reduce) { .gp-shell .calm-update-under { animation: none; } }
 
 /* ── 27. Controller open / close: circle burst + pop-in (2026-11-10) ─────────────────────────────────────────────
-   App.tsx BurstCover + html[data-pad]. The circle is one element scaled with transform (graphics engine only).
-   Controls are animated one by one on their own <g> (never the whole svg: the native touch layer reads its matrix). */
-.gp-burst { position: fixed; inset: 0; z-index: 60; overflow: hidden; pointer-events: auto; }
+   App.tsx BurstCover + html[data-pad]. Everything here is ONE layer moved by the graphics chip (transform/opacity),
+   so it runs at the screen's full rate (120 Hz):
+   - the circle is a small 96 px disc scaled up by --s (not a disc drawn bigger than the screen);
+   - the pad pops in as a whole (the <svg> element), not button by button: controls inside one drawing cannot be
+     moved by the graphics chip, so the first version redrew the entire pad every frame and ran at low frames. */
+.gp-burst { position: fixed; inset: 0; z-index: 60; overflow: hidden; pointer-events: auto; contain: strict; }
 .gp-burst-circle { position: absolute; border-radius: 50%; will-change: transform, opacity; }
-.gp-burst-grow { animation: gp-burst-grow .24s cubic-bezier(.4, 0, .2, 1) both; }
-.gp-burst-full { transform: none; }
-.gp-burst-shrink { animation: gp-burst-shrink .26s cubic-bezier(.4, 0, .2, 1) both; }
-.gp-burst-fade { animation: gp-burst-fade .2s ease-out both; }
-@keyframes gp-burst-grow { from { transform: scale(0); } to { transform: none; } }
-@keyframes gp-burst-shrink { from { transform: none; } to { transform: scale(0); } }
+.gp-burst-grow { animation: gp-burst-grow .17s cubic-bezier(.3, 0, .3, 1) both; }
+.gp-burst-full { transform: scale(var(--s)); }
+.gp-burst-shrink { animation: gp-burst-shrink .2s cubic-bezier(.4, 0, .6, 1) both; }
+.gp-burst-fade { transform: scale(var(--s)); animation: gp-burst-fade .14s linear both; }
+@keyframes gp-burst-grow { from { transform: scale(0); } to { transform: scale(var(--s)); } }
+@keyframes gp-burst-shrink { from { transform: scale(var(--s)); } to { transform: scale(0); } }
 @keyframes gp-burst-fade { from { opacity: 1; } to { opacity: 0; } }
-html[data-pad='hold'] .gp-pad-svg > g { opacity: 0; }
-html[data-pad='go'] .gp-pad-svg > g { animation: gp-pad-in .34s cubic-bezier(.2, .9, .3, 1.2) both; transform-box: fill-box; transform-origin: center; }
-html[data-pad='out'] .gp-pad-svg > g { animation: gp-pad-out .16s cubic-bezier(.4, 0, 1, 1) both; transform-box: fill-box; transform-origin: center; }
-@keyframes gp-pad-in { from { opacity: 0; transform: scale(.55); } 55% { opacity: 1; } to { opacity: 1; transform: none; } }
-@keyframes gp-pad-out { to { opacity: 0; transform: scale(.8); } }
-html[data-pad='go'] .gp-pad-svg > g:nth-child(2) { animation-delay: 0ms; }
-html[data-pad='go'] .gp-pad-svg > g:nth-child(3) { animation-delay: 14ms; }
-html[data-pad='go'] .gp-pad-svg > g:nth-child(4) { animation-delay: 28ms; }
-html[data-pad='go'] .gp-pad-svg > g:nth-child(5) { animation-delay: 42ms; }
-html[data-pad='go'] .gp-pad-svg > g:nth-child(6) { animation-delay: 56ms; }
-html[data-pad='go'] .gp-pad-svg > g:nth-child(7) { animation-delay: 70ms; }
-html[data-pad='go'] .gp-pad-svg > g:nth-child(8) { animation-delay: 84ms; }
-html[data-pad='go'] .gp-pad-svg > g:nth-child(9) { animation-delay: 98ms; }
-html[data-pad='go'] .gp-pad-svg > g:nth-child(10) { animation-delay: 112ms; }
-html[data-pad='go'] .gp-pad-svg > g:nth-child(11) { animation-delay: 126ms; }
-html[data-pad='go'] .gp-pad-svg > g:nth-child(12) { animation-delay: 140ms; }
-html[data-pad='go'] .gp-pad-svg > g:nth-child(13) { animation-delay: 154ms; }
-html[data-pad='go'] .gp-pad-svg > g:nth-child(14) { animation-delay: 168ms; }
-html[data-pad='go'] .gp-pad-svg > g:nth-child(15) { animation-delay: 182ms; }
-html[data-pad='go'] .gp-pad-svg > g:nth-child(16) { animation-delay: 196ms; }
-html[data-pad='go'] .gp-pad-svg > g:nth-child(17) { animation-delay: 210ms; }
-html[data-pad='go'] .gp-pad-svg > g:nth-child(18) { animation-delay: 224ms; }
-html[data-pad='go'] .gp-pad-svg > g:nth-child(19) { animation-delay: 238ms; }
-html[data-pad='go'] .gp-pad-svg > g:nth-child(20) { animation-delay: 252ms; }
-html[data-pad='go'] .gp-pad-svg > g:nth-child(21) { animation-delay: 266ms; }
-html[data-pad='go'] .gp-pad-svg > g:nth-child(22) { animation-delay: 280ms; }
-html[data-pad='go'] .gp-pad-svg > g:nth-child(23) { animation-delay: 294ms; }
-html[data-pad='go'] .gp-pad-svg > g:nth-child(24) { animation-delay: 308ms; }
-html[data-pad='go'] .gp-pad-svg > g:nth-child(25) { animation-delay: 322ms; }
-html[data-pad='go'] .gp-pad-svg > g:nth-child(26) { animation-delay: 336ms; }
-html[data-pad='go'] .gp-pad-svg > g:nth-child(27) { animation-delay: 350ms; }
-html[data-pad='go'] .gp-pad-svg > g:nth-child(28) { animation-delay: 364ms; }
-html[data-pad='go'] .gp-pad-svg > g:nth-child(29) { animation-delay: 378ms; }
-html[data-pad='go'] .gp-pad-svg > g:nth-child(30) { animation-delay: 392ms; }
-html[data-pad='go'] .gp-pad-svg > g:nth-child(31) { animation-delay: 406ms; }
+html[data-pad='hold'] .gp-pad-svg { opacity: 0; }
+html[data-pad='go'] .gp-pad-svg { animation: gp-pad-in .2s cubic-bezier(.2, .9, .3, 1.15) both; will-change: transform, opacity; }
+html[data-pad='out'] .gp-pad-svg { animation: gp-pad-out .11s cubic-bezier(.4, 0, 1, 1) both; will-change: transform, opacity; }
+@keyframes gp-pad-in { from { opacity: 0; transform: scale(.9); } to { opacity: 1; transform: none; } }
+@keyframes gp-pad-out { to { opacity: 0; transform: scale(.94); } }
 @media (prefers-reduced-motion: reduce) {
   .gp-burst-grow, .gp-burst-shrink, .gp-burst-fade { animation: none; }
-  html[data-pad] .gp-pad-svg > g { animation: none !important; opacity: 1 !important; }
+  html[data-pad] .gp-pad-svg { animation: none !important; opacity: 1 !important; }
 }
 
 /* ── 28. Controller: fill-up while a button is held (2026-11-10, replaces the ring) ──────────────────────────────
@@ -561,3 +534,6 @@ html[data-pad='go'] .gp-pad-svg > g:nth-child(31) { animation-delay: 406ms; }
 .gp-fill { transform: scaleY(0); transform-box: fill-box; transform-origin: 50% 100%; transition: transform .2s cubic-bezier(.4, 0, 1, 1); }
 .gp-fill.on { transform: scaleY(1); transition: transform .9s cubic-bezier(.2, .6, .3, 1) .18s; }
 @media (prefers-reduced-motion: reduce) { .gp-fill, .gp-fill.on { transition: none; } }
+
+/* ── 29. The ad rule in small text under the play-time card (2026-11-10) ─────────────────────────────────────── */
+.gp-shell .calm-ad-note { margin: 8px 2px 0; font-size: 12px; line-height: 1.45; color: var(--calm-muted); }

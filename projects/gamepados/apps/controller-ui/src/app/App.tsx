@@ -1002,10 +1002,15 @@ function TabFade({ animate, children }: { animate: boolean; children: React.Reac
 const BURST_COLOR = CONTROLLER.page.startsWith("#") ? CONTROLLER.page : "#170d09";
 type Burst = { phase: "grow" | "full" | "shrink" | "fade"; x: number; y: number };
 function BurstCover({ burst }: { burst: Burst }) {
+  // A SMALL disc (96 px) scaled up to cover the screen, not a disc drawn bigger than the screen: the first version
+  // made the graphics chip handle a picture of about 5000 x 5000 pixels on a phone, which is why it ran at low
+  // frames (2026-11-10). A flat colour scales up perfectly, and its edge is off-screen by the end.
+  const BASE = 96;
   const R = Math.ceil(Math.hypot(window.innerWidth, window.innerHeight)) + 8;
   return <div className="gp-burst" aria-hidden="true">
     <div className={`gp-burst-circle gp-burst-${burst.phase}`}
-      style={{ left: burst.x - R, top: burst.y - R, width: R * 2, height: R * 2, background: BURST_COLOR }} />
+      style={{ left: burst.x - BASE / 2, top: burst.y - BASE / 2, width: BASE, height: BASE, background: BURST_COLOR,
+        ["--s" as any]: (R * 2) / BASE }} />
   </div>;
 }
 
@@ -1543,6 +1548,9 @@ function ControllerScreen({ onBack, isActive: screenActive, activeMapping, custo
     };
     const tryActivate = () => {
       if (cancelled || usbWS.isOpen()) return;
+      // Mid pop-in / pop-out the pad is scaled, so its on-screen matrix is not the real one: wait for "gp-pad-settled".
+      const popping = document.documentElement.dataset.pad;
+      if (popping === "go" || popping === "out") return;
       const svg = svgRef.current;
       const m = svg && svg.getScreenCTM();
       if (!m) return;
@@ -1557,6 +1565,7 @@ function ControllerScreen({ onBack, isActive: screenActive, activeMapping, custo
     };
     // Double-rAF so the svg's CTM is read after layout has settled.
     raf1 = requestAnimationFrame(() => { raf2 = requestAnimationFrame(tryActivate); });
+    window.addEventListener("gp-pad-settled", tryActivate);
     const transportPoll = setInterval(() => {
       if (cancelled) return;
       if (usbWS.isOpen()) deactivate();
@@ -1565,6 +1574,7 @@ function ControllerScreen({ onBack, isActive: screenActive, activeMapping, custo
     return () => {
       cancelled = true;
       cancelAnimationFrame(raf1); cancelAnimationFrame(raf2);
+      window.removeEventListener("gp-pad-settled", tryActivate);
       clearInterval(transportPoll);
       deactivate();
     };
@@ -3320,6 +3330,8 @@ export default function App() {
   const later = (ms: number, fn: () => void) => { burstTimers.current.push(window.setTimeout(fn, ms)); };
   const setPad = (v: "hold" | "go" | "out" | null) => {
     if (v) document.documentElement.dataset.pad = v; else delete document.documentElement.dataset.pad;
+    // The pad is at its true size again: the native touch layer may read its position now (ControllerScreen).
+    if (!v) window.dispatchEvent(new Event("gp-pad-settled"));
   };
   /** Run `fn` once the window has the shape for `landscape` (the phone finished turning), or after `ms` anyway. */
   const whenShape = (landscape: boolean, ms: number, fn: () => void) => {
@@ -3342,16 +3354,16 @@ export default function App() {
     const recent = Date.now() - tap.t < 1500;
     setPad("hold");                                            // the controls wait, invisible, until the circle lifts
     setBurst({ phase: "grow", x: recent ? tap.x : window.innerWidth / 2, y: recent ? tap.y : window.innerHeight / 2 });
-    later(240, () => {                                         // screen covered: turn and swap behind the circle
+    later(170, () => {                                         // screen covered: turn and swap behind the circle
       turn("landscape-locked");
       fromControllerRef.current = false;
       setView("controller"); viewRef.current = "controller";
-      whenShape(true, 650, () => later(70, () => {             // one painted frame of the pad under the circle
+      whenShape(true, 650, () => later(34, () => {             // the pad has been drawn once under the circle
         setBurst((b) => (b ? { ...b, phase: "fade" } : b));
-        setPad("go");                                          // controls pop in, one after another
+        setPad("go");                                          // the pad pops in as ONE layer (graphics chip)
         transitioningRef.current = false;                      // the pad is visible: Back works from here on
-        later(220, () => setBurst(null));
-        later(620, () => setPad(null));
+        later(150, () => setBurst(null));
+        later(230, () => setPad(null));
       }));
     });
     later(2500, () => { setBurst(null); setPad(null); transitioningRef.current = false; });   // never stuck
@@ -3359,19 +3371,19 @@ export default function App() {
   function burstToHome() {
     transitioningRef.current = true;
     burstTimers.current.forEach(clearTimeout); burstTimers.current = [];
-    setPad("out");                                             // controls pop out
-    later(170, () => {
+    setPad("out");                                             // the pad pops out
+    later(110, () => {
       setBurst({ phase: "full", x: window.innerWidth / 2, y: window.innerHeight / 2 });   // same colour: invisible
       turn("portrait");
       fromControllerRef.current = true;
       setView("dashboard"); viewRef.current = "dashboard";
       setPad(null);
-      whenShape(false, 650, () => later(70, () => {
+      whenShape(false, 650, () => later(34, () => {
         const card = document.querySelector('.calm-controller-card[data-selected="true"]');
         const r = card ? card.getBoundingClientRect() : null;
         const x = r ? r.left + r.width / 2 : window.innerWidth / 2, y = r ? r.top + r.height / 2 : window.innerHeight / 2;
         setBurst({ phase: "shrink", x, y });                   // the circle shrinks into the layout's card
-        later(280, () => { setBurst(null); transitioningRef.current = false; });
+        later(210, () => { setBurst(null); transitioningRef.current = false; });
       }));
     });
     later(2500, () => { setBurst(null); setPad(null); transitioningRef.current = false; });
@@ -3385,13 +3397,13 @@ export default function App() {
     const tap = lastTapRef.current;
     const recent = Date.now() - tap.t < 1500;
     setBurst({ phase: "grow", x: recent ? tap.x : window.innerWidth / 2, y: recent ? tap.y : window.innerHeight / 2 });
-    later(240, () => {
+    later(170, () => {
       turn(orientation);
       try { swap(); } catch (e) { console.error(e); }
-      whenShape(landscape, 650, () => later(70, () => {
+      whenShape(landscape, 650, () => later(34, () => {
         setBurst((b) => (b ? { ...b, phase: "fade" } : b));
         transitioningRef.current = false;
-        later(220, () => setBurst(null));
+        later(150, () => setBurst(null));
       }));
     });
     later(2500, () => { setBurst(null); transitioningRef.current = false; });

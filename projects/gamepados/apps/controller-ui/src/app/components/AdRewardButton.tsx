@@ -56,7 +56,7 @@ export function AdRewardButton({ onCredited, onSignIn }: { onCredited?: () => vo
     const done = ad.phase === "done" ? ad.message : "";
     return <p role="status" className="w-full max-w-xs text-xs text-center"
       style={{ color: done ? GOOD : MUTED }}>
-      {done || `Ads come back under ${words.cap}.`}
+      {done || `Ads are available when your play time is below ${words.cap}.`}
     </p>;
   }
 

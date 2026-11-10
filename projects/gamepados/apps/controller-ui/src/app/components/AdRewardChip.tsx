@@ -12,7 +12,7 @@ import { useEffect, useSyncExternalStore } from "react";
 import { PlayCircle, Loader2 } from "lucide-react";
 import { getSession, onSessionChange } from "../store/account";
 import { getBillingState, onBillingChange, refresh } from "../store/billing";
-import { canShowAdButton, getAdState, onAdChange, watchAd } from "../store/rewardedAd";
+import { adCapReached, canShowAdButton, getAdState, onAdChange, watchAd } from "../store/rewardedAd";
 import { adsSupported, preloadRewardedAd } from "../platform/native";
 import { getAppConfig, onAppConfigChange, ruleWords } from "../store/appConfig";
 
@@ -48,8 +48,16 @@ export function AdRewardChip() {
 /** What the last ad did ("+30 minutes added", or why not), under the card. Only while there is something to say. */
 export function AdRewardStatus() {
   const ad = useSyncExternalStore(onAdChange, getAdState, getAdState);
-  if (ad.phase !== "done" && ad.phase !== "error") return null;
-  return (
+  // Read so the small note below appears and disappears with the plan, the sign-in and the portal's ads switch.
+  useSyncExternalStore(onBillingChange, getBillingState, getBillingState);
+  useSyncExternalStore(onSessionChange, getSession, getSession);
+  const cfg = useSyncExternalStore(onAppConfigChange, getAppConfig, getAppConfig);
+  if (ad.phase === "done" || ad.phase === "error") return (
     <p role="status" className="calm-ad-status" data-phase={ad.phase} data-testid="watch-ad-status">{ad.message}</p>
   );
+  // The rule, in small text (owner, 2026-11-10): ads can be watched only while play time is below the cap (1 hour).
+  // Shown to every player who can earn time from ads, whether the button is there right now or not; never to a
+  // Lifetime player, and not while ads are switched off.
+  if (!adsSupported() || !cfg.ads.available || !(canShowAdButton() || adCapReached())) return null;
+  return <p className="calm-ad-note" data-testid="ad-cap-note">Ads are available when your play time is below {ruleWords().cap}.</p>;
 }

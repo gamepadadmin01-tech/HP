@@ -427,6 +427,11 @@ class MainActivity : AppCompatActivity(), android.hardware.SensorEventListener {
     internal fun runAfterLaunch(block: () -> Unit) {
         runOnUiThread { if (launchSettled) block() else afterLaunch.add(block) }
     }
+    private val restoreTurnAnimation = Runnable {
+        window.attributes = window.attributes.apply {
+            rotationAnimation = WindowManager.LayoutParams.ROTATION_ANIMATION_CROSSFADE
+        }
+    }
     private fun settleLaunch() {
         if (launchSettled) return
         launchSettled = true
@@ -573,14 +578,12 @@ class MainActivity : AppCompatActivity(), android.hardware.SensorEventListener {
             // destroyed and recreated it right after launch -- the random "opens, closes, opens" flash on
             // start (random because it only happened when the phone was not already in that mode).
             val current = disp?.mode
-            // And on Android 12+ ONLY rates the panel can switch to SEAMLESSLY (Display.Mode.alternativeRefreshRates):
-            // some phones blank the screen for a moment on a non-seamless 60<->120 Hz switch, which also looked
-            // like the app opening twice. Android 11 keeps the same-resolution rule only (it has no such list).
-            val seamless: List<Float>? = if (android.os.Build.VERSION.SDK_INT >= 31 && current != null)
-                current.alternativeRefreshRates.toList() + current.refreshRate else null
+            // 2026-11-10: the "only seamless rates" rule (Display.Mode.alternativeRefreshRates, added 2026-11-08 while
+            // hunting the launch flash) is GONE. Many phones list no alternative rates at all, so the app was never
+            // asking for 120 Hz there and ran at 60: every animation looked low-frame (owner: "my phone is 120hz ...
+            // the frames are very low"). The launch flash had other causes (CLAUDE.md, Scars), fixed since.
             val modes = disp?.supportedModes?.filter {
-                (current == null || (it.physicalWidth == current.physicalWidth && it.physicalHeight == current.physicalHeight)) &&
-                (seamless == null || seamless.any { r -> kotlin.math.abs(r - it.refreshRate) < 0.5f })
+                current == null || (it.physicalWidth == current.physicalWidth && it.physicalHeight == current.physicalHeight)
             }
             (modes?.filter { it.refreshRate <= 121f }?.maxByOrNull { it.refreshRate }
                 ?: modes?.minByOrNull { it.refreshRate })?.let { best ->
@@ -1045,6 +1048,15 @@ class MainActivity : AppCompatActivity(), android.hardware.SensorEventListener {
                 fun setScreenOrientation(orientation: String) {
                     runOnUiThread {
                         try {
+                            // The app only turns the screen under its own full-screen cover (the circle burst), so the
+                            // turn is an instant cut: Android's own turn animation freezes a snapshot for a few hundred
+                            // milliseconds, which delayed and blurred the controller's opening (2026-11-10). A turn by
+                            // the player's hand gets the normal cross-fade back a second later.
+                            window.attributes = window.attributes.apply {
+                                rotationAnimation = WindowManager.LayoutParams.ROTATION_ANIMATION_JUMPCUT
+                            }
+                            mainHandler.removeCallbacks(restoreTurnAnimation)
+                            mainHandler.postDelayed(restoreTurnAnimation, 1200)
                             if (orientation == "landscape-locked") {
                                 // The CONTROLLER asks for this one. Wheel mode pins the
                                 // orientation here and only here: the sensor axis remap is

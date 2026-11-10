@@ -240,7 +240,7 @@ export function PlanPanel() {
                 {exhausted
                   ? `You're out of play time — watch an ad for ${words.reward} more.`
                   : noDaily
-                    ? `Your time never expires. Ads add ${words.reward} while under ${words.cap} is left.`
+                    ? `Your time never expires. Ads are available when your play time is below ${words.cap}.`
                   : freeGone
                     ? `Today's free time is used — playing from your ad time. ${formatResetsAt(ent.resetsAt)}`
                     : formatResetsAt(ent.resetsAt)}
