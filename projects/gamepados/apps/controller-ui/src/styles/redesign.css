@@ -503,23 +503,29 @@
 .gp-shell .calm-update-link:disabled { opacity: 1; }
 @media (prefers-reduced-motion: reduce) { .gp-shell .calm-update-under { animation: none; } }
 
-/* ── 27. Controller open / close: a plain fade (2026-11-10, "keep it simple") ───────────────────────────────────
-   App.tsx CoverLayer + html[data-pad]. A full-screen layer in the controller's colour fades in, the phone turns
-   behind it, it fades out, and the pad zooms in a little. Opacity and transform on whole layers only, so the
-   graphics chip runs it at the screen's full rate. */
+/* ── 27. Controller / editor open and close: ONE motion (2026-11-10) ─────────────────────────────────────────────
+   App.tsx coverThrough + html[data-nav]. Opening is one push FORWARD: the old screen grows a little and fades
+   (0.1 s), the new one arrives from the same direction, growing from 92% to 100% while fading in (0.22 s).
+   Closing is the same pull BACK. Both halves share one pair of curves, so it reads as a single movement; the cover
+   only hides the moment the phone turns. Whole layers, transform + opacity only (the graphics chip runs it).
+   .gp-nav = the three screens that take part: Home, the pad, the layout editor. */
 .gp-cover { position: fixed; inset: 0; z-index: 60; will-change: opacity; }
-.gp-cover-in { animation: gp-cover-in .12s ease-out both; }
-.gp-cover-out { animation: gp-cover-out .15s ease-in both; pointer-events: none; }
+.gp-cover-in { animation: gp-cover-in .1s ease-out both; }
+.gp-cover-out { animation: gp-cover-out .12s ease-in both; pointer-events: none; }
 @keyframes gp-cover-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes gp-cover-out { from { opacity: 1; } to { opacity: 0; } }
 html[data-pad='hold'] :is(.gp-ctl-wrap, .gp-pad-svg) { opacity: 0; }
-html[data-pad='go'] .gp-pad-svg { animation: gp-pad-in .2s cubic-bezier(.2, .8, .3, 1) both; will-change: transform, opacity; }
-html[data-pad='out'] .gp-pad-svg { animation: gp-pad-out .1s ease-in both; will-change: transform, opacity; }
-@keyframes gp-pad-in { from { opacity: 0; transform: scale(.94); } to { opacity: 1; transform: none; } }
-@keyframes gp-pad-out { to { opacity: 0; transform: scale(.97); } }
+html[data-nav] .gp-nav { will-change: transform, opacity; }
+html[data-nav='fwd-out'] .gp-nav { animation: gp-out-fwd .1s cubic-bezier(.3, 0, .8, .15) both; }
+html[data-nav='fwd-in'] .gp-nav { animation: gp-in-fwd .22s cubic-bezier(.05, .7, .1, 1) both; }
+html[data-nav='back-out'] .gp-nav { animation: gp-out-back .1s cubic-bezier(.3, 0, .8, .15) both; }
+html[data-nav='back-in'] .gp-nav { animation: gp-in-back .22s cubic-bezier(.05, .7, .1, 1) both; }
+@keyframes gp-out-fwd { to { opacity: 0; transform: scale(1.06); } }
+@keyframes gp-in-fwd { from { opacity: 0; transform: scale(.92); } to { opacity: 1; transform: none; } }
+@keyframes gp-out-back { to { opacity: 0; transform: scale(.94); } }
+@keyframes gp-in-back { from { opacity: 0; transform: scale(1.06); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) {
-  .gp-cover-in, .gp-cover-out { animation: none; }
-  html[data-pad] .gp-pad-svg { animation: none !important; opacity: 1 !important; }
+  .gp-cover-in, .gp-cover-out, html[data-nav] .gp-nav { animation: none !important; }
 }
 
 /* ── 28. Controller: fill-up while a button is held (2026-11-10, replaces the ring) ──────────────────────────────

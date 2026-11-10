@@ -652,7 +652,7 @@ export function CustomPadEditor({
       exit={{ opacity: 0, scale: 0.98, transition: EXIT }}
       transition={{ duration: 0.34, ease: [0.16, 1, 0.3, 1] }}
       style={{ willChange: "transform, opacity", backfaceVisibility: "hidden" }}
-      data-testid="layout-editor-screen" className="fixed inset-0 z-50 bg-[#070910] overflow-hidden touch-none select-none"
+      data-testid="layout-editor-screen" className="fixed inset-0 z-50 bg-[#070910] overflow-hidden touch-none select-none gp-nav"
     >
       <ShellMotion />
       {/* Rotation layer — auto-rotates the whole editor (canvas + overlays) into

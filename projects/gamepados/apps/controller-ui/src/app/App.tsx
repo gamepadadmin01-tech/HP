@@ -1825,7 +1825,7 @@ function ControllerScreen({ onBack, isActive: screenActive, activeMapping, custo
           occlude the indicator; the HUD toggle stays above both at z-10. */}
       <div className="absolute inset-0 z-[5] flex items-center justify-center"
            style={svgTransform}>
-        <svg ref={svgRef} viewBox={`0 0 ${W} 570`} className="w-full h-full max-h-full gp-pad-svg"
+        <svg ref={svgRef} viewBox={`0 0 ${W} 570`} className="w-full h-full max-h-full gp-pad-svg gp-nav"
           style={{ touchAction: "none", userSelect: "none" }}>
         <defs>
           <clipPath id="clip-LT"><rect x={LT.x} y={LT.y} width={LT.w} height={LT.h} rx={LT.rx} /></clipPath>
@@ -3346,45 +3346,55 @@ export default function App() {
   };
   // Cover on -> turn the screen and build the next screen behind it -> cover off. The turn is asked for at once and
   // the next screen is built as soon as the cover is solid, so Android's 0.2 s is spent under the cover, not after it.
-  const COVER_MS = 120;
+  //
+  // ONE MOTION (owner, 2026-11-10: "keep the animation like one then it will feel smooth"). The old screen and the new
+  // one move in the SAME direction on the same curve, so the eye reads a single push forward (opening) or pull back
+  // (closing) instead of separate steps. It is the standard "fade through / shared axis" screen change from Google's
+  // Material motion guidance: the old screen fades out quickly while moving on, the new one fades in growing from
+  // 92% to 100%. `html[data-nav]` tells the screens which half is playing (redesign.css section 27).
+  const COVER_MS = 100;
   const after2Frames = (fn: () => void) => requestAnimationFrame(() => requestAnimationFrame(fn));
-  function coverThrough(orientation: string, landscape: boolean, swap: () => void, onReveal?: () => void) {
+  const setNav = (v: string | null) => { if (v) document.documentElement.dataset.nav = v; else delete document.documentElement.dataset.nav; };
+  function coverThrough(dir: "fwd" | "back", orientation: string, landscape: boolean, swap: () => void, onReveal?: () => void) {
     transitioningRef.current = true;
     coverTimers.current.forEach(clearTimeout); coverTimers.current = [];
     const t0 = performance.now();
+    setNav(dir + "-out");                                      // the old screen moves on and fades
     setCover("in");
     turn(orientation);
     later(COVER_MS, () => { try { swap(); } catch (e) { console.error(e); } });
     later(COVER_MS + 10, () => whenShape(landscape, 700, () => {
       later(Math.max(0, COVER_MS + 10 - (performance.now() - t0)), () => after2Frames(() => {
         onReveal?.();
+        setNav(dir + "-in");                                   // the new screen arrives from the same direction
         setCover("out");
         transitioningRef.current = false;                      // the new screen is visible: Back works from here on
-        later(170, () => setCover(null));
+        later(140, () => setCover(null));
+        later(250, () => setNav(null));
       }));
     }));
-    later(2500, () => { setCover(null); setPad(null); transitioningRef.current = false; });   // never stuck
+    later(2500, () => { setCover(null); setPad(null); setNav(null); transitioningRef.current = false; });   // never stuck
   }
   function openController() {
     setPad("hold");                                            // the controller waits, invisible, behind the cover
-    coverThrough("landscape-locked", true, () => {
+    coverThrough("fwd", "landscape-locked", true, () => {
       fromControllerRef.current = false;
       setView("controller"); viewRef.current = "controller";
     }, () => {
-      setPad("go");                                            // the pad zooms in a little as the cover lifts
-      later(230, () => setPad(null));
+      setPad("go");                                            // arriving: the touch layer waits until it has settled
+      later(250, () => setPad(null));
     });
   }
   function closeController() {
-    setPad("out");                                             // the pad fades out as the cover comes on
-    coverThrough("portrait", false, () => {
+    setPad("out");                                             // leaving: the touch layer stops reading positions
+    coverThrough("back", "portrait", false, () => {
       fromControllerRef.current = true;
       setView("dashboard"); viewRef.current = "dashboard";
     }, () => setPad(null));
   }
   /** The same cover for the layout editor (open and close). */
-  function coverSwap(orientation: string, landscape: boolean, swap: () => void) {
-    coverThrough(orientation, landscape, swap);
+  function coverSwap(dir: "fwd" | "back", orientation: string, landscape: boolean, swap: () => void) {
+    coverThrough(dir, orientation, landscape, swap);
   }
   const reducedMotionNow = () => !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 
@@ -3438,7 +3448,7 @@ export default function App() {
   // curtain fades in first and hides the device's physical rotation, instead of
   // the editor visibly CSS-spinning while Android rotates underneath it.
   function openEditor(pad: CustomPad) {
-    if (!reducedMotionNow()) { if (!transitioningRef.current) coverSwap("landscape", true, () => setEditingPad(pad)); return; }
+    if (!reducedMotionNow()) { if (!transitioningRef.current) coverSwap("fwd", "landscape", true, () => setEditingPad(pad)); return; }
     runCurtainSequence(() => {
       const bridge = (window as any).AndroidBridge;
       try { bridge?.setScreenOrientation?.("landscape"); } catch (e) {}
@@ -3448,7 +3458,7 @@ export default function App() {
   function closeEditor() {
     if (!reducedMotionNow()) {
       const toController = viewRef.current === "controller";
-      if (!transitioningRef.current) coverSwap(toController ? "landscape-locked" : "portrait", toController, () => setEditingPad(null));
+      if (!transitioningRef.current) coverSwap("back", toController ? "landscape-locked" : "portrait", toController, () => setEditingPad(null));
       return;
     }
     runCurtainSequence(() => {
@@ -3660,7 +3670,7 @@ export default function App() {
         )}
 
         {view === "dashboard" && (
-          <ShellScreenTransition key="dashboard" direction={1} skipEntrance={(firstRoute.current && !!(window as any).AndroidBridge?.onUiReady) || fromControllerRef.current} className="absolute inset-0 z-10">
+          <ShellScreenTransition key="dashboard" direction={1} skipEntrance={(firstRoute.current && !!(window as any).AndroidBridge?.onUiReady) || fromControllerRef.current} className="absolute inset-0 z-10 gp-nav">
             <DashboardScreen
               onLaunch={() => navigateTo("controller")}
               onBack={() => navigateTo("scanner")}
