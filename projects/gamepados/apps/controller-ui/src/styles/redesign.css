@@ -504,27 +504,32 @@
 @media (prefers-reduced-motion: reduce) { .gp-shell .calm-update-under { animation: none; } }
 
 /* ── 27. Controller open / close: circle burst + pop-in (2026-11-10) ─────────────────────────────────────────────
-   App.tsx BurstCover + html[data-pad]. Everything here is ONE layer moved by the graphics chip (transform/opacity),
-   so it runs at the screen's full rate (120 Hz):
-   - the circle is a small 96 px disc scaled up by --s (not a disc drawn bigger than the screen);
-   - the pad pops in as a whole (the <svg> element), not button by button: controls inside one drawing cannot be
-     moved by the graphics chip, so the first version redrew the entire pad every frame and ran at low frames. */
+   App.tsx BurstCover + html[data-pad]. Every moving thing is ONE layer moved by the graphics chip (transform and
+   opacity only), so it runs at the screen's full rate:
+   - the circle is a small 96 px disc scaled up by --s; a thin ring of the controller colour rides out with it and
+     again from the centre when the pad pops in;
+   - the pad pops in as a whole (the <svg> element) with a small overshoot; controls inside one drawing cannot be
+     moved separately by the graphics chip.
+   The burst is 0.2 s on purpose: Android needs that long to turn the screen, and the turn happens DURING it. */
 .gp-burst { position: fixed; inset: 0; z-index: 60; overflow: hidden; pointer-events: auto; contain: strict; }
-.gp-burst-circle { position: absolute; border-radius: 50%; will-change: transform, opacity; }
-.gp-burst-grow { animation: gp-burst-grow .17s cubic-bezier(.3, 0, .3, 1) both; }
+.gp-burst-circle, .gp-burst-ring { position: absolute; border-radius: 50%; will-change: transform, opacity; }
+.gp-burst-grow { animation: gp-burst-grow .2s cubic-bezier(.45, 0, .25, 1) both; }
 .gp-burst-full { transform: scale(var(--s)); }
-.gp-burst-shrink { animation: gp-burst-shrink .2s cubic-bezier(.4, 0, .6, 1) both; }
-.gp-burst-fade { transform: scale(var(--s)); animation: gp-burst-fade .14s linear both; }
+.gp-burst-shrink { animation: gp-burst-shrink .23s cubic-bezier(.5, 0, .3, 1) both; }
+.gp-burst-fade { transform: scale(var(--s)); animation: gp-burst-fade .13s linear both; }
+.gp-burst-ring { box-sizing: border-box; border: 1.5px solid; opacity: 0; animation: gp-burst-ring .38s cubic-bezier(.2, .7, .3, 1) both; }
 @keyframes gp-burst-grow { from { transform: scale(0); } to { transform: scale(var(--s)); } }
 @keyframes gp-burst-shrink { from { transform: scale(var(--s)); } to { transform: scale(0); } }
 @keyframes gp-burst-fade { from { opacity: 1; } to { opacity: 0; } }
+@keyframes gp-burst-ring { from { transform: scale(0); opacity: .95; } to { transform: scale(calc(var(--s) * .6)); opacity: 0; } }
+html[data-pad='hold'] .gp-ctl-wrap { opacity: 0; }
 html[data-pad='hold'] .gp-pad-svg { opacity: 0; }
-html[data-pad='go'] .gp-pad-svg { animation: gp-pad-in .2s cubic-bezier(.2, .9, .3, 1.15) both; will-change: transform, opacity; }
-html[data-pad='out'] .gp-pad-svg { animation: gp-pad-out .11s cubic-bezier(.4, 0, 1, 1) both; will-change: transform, opacity; }
-@keyframes gp-pad-in { from { opacity: 0; transform: scale(.9); } to { opacity: 1; transform: none; } }
-@keyframes gp-pad-out { to { opacity: 0; transform: scale(.94); } }
+html[data-pad='go'] .gp-pad-svg { animation: gp-pad-in .26s cubic-bezier(.2, 1.25, .35, 1) both; will-change: transform, opacity; }
+html[data-pad='out'] .gp-pad-svg { animation: gp-pad-out .12s cubic-bezier(.4, 0, 1, 1) both; will-change: transform, opacity; }
+@keyframes gp-pad-in { from { opacity: 0; transform: scale(.84); } 45% { opacity: 1; } to { opacity: 1; transform: none; } }
+@keyframes gp-pad-out { to { opacity: 0; transform: scale(.9); } }
 @media (prefers-reduced-motion: reduce) {
-  .gp-burst-grow, .gp-burst-shrink, .gp-burst-fade { animation: none; }
+  .gp-burst-grow, .gp-burst-shrink, .gp-burst-fade, .gp-burst-ring { animation: none; }
   html[data-pad] .gp-pad-svg { animation: none !important; opacity: 1 !important; }
 }
 
