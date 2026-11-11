@@ -1,6 +1,6 @@
 // Run: node transitions.test.mjs   (vite on 127.0.0.1:5187; ROUNDS=10 for the long version)
 // Thorough check of the controller / editor open-close motion (owner, 2026-11-11: "check 1 to 10 times").
-// The motion is one basic fade under a cover (App.tsx coverThrough, 2026-11-11). Phone-like: CPU 4x slower, the screen "turns"
+// Controller: the gamepad icon on the cover (App.tsx openController/closeController); editor: the basic fade (coverThrough). Phone-like: CPU 4x slower, the screen "turns"
 // 220 ms after the app asks. Every frame is sampled in the page. Checks, per run:
 //   - no blank frame: at every frame either the cover or the expected screen is (nearly) fully visible, or the two
 //     together cover the screen (cover + screen opacity >= 0.9);
@@ -43,7 +43,8 @@ await (async () => {
         const icon = geo(".gp-cover-icon"), wrap = geo(".gp-ctl-wrap");
         // "nav" = a change is in progress (the cover is on screen).
         window.__f.push({ t: performance.now() - t0, abs: performance.timeOrigin + performance.now(), cover, home, pad, editor, shown, nav: document.querySelector(".gp-cover") ? "on" : "", land: innerWidth > innerHeight,
-          icon, iconOp: op(".gp-cover-icon"), wrapScale: wrap ? wrap.scale : 0, pop: document.documentElement.dataset.ctlPop || "" });
+          icon, iconOp: op(".gp-cover-icon"), wrapScale: wrap ? wrap.scale : 0, pop: document.documentElement.dataset.ctlPop || "",
+          cc: document.querySelector(".gp-cover")?.className || "", ic: document.querySelector(".gp-cover-icon")?.className || "" });
         if (performance.now() - t0 < 2400) requestAnimationFrame(tick);
       };
       requestAnimationFrame(tick);
@@ -70,8 +71,8 @@ await (async () => {
       // Only motion you can SEE: the cover part-way through its fade (anything changing), the icon moving on the
       // solid cover, or the controller popping out of it. A screen built or resized UNDER the solid cover is not seen.
       const coverPartway = f[i].cover < 0.98 || f[i - 1].cover < 0.98;
-      // The controller's pop is drawn by Chrome's compositor, which keeps going while this page's own clock stalls:
-      // it is judged on the PAINTED frames instead (paintedPop below).
+      // The final fades are also judged on Chrome's PAINTED frames (paintedPhase below): the compositor draws them and
+      // keeps going while this page's own clock stalls.
       const seen = (coverPartway && (["cover", "home", "pad", "editor"].some(d) || iconMoved)) || iconMoved;
       // The phone's own turn (the window changing shape) is Android's, not ours: not counted.
       const turning = f[i].land !== f[i - 1].land;
@@ -87,20 +88,26 @@ await (async () => {
     check(worst <= 60, `${label}: smooth while moving, longest frame gap ${Math.round(worst)} ms (CPU 4x slower)`);
     return { settledMs: settled ? Math.round(settled.t) : -1, worst: Math.round(worst), frames: f };
   };
-  // What actually reaches the screen: Chrome's painted frames (screencast), for the pop.
+  // What actually reaches the screen: Chrome's painted frames (screencast).
   let painted = [];
   cdp.on("Page.screencastFrame", async (fr) => { painted.push({ t: fr.metadata.timestamp * 1000, data: fr.data }); try { await cdp.send("Page.screencastFrameAck", { sessionId: fr.sessionId }); } catch {} });
-  const paintStart = async () => { painted = []; await cdp.send("Page.startScreencast", { format: "jpeg", quality: 40, everyNthFrame: 1 }); await pause(120); };
-  const paintStop = async () => { await cdp.send("Page.stopScreencast"); return painted; };
-  /** The pop, on painted frames: how long until it first shows, and the longest still gap while it runs. */
-  const paintedPop = (f, pf) => {
-    const go = f.find((x) => x.pop === "go"), end = go && f.find((x) => x.abs > go.abs && !x.pop);
-    if (!go || !end) return null;
-    const ch = []; for (let i = 1; i < pf.length; i++) if (pf[i].data !== pf[i - 1].data && pf[i].t >= go.abs - 5 && pf[i].t <= end.abs) ch.push(pf[i].t);
+  // NOPAINT=1 skips the screen recording (it is heavy itself) and the painted checks.
+  const PAINT = !process.env.NOPAINT;
+  const paintStart = async () => { painted = []; if (!PAINT) return; await cdp.send("Page.startScreencast", { format: "jpeg", quality: 40, everyNthFrame: 1 }); await pause(120); };
+  const paintStop = async () => { if (PAINT) await cdp.send("Page.stopScreencast"); return painted; };
+  /** On painted frames, from the first sampled frame matching `from` until the cover is gone: how long until the
+   *  picture first changes, and the longest still gap while it runs. */
+  const paintedPhase = (f, pf, from) => {
+    if (!PAINT) return { start: 0, gap: 0, n: 0 };
+    const a = f.find(from), b = a && f.find((x) => x.abs > a.abs && !x.cc);
+    if (!a || !b) return null;
+    const ch = []; for (let i = 1; i < pf.length; i++) if (pf[i].data !== pf[i - 1].data && pf[i].t >= a.abs - 5 && pf[i].t <= b.abs) ch.push(pf[i].t);
     if (!ch.length) return { start: 999, gap: 999, n: 0 };
     let gap = 0; for (let i = 1; i < ch.length; i++) gap = Math.max(gap, ch[i] - ch[i - 1]);
-    return { start: Math.round(ch[0] - go.abs), gap: Math.round(gap), n: ch.length };
+    return { start: Math.round(ch[0] - a.abs), gap: Math.round(gap), n: ch.length };
   };
+  const ph = (x) => x ? `first change after ${x.start} ms, longest still gap ${x.gap} ms, ${x.n} changing frames` : "phase not seen";
+  const near = (v, w) => Math.abs(v - w) <= 3;
   const tapCard = (name) => page.evaluate((n) => document.querySelector(`button[aria-label="Play ${n}"]`).click(), name);
   const times = [];
 
@@ -112,25 +119,47 @@ await (async () => {
     await page.evaluate(() => window.__arm());
     await tapCard(layout);
     const o = await analyse(`round ${i} open (${layout})`, "pad");
-    const pp = paintedPop(o.frames, await paintStop());
-    check(pp && pp.start <= 60 && pp.gap <= 40, `round ${i} open: the pop is smooth on screen (painted: first frame after ${pp ? pp.start : "-"} ms, longest still gap ${pp ? pp.gap : "-"} ms, ${pp ? pp.n : 0} changing frames; CPU 4x slower)`);
+    const po = paintedPhase(o.frames, await paintStop(), (x) => x.cc.includes("gp-cover-out"));
+    check(po && po.start <= 60 && po.gap <= 40, `round ${i} open: the reveal fade is smooth on screen (painted: ${ph(po)}; CPU 4x slower)`);
     const geo = await page.evaluate((n) => window.__geo.slice(n), geoBefore);
     check(geo.length >= 1 && geo.every((g) => Math.abs(g - 0.715) < 0.01), `round ${i}: touch layer only ever got the pad at full size (${geo.map((g) => g.toFixed(3)).join(", ") || "none"})`);
-    // The opening's story, frame by frame: icon upright in portrait -> icon flat BEFORE the phone turns -> the
-    // controller grows out of it from small to full size.
+    // The opening's story, frame by frame: icon upright in portrait -> icon flat BEFORE the phone turns -> the icon
+    // and cover fade away and reveal the controller, which never moves (always full size).
     const fr = o.frames, firstLand = fr.findIndex((x) => x.land);
-    const upright = fr.some((x) => !x.land && x.icon && Math.abs(x.icon.rot - 90) <= 3 && x.iconOp > 0.9);
-    const flatBeforeTurn = firstLand > 0 && fr.slice(0, firstLand).some((x) => x.icon && Math.abs(x.icon.rot) <= 3 && x.iconOp > 0.9)
-      && !fr.slice(0, firstLand).some((x, k) => x.icon && Math.abs(x.icon.rot) > 3 && fr.slice(0, k).some((y) => y.icon && Math.abs(y.icon.rot) <= 3));
-    const popScales = fr.filter((x) => x.pop === "go").map((x) => x.wrapScale);
-    const grew = popScales.length >= 3 && Math.min(...popScales) < 0.4 && fr[fr.length - 1].wrapScale > 0.999;
+    const upright = fr.some((x) => !x.land && x.icon && near(x.icon.rot, 90) && x.iconOp > 0.9);
+    const flatBeforeTurn = firstLand > 0 && fr.slice(0, firstLand).some((x) => x.icon && near(x.icon.rot, 0) && x.iconOp > 0.9)
+      && !fr.slice(0, firstLand).some((x, k) => x.icon && !near(x.icon.rot, 0) && fr.slice(0, k).some((y) => y.icon && near(y.icon.rot, 0)));
+    const reveal = fr.filter((x) => x.cc.includes("gp-cover-out"));
+    const fadeReveal = reveal.length >= 3 && reveal.every((x) => x.land && x.icon && near(x.icon.rot, 0) && Math.abs(x.icon.scale - 1) < 0.01)
+      && reveal.some((x) => x.cover < 0.5);
+    const ctlStill = fr.every((x) => !x.wrapScale || Math.abs(x.wrapScale - 1) < 0.001);
     check(upright, `round ${i} open: the gamepad icon pops up standing upright`);
     check(flatBeforeTurn, `round ${i} open: the icon turns flat before the phone turns`);
-    check(grew, `round ${i} open: the controller pops out of the icon to full size (smallest ${popScales.length ? Math.min(...popScales).toFixed(2) : "-"}, ${popScales.length} frames)`);
+    const badR = reveal.find((x) => !(x.land && x.icon && near(x.icon.rot, 0) && Math.abs(x.icon.scale - 1) < 0.01));
+    check(fadeReveal, `round ${i} open: the flat icon and cover fade to reveal the controller (${reveal.length} fade frames${badR ? `; off frame: land=${badR.land} icon=${JSON.stringify(badR.icon)}` : ""}${reveal.some((x) => x.cover < 0.5) ? "" : "; never below half"})`);
+    check(ctlStill, `round ${i} open: the controller itself never moves or scales`);
+
+    await paintStart();
     await page.evaluate(() => window.__arm());
     if (i % 2) await page.evaluate(() => window.handleAndroidBack());
     else await page.evaluate(() => [...document.querySelectorAll("button")].find((b) => b.textContent.includes("BACK")).click());
     const c = await analyse(`round ${i} close (${i % 2 ? "Android Back" : "BACK button"})`, "home");
+    const pc = paintedPhase(c.frames, await paintStop(), (x) => x.ic.includes("gp-icon-back"));
+    // The icon's turn has a planned 45 ms still moment (the same keyframes as the opening, played in reverse).
+    check(pc && pc.start <= 60 && pc.gap <= 60, `round ${i} close: the icon's turn and the fade are smooth on screen (painted: ${ph(pc)}; CPU 4x slower)`);
+    // The closing's story = the opening reversed: the flat icon fades in over the controller (still landscape) -> the
+    // phone turns -> the icon turns upright and shrinks away -> the cover fades to reveal Home.
+    const cf = c.frames, firstPort = cf.findIndex((x) => !x.land);
+    const flatFirst = firstPort > 0 && cf.slice(0, firstPort).some((x) => x.icon && near(x.icon.rot, 0) && x.iconOp > 0.9 && x.cover > 0.98)
+      && cf.slice(0, firstPort).every((x) => !x.icon || near(x.icon.rot, 0));
+    const uprightAfter = firstPort > 0 && cf.slice(firstPort).some((x) => x.icon && near(x.icon.rot, 90) && x.iconOp > 0.9);
+    const k90 = cf.findIndex((x, k) => k >= firstPort && x.icon && near(x.icon.rot, 90));
+    const shrank = k90 > 0 && cf.slice(k90).some((x) => x.icon && near(x.icon.rot, 90) && (x.icon.scale < 0.6 || x.iconOp < 0.3) && x.cover > 0.98);
+    const homeFade = cf.some((x) => x.cc.includes("gp-cover-out") && x.cover < 0.5 && !x.land);
+    check(flatFirst, `round ${i} close: the flat icon fades in over the controller before the phone turns`);
+    check(uprightAfter, `round ${i} close: after the turn the icon turns upright`);
+    check(shrank, `round ${i} close: then it shrinks away on the solid cover`);
+    check(homeFade, `round ${i} close: then the cover fades to reveal Home`);
     times.push(`${o.settledMs}/${c.settledMs}`);
   }
 
