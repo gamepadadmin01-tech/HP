@@ -22,7 +22,8 @@ try {
  assert.ok(await page.$('[data-testid="settings-heading"]'),'Back returns to previous tab');await back();assert.ok(await page.$('[data-testid="home-heading"]'));
  await click('[data-testid="profile-shortcut-button"]');await click('[data-testid="auth-forgot-password-button"]');await back();assert.ok(await page.$('[data-testid="auth-signin-form"]'));await back();assert.ok(await page.$('[data-testid="home-heading"]'));
  await click('[data-testid="create-layout-button"]');await back();assert.equal(await page.$('[role="dialog"][aria-label="Create or import a layout"]'),null);
- await page.$eval('button[aria-label^="Play "]',e=>e.click());await pause();await back();assert.ok(await page.$('[data-testid="home-heading"]'),'Controller Back returns to Play');
+ // The opening (gamepad icon -> turn -> pop, 2026-11-11) ignores Back until the controller is fully open: wait for it.
+ await page.$eval('button[aria-label^="Play "]',e=>e.click());await page.waitForSelector('[data-screen="pad"]');await page.waitForFunction(()=>!document.querySelector('.gp-cover'),{timeout:4000});await back();assert.ok(await page.$('[data-testid="home-heading"]'),'Controller Back returns to Play');
  await click('[data-testid="create-layout-button"]');
  await page.evaluate(()=>[...document.querySelectorAll('button')].find(e=>e.textContent.includes('Create custom pad')).click());await pause();
  await page.waitForSelector('[data-testid="editor-back-button"]');await back();assert.equal(await page.$('[data-testid="editor-back-button"]'),null,'Unchanged editor closes without losing existing layouts');

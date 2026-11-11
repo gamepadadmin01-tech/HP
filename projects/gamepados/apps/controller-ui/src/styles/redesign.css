@@ -514,6 +514,30 @@
 @keyframes gp-cover-out { from { opacity: 1; } to { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .gp-cover-in, .gp-cover-out { animation: none; } }
 
+/* ── 27b. Controller opening: the gamepad icon (2026-11-11) ─────────────────────────────────────────────────────
+   App.tsx openController. 0-0.56 s: the icon pops up standing upright, then turns flat (the way the phone turns).
+   Then the phone turns; the icon is already flat, so the turn looks seamless. Then html[data-ctl-pop="go"]: the
+   cover drops BELOW the controller, the icon swells and fades, and the controller pops out of it to full screen
+   (0.38 s). Each moving thing is one layer, transform + opacity only, so the graphics chip runs it on its own. */
+.gp-cover { display: flex; align-items: center; justify-content: center; }
+.gp-cover-icon { width: 150px; height: 150px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  will-change: transform, opacity; animation: gp-icon-in .56s both; }
+@keyframes gp-icon-in {
+  0%   { opacity: 0; transform: rotate(90deg) scale(.4); animation-timing-function: cubic-bezier(.3, 1.45, .6, 1); }
+  40%  { opacity: 1; transform: rotate(90deg) scale(1); animation-timing-function: linear; }
+  48%  { opacity: 1; transform: rotate(90deg) scale(1); animation-timing-function: cubic-bezier(.65, 0, .35, 1); }
+  100% { opacity: 1; transform: rotate(0deg) scale(1); }
+}
+/* While it waits behind the icon, the controller is already its own layer, drawn at full size (opacity .01, not 0:
+   at 0 Chrome skips drawing it), so the first frame of the pop is ready at once instead of ~50 ms late. */
+html[data-ctl-pop="wait"] .gp-ctl-wrap { will-change: transform, opacity; opacity: .01; }
+html[data-ctl-pop="go"] .gp-cover { z-index: 15; }
+html[data-ctl-pop="go"] .gp-cover-icon { animation: gp-icon-out .22s ease-out both; }
+@keyframes gp-icon-out { from { opacity: 1; transform: scale(1); } to { opacity: 0; transform: scale(1.9); } }
+html[data-ctl-pop="go"] .gp-ctl-wrap { will-change: transform, opacity; transform-origin: 50% 50%;
+  animation: gp-ctl-pop .38s cubic-bezier(.22, 1.12, .36, 1) both; }
+@keyframes gp-ctl-pop { 0% { opacity: 0; transform: scale(.12); } 30% { opacity: 1; } 100% { opacity: 1; transform: scale(1); } }
+
 /* ── 28. Controller: fill-up while a button is held (2026-11-10, replaces the ring) ──────────────────────────────
    Widgets.tsx BtnBase. A layer of the controller colour, clipped to the button, rises from the bottom while the
    button is held (after 0.18 s, so a quick tap shows nothing) and drains quickly on release. transform only. */
