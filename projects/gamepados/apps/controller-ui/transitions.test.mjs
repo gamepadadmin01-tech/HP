@@ -21,10 +21,12 @@ await (async () => {
   await page.exposeFunction("__turn", async (o) => { await pause(220); await page.setViewport({ ...(o.startsWith("landscape") ? L : P), deviceScaleFactor: 2 }); });
   await page.evaluateOnNewDocument(() => {
     try { localStorage.clear(); } catch {}
-    window.__geo = [];
+    window.__geo = []; window.__held = 0;
     window.AndroidBridge = { onUiReady() {}, exitApp() {}, getDistributionChannel: () => "direct", getAppVersionName: () => "1.4.16", getAppVersionCode: () => 70,
       getNetworkTelemetryJson: () => JSON.stringify({ engineRunning: true, linkAlive: true, connectionType: "wireless" }), getUsbBroadcastAddress: () => "", stopEngine() {},
       setScreenOrientation(o) { window.__turn(o); },
+      // How the phone is HELD (0 upright, 270 sideways = turned anticlockwise) and how the screen is turned (landscape = 90).
+      getHeldRotation: () => window.__held, getDisplayRotation: () => (innerWidth > innerHeight ? 90 : 0),
       setNativeInputGeometry(j) { window.__geo.push(JSON.parse(j).matrix[0]); }, setNativeInputActive() {}, setNativeGyroConfig() {} };
     // frame sampler, armed per run
     window.__arm = (expect) => {
@@ -44,8 +46,9 @@ await (async () => {
         // "nav" = a change is in progress (the cover is on screen).
         window.__f.push({ t: performance.now() - t0, abs: performance.timeOrigin + performance.now(), cover, home, pad, editor, shown, nav: document.querySelector(".gp-cover") ? "on" : "", land: innerWidth > innerHeight,
           icon, iconOp: op(".gp-cover-icon"), wrapScale: wrap ? wrap.scale : 0, pop: document.documentElement.dataset.ctlPop || "",
-          cc: document.querySelector(".gp-cover")?.className || "", ic: document.querySelector(".gp-cover-icon")?.className || "" });
-        if (performance.now() - t0 < 2400) requestAnimationFrame(tick);
+          cc: document.querySelector(".gp-cover")?.className || "", ic: document.querySelector(".gp-cover-icon")?.className || "",
+          pv: icon ? ((icon.rot + window.__held + (innerWidth > innerHeight ? 90 : 0)) % 360 + 540) % 360 - 180 : null });
+        if (performance.now() - t0 < 4600) requestAnimationFrame(tick);
       };
       requestAnimationFrame(tick);
     };
@@ -58,7 +61,7 @@ await (async () => {
   await cdp.send("Emulation.setCPUThrottlingRate", { rate: 4 });
 
   const analyse = async (label, endScreen) => {
-    await pause(2500);
+    await pause(4700);
     const f = await page.evaluate(() => window.__f);
     const blank = f.filter((x) => x.cover + x.shown < 0.9);
     const moving = f.filter((x) => x.nav || (x.cover > 0.02 && x.cover < 0.98));
@@ -111,55 +114,53 @@ await (async () => {
   const tapCard = (name) => page.evaluate((n) => document.querySelector(`button[aria-label="Play ${n}"]`).click(), name);
   const times = [];
 
-  // ── A. ROUNDS rounds, alternating the two layouts and the two Back routes ─────────────────────────────────────
+  /** The icon's story as the PLAYER sees it, frame by frame (angles: 90 = standing, 0 = lying flat):
+   *  it appears only after the screen has turned, at `from`, turns only towards `to` (never back, never past), ends at
+   *  `to`, the screen never changes shape while it shows, and it fades together with the cover, still. */
+  const iconStory = (f, from, to, landscapeEnd, label) => {
+    const shown = f.filter((x) => x.icon && x.pv !== null);
+    const vis = shown.filter((x) => x.iconOp > 0.9);
+    const lo = Math.min(from, to) - 3, hi = Math.max(from, to) + 3;
+    const firstIcon = shown[0];
+    check(!!firstIcon && firstIcon.land === landscapeEnd, `${label}: the icon appears only after the screen has turned`);
+    check(shown.every((x) => x.land === landscapeEnd), `${label}: the screen never turns while the icon shows`);
+    check(vis.length > 0 && near(vis[0].pv, from), `${label}: it appears ${from === 90 ? "standing" : "lying flat"} for the player (${vis.length ? vis[0].pv : "-"} deg)`);
+    let back = 0; for (let k = 1; k < shown.length; k++) { const d = shown[k].pv - shown[k - 1].pv; if (to > from ? d < -3 : to < from ? d > 3 : Math.abs(d) > 3) back++; }
+    check(shown.every((x) => x.pv >= lo && x.pv <= hi) && back === 0,
+      `${label}: it only turns ${from === to ? "not at all" : "from " + from + " to " + to} (range ${Math.min(...shown.map((x) => x.pv))}..${Math.max(...shown.map((x) => x.pv))}, ${back} backward steps)`);
+    check(vis.length > 0 && near(vis[vis.length - 1].pv, to), `${label}: it ends ${to === 90 ? "standing" : "lying flat"} for the player`);
+    const rev = f.filter((x) => x.cc.includes("gp-cover-reveal"));
+    check(rev.length >= 2 && rev.every((x) => !x.icon || near(x.pv, to)) && rev.some((x) => x.cover < 0.9), `${label}: then the icon and cover fade together, the icon still (${rev.length} fade frames)`);
+  };
+
+  // ── A. ROUNDS rounds, alternating the two layouts, the two Back routes and how the phone is held ──────────────────
+  //   odd rounds: Home held upright, the controller held sideways (the usual way);
+  //   even rounds: still sideways on Home (owner's report, 2026-11-11), upright while the controller shows.
   for (let i = 1; i <= ROUNDS; i++) {
     const layout = i % 2 ? "Standard Controller" : "Standard Racing Controller";
+    const openHeld = i % 2 ? 0 : 270, closeHeld = i % 2 ? 270 : 0;
     const geoBefore = await page.evaluate(() => window.__geo.length);
+    await page.evaluate((h) => { window.__held = h; }, openHeld);
     await paintStart();
     await page.evaluate(() => window.__arm());
     await tapCard(layout);
-    const o = await analyse(`round ${i} open (${layout})`, "pad");
-    const po = paintedPhase(o.frames, await paintStop(), (x) => x.cc.includes("gp-cover-out"));
+    const o = await analyse(`round ${i} open (${layout}, held ${openHeld ? "sideways" : "upright"})`, "pad");
+    const po = paintedPhase(o.frames, await paintStop(), (x) => x.cc.includes("gp-cover-reveal"));
     check(po && po.start <= 60 && po.gap <= 40, `round ${i} open: the reveal fade is smooth on screen (painted: ${ph(po)}; CPU 4x slower)`);
     const geo = await page.evaluate((n) => window.__geo.slice(n), geoBefore);
     check(geo.length >= 1 && geo.every((g) => Math.abs(g - 0.715) < 0.01), `round ${i}: touch layer only ever got the pad at full size (${geo.map((g) => g.toFixed(3)).join(", ") || "none"})`);
-    // The opening's story, frame by frame: icon upright in portrait -> icon flat BEFORE the phone turns -> the icon
-    // and cover fade away and reveal the controller, which never moves (always full size).
-    const fr = o.frames, firstLand = fr.findIndex((x) => x.land);
-    const upright = fr.some((x) => !x.land && x.icon && near(x.icon.rot, 90) && x.iconOp > 0.9);
-    const flatBeforeTurn = firstLand > 0 && fr.slice(0, firstLand).some((x) => x.icon && near(x.icon.rot, 0) && x.iconOp > 0.9)
-      && !fr.slice(0, firstLand).some((x, k) => x.icon && !near(x.icon.rot, 0) && fr.slice(0, k).some((y) => y.icon && near(y.icon.rot, 0)));
-    const reveal = fr.filter((x) => x.cc.includes("gp-cover-out"));
-    const fadeReveal = reveal.length >= 3 && reveal.every((x) => x.land && x.icon && near(x.icon.rot, 0) && Math.abs(x.icon.scale - 1) < 0.01)
-      && reveal.some((x) => x.cover < 0.5);
-    const ctlStill = fr.every((x) => !x.wrapScale || Math.abs(x.wrapScale - 1) < 0.001);
-    check(upright, `round ${i} open: the gamepad icon pops up standing upright`);
-    check(flatBeforeTurn, `round ${i} open: the icon turns flat before the phone turns`);
-    const badR = reveal.find((x) => !(x.land && x.icon && near(x.icon.rot, 0) && Math.abs(x.icon.scale - 1) < 0.01));
-    check(fadeReveal, `round ${i} open: the flat icon and cover fade to reveal the controller (${reveal.length} fade frames${badR ? `; off frame: land=${badR.land} icon=${JSON.stringify(badR.icon)}` : ""}${reveal.some((x) => x.cover < 0.5) ? "" : "; never below half"})`);
-    check(ctlStill, `round ${i} open: the controller itself never moves or scales`);
+    iconStory(o.frames, openHeld ? 0 : 90, 0, true, `round ${i} open, held ${openHeld ? "sideways" : "upright"}`);
+    check(o.frames.every((x) => !x.wrapScale || Math.abs(x.wrapScale - 1) < 0.001), `round ${i} open: the controller itself never moves or scales`);
 
+    await page.evaluate((h) => { window.__held = h; }, closeHeld);
     await paintStart();
     await page.evaluate(() => window.__arm());
     if (i % 2) await page.evaluate(() => window.handleAndroidBack());
     else await page.evaluate(() => [...document.querySelectorAll("button")].find((b) => b.textContent.includes("BACK")).click());
-    const c = await analyse(`round ${i} close (${i % 2 ? "Android Back" : "BACK button"})`, "home");
-    const pc = paintedPhase(c.frames, await paintStop(), (x) => x.ic.includes("gp-icon-back"));
-    // The icon's turn has a planned 45 ms still moment (the same keyframes as the opening, played in reverse).
-    check(pc && pc.start <= 60 && pc.gap <= 60, `round ${i} close: the icon's turn and the fade are smooth on screen (painted: ${ph(pc)}; CPU 4x slower)`);
-    // The closing's story = the opening reversed: the flat icon fades in over the controller (still landscape) -> the
-    // phone turns -> the icon turns upright and shrinks away -> the cover fades to reveal Home.
-    const cf = c.frames, firstPort = cf.findIndex((x) => !x.land);
-    const flatFirst = firstPort > 0 && cf.slice(0, firstPort).some((x) => x.icon && near(x.icon.rot, 0) && x.iconOp > 0.9 && x.cover > 0.98)
-      && cf.slice(0, firstPort).every((x) => !x.icon || near(x.icon.rot, 0));
-    const uprightAfter = firstPort > 0 && cf.slice(firstPort).some((x) => x.icon && near(x.icon.rot, 90) && x.iconOp > 0.9);
-    const k90 = cf.findIndex((x, k) => k >= firstPort && x.icon && near(x.icon.rot, 90));
-    const shrank = k90 > 0 && cf.slice(k90).some((x) => x.icon && near(x.icon.rot, 90) && (x.icon.scale < 0.6 || x.iconOp < 0.3) && x.cover > 0.98);
-    const homeFade = cf.some((x) => x.cc.includes("gp-cover-out") && x.cover < 0.5 && !x.land);
-    check(flatFirst, `round ${i} close: the flat icon fades in over the controller before the phone turns`);
-    check(uprightAfter, `round ${i} close: after the turn the icon turns upright`);
-    check(shrank, `round ${i} close: then it shrinks away on the solid cover`);
-    check(homeFade, `round ${i} close: then the cover fades to reveal Home`);
+    const c = await analyse(`round ${i} close (${i % 2 ? "Android Back" : "BACK button"}, held ${closeHeld ? "sideways" : "upright"})`, "home");
+    const pc = paintedPhase(c.frames, await paintStop(), (x) => x.cc.includes("gp-cover-reveal"));
+    check(pc && pc.start <= 60 && pc.gap <= 40, `round ${i} close: the reveal fade is smooth on screen (painted: ${ph(pc)}; CPU 4x slower)`);
+    iconStory(c.frames, closeHeld ? 0 : 90, 90, false, `round ${i} close, held ${closeHeld ? "sideways" : "upright"}`);
     times.push(`${o.settledMs}/${c.settledMs}`);
   }
 

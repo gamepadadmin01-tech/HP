@@ -998,19 +998,20 @@ function TabFade({ animate, children }: { animate: boolean; children: React.Reac
 // happen WHILE the cover is on, never after it, because Android needs about 0.2 s to turn the screen.
 // It lives outside React's App state (a tiny store) so that starting it never redraws the whole app first.
 const COVER_COLOR = CONTROLLER.page.startsWith("#") ? CONTROLLER.page : "#170d09";
-// in / out: the plain fade (editor). Controller (icon on the cover): intro (fade in, icon pops up upright and turns
-// flat) -> reveal (fade out with the flat icon). outro (fade in with the flat icon) -> unturn (the icon turns upright and
-// shrinks away: gp-icon-in played in reverse) -> out.
-type Cover = "in" | "out" | "intro" | "reveal" | "outro" | "unturn" | null;
+// in / out: the plain fade (the layout editor, and the start of the controller's open / close). icon: the solid cover
+// with the gamepad icon (it pops up, and turns if the phone is not held the target way). reveal: the cover and the
+// still icon fade out together, showing the screen underneath.
+type Cover = "in" | "out" | "icon" | "reveal" | null;
 let coverNow: Cover = null;
+/** The icon's rotation ON THE SCREEN, in degrees: where it pops up (r0) and where it ends (r1). */
+let coverIcon: { r0: number; r1: number } | null = null;
 const coverSubs = new Set<() => void>();
 function setCover(c: Cover) { coverNow = c; coverSubs.forEach((f) => f()); }
 const subscribeCover = (f: () => void) => { coverSubs.add(f); return () => { coverSubs.delete(f); }; };
-// Called once when the cover has REALLY finished fading in (its animationend), so the next screen is built only under
-// a solid cover, however slow the phone is. A timer cannot know that: on a busy phone the fade starts late.
-// One-shot waits on a real animationend, each with a time limit so nothing can hang.
+// One-shot waits on a real animationend, each with a time limit so nothing can hang. Waiting on the animation itself
+// (not a timer) means the next step starts only when the step before has really finished, however busy the phone is.
 type Waiter = { fn: (() => void) | null };
-const coverSolid: Waiter = { fn: null }, iconTurned: Waiter = { fn: null }, coverFaded: Waiter = { fn: null };
+const coverSolid: Waiter = { fn: null }, iconDone: Waiter = { fn: null }, coverFaded: Waiter = { fn: null };
 function waitFor(w: Waiter, fn: () => void, maxMs: number) {
   let done = false;
   const run = () => { if (done) return; done = true; if (w.fn === run) w.fn = null; fn(); };
@@ -1018,22 +1019,35 @@ function waitFor(w: Waiter, fn: () => void, maxMs: number) {
   window.setTimeout(run, maxMs);                             // never wait longer than this
 }
 const whenCoverSolid = (fn: () => void, maxMs: number) => waitFor(coverSolid, fn, maxMs);
-// CONTROLLER OPEN / CLOSE (owner, 2026-11-11): opening, a small gamepad in the theme colour pops up standing upright and
-// turns flat, the phone turns, and the icon and cover simply fade to reveal the controller (the controller itself does
-// not move). Closing is the exact reverse. The icon is ONE layer (transform + opacity only). Timings: redesign.css 27b.
+/** How the player holds the phone (upright or sideways, from the motion sensor) and how the screen's picture therefore
+ *  looks turned TO THE PLAYER (clockwise degrees: 0 / 90 / 180 / 270). null when unknown (lying flat, old app shell). */
+function howHeld(): { upright: boolean; turned: number } | null {
+  try {
+    const b = (window as any).AndroidBridge;
+    const held = b?.getHeldRotation?.(), shown = b?.getDisplayRotation?.();
+    if (typeof held === "number" && held >= 0 && typeof shown === "number") return { upright: held % 180 === 0, turned: (held + shown) % 360 };
+  } catch (e) { console.error(e); }
+  return null;
+}
+// CONTROLLER OPEN / CLOSE (owner, 2026-11-11). The icon always matches how the player HOLDS the phone: it appears
+// standing up if the phone is held upright, lying flat if it is held sideways. Opening, it then turns flat if it was
+// standing (the controller is played sideways); closing, it turns upright if it was flat (Home is upright). If the phone
+// is already held the target way it does not turn. The screen itself turns BEFORE the icon appears, under a plain
+// cover, so a turn can never twist the icon. The icon is ONE layer (transform + opacity only). Timings: redesign.css 27b.
 function CoverLayer() {
   const cover = useSyncExternalStore(subscribeCover, () => coverNow, () => coverNow);
   if (!cover) return null;
-  const fading = cover === "out" || cover === "reveal" ? "out" : "in";       // unturn keeps "in": the cover stays solid
-  const icon = cover === "intro" || cover === "reveal" || cover === "outro" || cover === "unturn";
-  const iconMotion = cover === "intro" ? " gp-icon-in" : cover === "unturn" ? " gp-icon-back" : "";   // else: still and flat
+  const fade = cover === "out" ? "gp-cover-out" : cover === "reveal" ? "gp-cover-reveal" : "gp-cover-in";
+  const ic = (cover === "icon" || cover === "reveal") ? coverIcon : null;
+  const motion = cover !== "icon" || !ic ? "" : ic.r0 === ic.r1 ? " gp-icon-pop" : " gp-icon-turn";
   return (
-    <div className={`gp-cover gp-cover-${fading}`} style={{ background: COVER_COLOR }} aria-hidden="true"
+    <div className={`gp-cover ${fade}`} style={{ background: COVER_COLOR }} aria-hidden="true"
       onAnimationEnd={(e) => { if (e.target !== e.currentTarget) return;
         if (e.animationName === "gp-cover-in") coverSolid.fn?.(); else if (e.animationName === "gp-cover-out") coverFaded.fn?.(); }}>
-      {icon && (
-        <div className={"gp-cover-icon" + iconMotion} style={{ background: `radial-gradient(circle, rgba(${CONTROLLER.rgb},0.30), transparent 68%)` }}
-          onAnimationEnd={(e) => { e.stopPropagation(); if (e.animationName === "gp-icon-in") iconTurned.fn?.(); }}>
+      {ic && (
+        <div className={"gp-cover-icon" + motion}
+          style={{ background: `radial-gradient(circle, rgba(${CONTROLLER.rgb},0.30), transparent 68%)`, ["--r0" as any]: `${ic.r0}deg`, ["--r1" as any]: `${ic.r1}deg` }}
+          onAnimationEnd={(e) => { e.stopPropagation(); if (e.animationName === "gp-icon-pop" || e.animationName === "gp-icon-turn") iconDone.fn?.(); }}>
           <Gamepad2 strokeWidth={1.6} style={{ width: 76, height: 76, color: `rgb(${CONTROLLER.rgb})` }} />
         </div>
       )}
@@ -3401,44 +3415,64 @@ export default function App() {
     }, 450);
     later(2500, () => { setCover(null); transitioningRef.current = false; });   // never stuck
   }
-  function openController() {
-    transitioningRef.current = true;                          // Back waits until the controller is fully open
-    coverTimers.current.forEach(clearTimeout); coverTimers.current = [];
-    let finished = false;
-    const finish = () => { if (finished) return; finished = true; setCtlPop(null); setCover(null); transitioningRef.current = false; };
-    setCover("intro");                                        // 1. fade to the controller colour; the icon pops up upright
-    waitFor(iconTurned, () => {                               // 2. the icon has turned flat: now the phone turns, and the
-      turn("landscape-locked");                               //    controller is built behind the still icon DURING the turn
-      setCtlPop("wait");                                      //    (measured: built while the icon moved, it froze the icon)
-      try { fromControllerRef.current = false; setView("controller"); viewRef.current = "controller"; } catch (e) { console.error(e); }
-      whenShape(true, 700, () => after2Frames(() => {         // 3. turned and drawn twice: the icon and the cover fade away
-        setCtlPop(null);                                      //    and reveal the controller. The controller does not move.
-        setCover("reveal");
-        waitFor(coverFaded, finish, 600);                     //    removed once the fade has really finished
-      }));
-    }, 1000);
-    later(3200, finish);                                      // never stuck
-  }
-  /** The exact reverse of openController. */
-  function closeController() {
-    transitioningRef.current = true;
+  /** Run `fn` once the window has stopped changing size for `quietMs` (the turn, then the system bars hiding or showing,
+   *  each resize the page), or after `maxMs` anyway. Revealing before that let the screen redraw mid-fade (a glitch). */
+  const whenSettled = (quietMs: number, maxMs: number, fn: () => void) => {
+    let done = false, t = 0;
+    const go = () => { if (done) return; done = true; window.removeEventListener("resize", bump); clearTimeout(t); fn(); };
+    const bump = () => { clearTimeout(t); t = window.setTimeout(go, quietMs); };
+    window.addEventListener("resize", bump);
+    bump();
+    later(maxMs, go);
+  };
+  /**
+   * The controller's open and close (owner, 2026-11-11). Step by step:
+   *  1. a plain cover in the controller's colour fades in (no icon yet);
+   *  2. under it the screen turns and the next screen is built; wait until the window stops changing size;
+   *  3. the gamepad icon pops up matching how the phone is HELD (upright: standing; sideways: lying flat);
+   *  4. if that is not the target (`target`: 0 = flat for the controller, 90 = standing for Home), it turns to it;
+   *  5. the icon and the cover fade together and reveal the screen underneath.
+   */
+  function iconThrough(orientation: string, landscape: boolean, target: 0 | 90, swap: () => void) {
+    transitioningRef.current = true;                          // Back and taps wait until it has finished
     coverTimers.current.forEach(clearTimeout); coverTimers.current = [];
     setCtlPop(null);
     let finished = false;
-    const finish = () => { if (finished) return; finished = true; setCover(null); transitioningRef.current = false; };
-    setCover("outro");                                        // 1. the cover and the flat icon fade in over the controller
-    whenCoverSolid(() => {                                    // 2. solid: the phone turns back, and Home is built behind the
-      turn("portrait");                                       //    still icon during the turn
-      try { fromControllerRef.current = true; setView("dashboard"); viewRef.current = "dashboard"; } catch (e) { console.error(e); }
-      whenShape(false, 700, () => after2Frames(() => {        // 3. turned and drawn twice: the icon turns upright and shrinks away
-        setCover("unturn");
-        waitFor(iconTurned, () => {                           // 4. the cover fades and reveals Home
-          setCover("out");
-          waitFor(coverFaded, finish, 600);
-        }, 1000);
-      }));
-    }, 450);
-    later(3200, finish);                                      // never stuck
+    const finish = () => { if (finished) return; finished = true; setCtlPop(null); setCover(null); coverIcon = null; transitioningRef.current = false; };
+    coverIcon = null;
+    setCover("in");                                           // 1.
+    whenCoverSolid(() => {
+      turn(orientation);                                      // 2. (a plain colour: the turn shows nothing)
+      if (landscape) setCtlPop("wait");                       //    the touch layer waits for the final size
+      try { swap(); } catch (e) { console.error(e); }
+      whenShape(landscape, 900, () => whenSettled(300, 1500, () => after2Frames(() => {
+        // 3. How the player holds the phone right now. Unknown: assume it is already held the target way (no turn).
+        const h = howHeld();
+        const start = h === null ? target : h.upright ? 90 : 0;  // as the player sees it: 90 = standing, 0 = flat
+        // The picture looks turned by h.turned to the player, so on the screen the icon is rotated by (start - turned).
+        const r0 = ((start - (h?.turned ?? 0)) % 360 + 540) % 360 - 180;   // -180..179
+        coverIcon = { r0, r1: r0 + (target - start) };          // 4. turns by +90 / -90, or not at all
+        setCover("icon");
+        waitFor(iconDone, () => {
+          setCtlPop(null);                                    //    the screen is in place: the touch layer gets its position
+          setCover("reveal");                                 // 5.
+          waitFor(coverFaded, finish, 900);
+        }, 3000);
+      })));
+    }, 500);
+    later(8000, finish);                                      // never stuck
+  }
+  function openController() {
+    iconThrough("landscape-locked", true, 0, () => {
+      fromControllerRef.current = false;
+      setView("controller"); viewRef.current = "controller";
+    });
+  }
+  function closeController() {
+    iconThrough("portrait", false, 90, () => {
+      fromControllerRef.current = true;
+      setView("dashboard"); viewRef.current = "dashboard";
+    });
   }
   /** The same fade for the layout editor (open and close). */
   function coverSwap(orientation: string, landscape: boolean, swap: () => void) {

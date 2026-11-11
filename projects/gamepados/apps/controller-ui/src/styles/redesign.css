@@ -515,22 +515,28 @@
 @media (prefers-reduced-motion: reduce) { .gp-cover-in, .gp-cover-out { animation: none; } }
 
 /* ── 27b. Controller open / close: the gamepad icon (2026-11-11) ──────────────────────────────────────────────────
-   App.tsx openController / closeController / CoverLayer. Opening: the cover fades in while the icon pops up standing
-   upright, then turns flat (the way the phone turns), 0.56 s. The phone turns; the icon is already flat, so the turn
-   looks seamless. Then the cover and the icon simply fade (.gp-cover-out, 0.24 s) and reveal the controller, which
-   does not move. Closing is the exact reverse: the cover fades in with the flat icon, the phone turns back, the icon
-   turns upright and shrinks away (the same keyframes played in reverse), and the cover fades to reveal Home.
+   App.tsx iconThrough / CoverLayer. A plain cover fades in (.gp-cover-in) and the screen turns under it. Then the icon
+   pops up matching how the phone is held (--r0, its rotation on the screen), and turns to the target (--r1) if it is
+   not there already, then the cover and the still icon fade together (.gp-cover-reveal). Deliberately unhurried
+   (owner: "keep more delays", he will ask for faster): pop .35 s, still .25 s, turn .6 s, still .3 s, fade .4 s.
    The icon is one layer, transform + opacity only, so the graphics chip runs it on its own. */
 .gp-cover { display: flex; align-items: center; justify-content: center; }
+.gp-cover-reveal { animation: gp-cover-out .4s ease-in-out both; pointer-events: none; }
 .gp-cover-icon { width: 150px; height: 150px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
-  will-change: transform, opacity; }
-.gp-icon-in { animation: gp-icon-in .56s both; }
-.gp-icon-back { animation: gp-icon-in .56s reverse both; }
-@keyframes gp-icon-in {
-  0%   { opacity: 0; transform: rotate(90deg) scale(.4); animation-timing-function: cubic-bezier(.3, 1.45, .6, 1); }
-  40%  { opacity: 1; transform: rotate(90deg) scale(1); animation-timing-function: linear; }
-  48%  { opacity: 1; transform: rotate(90deg) scale(1); animation-timing-function: cubic-bezier(.65, 0, .35, 1); }
-  100% { opacity: 1; transform: rotate(0deg) scale(1); }
+  transform: rotate(var(--r1, 0deg)); will-change: transform, opacity; }
+.gp-icon-pop { animation: gp-icon-pop .7s both; }
+.gp-icon-turn { animation: gp-icon-turn 1.5s both; }
+@keyframes gp-icon-pop {
+  0%   { opacity: 0; transform: rotate(var(--r0)) scale(.4); animation-timing-function: cubic-bezier(.3, 1.45, .6, 1); }
+  50%  { opacity: 1; transform: rotate(var(--r0)) scale(1); }
+  100% { opacity: 1; transform: rotate(var(--r0)) scale(1); }
+}
+@keyframes gp-icon-turn {
+  0%   { opacity: 0; transform: rotate(var(--r0)) scale(.4); animation-timing-function: cubic-bezier(.3, 1.45, .6, 1); }
+  23%  { opacity: 1; transform: rotate(var(--r0)) scale(1); animation-timing-function: linear; }
+  40%  { opacity: 1; transform: rotate(var(--r0)) scale(1); animation-timing-function: cubic-bezier(.65, 0, .35, 1); }
+  80%  { opacity: 1; transform: rotate(var(--r1)) scale(1); }
+  100% { opacity: 1; transform: rotate(var(--r1)) scale(1); }
 }
 
 /* ── 28. Controller: fill-up while a button is held (2026-11-10, replaces the ring) ──────────────────────────────

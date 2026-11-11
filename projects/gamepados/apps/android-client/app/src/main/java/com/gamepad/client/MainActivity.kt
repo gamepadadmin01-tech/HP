@@ -89,6 +89,17 @@ class MainActivity : AppCompatActivity(), android.hardware.SensorEventListener {
 
     private lateinit var cameraExecutor: ExecutorService
     private lateinit var sensorManager: android.hardware.SensorManager
+    // HOW THE PHONE IS HELD (2026-11-11), for the controller open/close icon: 0 = upright, 90 = turned clockwise
+    // (left side up), 180 = upside down, 270 = turned anticlockwise (right side up), -1 = unknown (lying flat).
+    // Android's own light orientation listener (accelerometer, normal rate), on only while the app is in front.
+    @Volatile private var heldRotation: Int = -1
+    private val heldListener by lazy {
+        object : android.view.OrientationEventListener(this) {
+            override fun onOrientationChanged(o: Int) {
+                heldRotation = if (o == ORIENTATION_UNKNOWN) -1 else ((o + 45) / 90 % 4) * 90
+            }
+        }
+    }
     // STEERING via SENSOR FUSION (matches the reference app): the Game Rotation
     // Vector (gyro+accel fused, no magnetometer → drift-free heading-independent,
     // and crucially NO gravity blind-spot) feeds getRotationMatrixFromVector →
@@ -1043,6 +1054,19 @@ class MainActivity : AppCompatActivity(), android.hardware.SensorEventListener {
                         }
                     }
                 }
+
+                /** How the phone is held (see heldRotation): 0 / 90 / 180 / 270, or -1 if unknown. */
+                @android.webkit.JavascriptInterface
+                fun getHeldRotation(): Int = heldRotation
+
+                /** How the screen's picture is turned from the phone's natural (upright) position: 0 / 90 / 180 / 270.
+                 *  With getHeldRotation the page knows how its picture looks to the player (controller icon). */
+                @android.webkit.JavascriptInterface
+                fun getDisplayRotation(): Int = try {
+                    val r = if (android.os.Build.VERSION.SDK_INT >= 30) display?.rotation ?: 0
+                            else @Suppress("DEPRECATION") windowManager.defaultDisplay.rotation
+                    r * 90
+                } catch (_: Exception) { 0 }
 
                 @android.webkit.JavascriptInterface
                 fun setScreenOrientation(orientation: String) {
@@ -2018,6 +2042,7 @@ class MainActivity : AppCompatActivity(), android.hardware.SensorEventListener {
             // 4-arg overload → events delivered on sensorHandler's thread, off the UI looper.
             sensorManager.registerListener(this, it, android.hardware.SensorManager.SENSOR_DELAY_FASTEST, sensorHandler)
         }
+        try { if (heldListener.canDetectOrientation()) heldListener.enable() } catch (_: Exception) {}
         // (Re)start the USB-tether watcher. Reset lastUsbActive so the current
         // state is re-broadcast on resume — handles "plugged in while app was
         // backgrounded" and "returned to app after enabling USB tethering".
@@ -2035,6 +2060,8 @@ class MainActivity : AppCompatActivity(), android.hardware.SensorEventListener {
         super.onPause()
         screenAwakePolicy.resumed = false
         sensorManager.unregisterListener(this)
+        try { heldListener.disable() } catch (_: Exception) {}
+        heldRotation = -1
         mainHandler.removeCallbacks(usbWatchRunnable)
 
         // ── Release everything that only makes sense while the user is here ──
