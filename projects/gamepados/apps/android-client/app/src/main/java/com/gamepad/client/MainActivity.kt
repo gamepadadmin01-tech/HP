@@ -89,17 +89,6 @@ class MainActivity : AppCompatActivity(), android.hardware.SensorEventListener {
 
     private lateinit var cameraExecutor: ExecutorService
     private lateinit var sensorManager: android.hardware.SensorManager
-    // HOW THE PHONE IS HELD (2026-11-11), for the controller open/close icon: 0 = upright, 90 = turned clockwise
-    // (left side up), 180 = upside down, 270 = turned anticlockwise (right side up), -1 = unknown (lying flat).
-    // Android's own light orientation listener (accelerometer, normal rate), on only while the app is in front.
-    @Volatile private var heldRotation: Int = -1
-    private val heldListener by lazy {
-        object : android.view.OrientationEventListener(this) {
-            override fun onOrientationChanged(o: Int) {
-                heldRotation = if (o == ORIENTATION_UNKNOWN) -1 else ((o + 45) / 90 % 4) * 90
-            }
-        }
-    }
     // STEERING via SENSOR FUSION (matches the reference app): the Game Rotation
     // Vector (gyro+accel fused, no magnetometer → drift-free heading-independent,
     // and crucially NO gravity blind-spot) feeds getRotationMatrixFromVector →
@@ -321,16 +310,11 @@ class MainActivity : AppCompatActivity(), android.hardware.SensorEventListener {
             (getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as android.os.VibratorManager).defaultVibrator
         else @Suppress("DEPRECATION") (getSystemService(Context.VIBRATOR_SERVICE) as android.os.Vibrator)
 
-    /** Play a button haptic as a TOUCH vibration where the OS supports it (API 33+), so the phone's own
-     *  touch-feedback strength setting applies; older versions play it plainly. */
+    /** Play a button haptic as a plain vibration (owner, 2026-11-11: "device max minus 20 percent"). It used to be
+     *  a TOUCH vibration, which Android scales down by the phone's touch-feedback setting (often set low), so the
+     *  buttons felt far weaker than the 80% they were set to. */
     private fun vibrateTouch(v: android.os.Vibrator, effect: android.os.VibrationEffect) {
-        if (android.os.Build.VERSION.SDK_INT >= 33) {
-            val attrs = android.os.VibrationAttributes.Builder()
-                .setUsage(android.os.VibrationAttributes.USAGE_TOUCH).build()
-            v.vibrate(effect, attrs)
-        } else if (android.os.Build.VERSION.SDK_INT >= 26) {
-            v.vibrate(effect)
-        }
+        if (android.os.Build.VERSION.SDK_INT >= 26) v.vibrate(effect)
     }
 
     internal fun playHapticEvent(event: String) {
@@ -338,30 +322,29 @@ class MainActivity : AppCompatActivity(), android.hardware.SensorEventListener {
             try {
                 val v = vib()
                 if (!v.hasVibrator()) return@runOnUiThread
-                // 80% STRENGTH (owner, 2026-11-08: half was too weak, "increase the haptic vibration to 80
-                // percent"). Full strength was the predefined CLICK/TICK/HEAVY_CLICK, which have no strength
-                // setting, so each kind of motor gets its own 80% version:
-                //   1. motors with composition primitives -> the same CLICK/TICK primitive at scale 0.8;
-                //   2. motors with amplitude control      -> a short one-shot at about 80% amplitude;
-                //   3. on/off motors (no amplitude)       -> slightly shorter pulses (13 ms, full was 16). The press
-                //      stays ONE atomic effect, so the release tick cannot cancel it mid-play (Moto G84).
-                // USAGE_TOUCH (API 33+) keeps the phone's own touch-haptic strength setting on top of this.
+                // DEVICE MAXIMUM MINUS 20% (owner, 2026-11-11; was "80%" of the softer preset click since 2026-11-08).
+                // Still a short button TICK, never a buzz (owner's haptic rule). Per kind of motor:
+                //   1. motors with amplitude control      -> a one-shot at 204 of 255 (80% of the motor's maximum),
+                //      long enough (14-16 ms) for the motor to actually reach that strength;
+                //   2. motors with composition primitives only -> the CLICK/TICK primitive at scale 0.8;
+                //   3. on/off motors (no amplitude)       -> 13 ms pulses (full was 16). The press stays ONE atomic
+                //      effect, so the release tick cannot cancel it mid-play (Moto G84).
+                // Played as a plain vibration (vibrateTouch), so the phone's touch-feedback setting does not shrink it.
                 val release = event == "tick" || event == "uiToggle" || event == "buttonRelease"
                 val trigger = event == "triggerPull"
-                if (android.os.Build.VERSION.SDK_INT >= 30 && v.areAllPrimitivesSupported(
+                if (android.os.Build.VERSION.SDK_INT >= 26 && v.hasAmplitudeControl()) {
+                    val effect = when {
+                        release -> android.os.VibrationEffect.createOneShot(9, 204)
+                        trigger -> android.os.VibrationEffect.createOneShot(16, 204)
+                        else    -> android.os.VibrationEffect.createOneShot(14, 204)
+                    }
+                    vibrateTouch(v, effect)
+                } else if (android.os.Build.VERSION.SDK_INT >= 30 && v.areAllPrimitivesSupported(
                         android.os.VibrationEffect.Composition.PRIMITIVE_CLICK,
                         android.os.VibrationEffect.Composition.PRIMITIVE_TICK)) {
                     val prim = if (release) android.os.VibrationEffect.Composition.PRIMITIVE_TICK
                                else android.os.VibrationEffect.Composition.PRIMITIVE_CLICK
-                    val scale = if (trigger) 0.9f else 0.8f
-                    vibrateTouch(v, android.os.VibrationEffect.startComposition().addPrimitive(prim, scale).compose())
-                } else if (android.os.Build.VERSION.SDK_INT >= 26 && v.hasAmplitudeControl()) {
-                    val effect = when {
-                        release -> android.os.VibrationEffect.createOneShot(8, 130)
-                        trigger -> android.os.VibrationEffect.createOneShot(14, 215)
-                        else    -> android.os.VibrationEffect.createOneShot(12, 205)
-                    }
-                    vibrateTouch(v, effect)
+                    vibrateTouch(v, android.os.VibrationEffect.startComposition().addPrimitive(prim, 0.8f).compose())
                 } else if (android.os.Build.VERSION.SDK_INT >= 26) {
                     val effect = when {
                         release -> android.os.VibrationEffect.createOneShot(8, android.os.VibrationEffect.DEFAULT_AMPLITUDE)
@@ -437,11 +420,6 @@ class MainActivity : AppCompatActivity(), android.hardware.SensorEventListener {
     private val afterLaunch = ArrayList<() -> Unit>()
     internal fun runAfterLaunch(block: () -> Unit) {
         runOnUiThread { if (launchSettled) block() else afterLaunch.add(block) }
-    }
-    private val restoreTurnAnimation = Runnable {
-        window.attributes = window.attributes.apply {
-            rotationAnimation = WindowManager.LayoutParams.ROTATION_ANIMATION_CROSSFADE
-        }
     }
     private fun settleLaunch() {
         if (launchSettled) return
@@ -567,13 +545,6 @@ class MainActivity : AppCompatActivity(), android.hardware.SensorEventListener {
         // so any handoff frame between the native splash and the React UI is invisible.
         window.decorView.setBackgroundColor(Color.parseColor("#1A1210"))   // = splash_bg = the app's page colour
         WindowCompat.setDecorFitsSystemWindows(window, false)
-        // Turning the screen (opening/closing the controller) CROSS-FADES instead of spinning a snapshot of the old
-        // screen (2026-11-09: the controller opens with no cover now, so the turn itself is what the player sees).
-        // Android uses it when this window is full-screen on top; otherwise it falls back to its usual turn.
-        window.attributes = window.attributes.apply {
-            rotationAnimation = WindowManager.LayoutParams.ROTATION_ANIMATION_CROSSFADE
-        }
-
         // Render at the display's highest refresh rate UP TO 120Hz instead of the default 60Hz, so the
         // WebView UI + animations are smooth on high-refresh phones. 120 is the cap (owner, 2026-11-02):
         // a 144/165Hz mode gives the web view a ~6ms frame budget, and it drops frames under load, so a
@@ -1055,32 +1026,12 @@ class MainActivity : AppCompatActivity(), android.hardware.SensorEventListener {
                     }
                 }
 
-                /** How the phone is held (see heldRotation): 0 / 90 / 180 / 270, or -1 if unknown. */
-                @android.webkit.JavascriptInterface
-                fun getHeldRotation(): Int = heldRotation
-
-                /** How the screen's picture is turned from the phone's natural (upright) position: 0 / 90 / 180 / 270.
-                 *  With getHeldRotation the page knows how its picture looks to the player (controller icon). */
-                @android.webkit.JavascriptInterface
-                fun getDisplayRotation(): Int = try {
-                    val r = if (android.os.Build.VERSION.SDK_INT >= 30) display?.rotation ?: 0
-                            else @Suppress("DEPRECATION") windowManager.defaultDisplay.rotation
-                    r * 90
-                } catch (_: Exception) { 0 }
-
                 @android.webkit.JavascriptInterface
                 fun setScreenOrientation(orientation: String) {
                     runOnUiThread {
                         try {
-                            // The app only turns the screen under its own full-screen cover (the circle burst), so the
-                            // turn is an instant cut: Android's own turn animation freezes a snapshot for a few hundred
-                            // milliseconds, which delayed and blurred the controller's opening (2026-11-10). A turn by
-                            // the player's hand gets the normal cross-fade back a second later.
-                            window.attributes = window.attributes.apply {
-                                rotationAnimation = WindowManager.LayoutParams.ROTATION_ANIMATION_JUMPCUT
-                            }
-                            mainHandler.removeCallbacks(restoreTurnAnimation)
-                            mainHandler.postDelayed(restoreTurnAnimation, 1200)
+                            // Android's own turn animation, as in 1.4.16 (owner, 2026-11-11: 1.4.16 is the reference).
+                            // The page's LOADING curtain is up while it plays, and it hides the switch itself.
                             if (orientation == "landscape-locked") {
                                 // The CONTROLLER asks for this one. Wheel mode pins the
                                 // orientation here and only here: the sensor axis remap is
@@ -2042,7 +1993,6 @@ class MainActivity : AppCompatActivity(), android.hardware.SensorEventListener {
             // 4-arg overload → events delivered on sensorHandler's thread, off the UI looper.
             sensorManager.registerListener(this, it, android.hardware.SensorManager.SENSOR_DELAY_FASTEST, sensorHandler)
         }
-        try { if (heldListener.canDetectOrientation()) heldListener.enable() } catch (_: Exception) {}
         // (Re)start the USB-tether watcher. Reset lastUsbActive so the current
         // state is re-broadcast on resume — handles "plugged in while app was
         // backgrounded" and "returned to app after enabling USB tethering".
@@ -2060,8 +2010,6 @@ class MainActivity : AppCompatActivity(), android.hardware.SensorEventListener {
         super.onPause()
         screenAwakePolicy.resumed = false
         sensorManager.unregisterListener(this)
-        try { heldListener.disable() } catch (_: Exception) {}
-        heldRotation = -1
         mainHandler.removeCallbacks(usbWatchRunnable)
 
         // ── Release everything that only makes sense while the user is here ──

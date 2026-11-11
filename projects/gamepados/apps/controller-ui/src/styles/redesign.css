@@ -503,42 +503,6 @@
 .gp-shell .calm-update-link:disabled { opacity: 1; }
 @media (prefers-reduced-motion: reduce) { .gp-shell .calm-update-under { animation: none; } }
 
-/* ── 27. Controller / editor open and close: one basic fade (2026-11-11) ─────────────────────────────────────────
-   App.tsx CoverLayer + coverThrough. The screen fades to the controller's colour (0.16 s), the phone turns and the
-   next screen is built behind it, and the screen fades back in (0.24 s). Nothing else moves. Opacity only, on one
-   full-screen layer, so the graphics chip runs it on its own. */
-.gp-cover { position: fixed; inset: 0; z-index: 60; will-change: opacity; }
-.gp-cover-in { animation: gp-cover-in .16s ease-out both; }
-.gp-cover-out { animation: gp-cover-out .24s ease-in-out both; pointer-events: none; }
-@keyframes gp-cover-in { from { opacity: 0; } to { opacity: 1; } }
-@keyframes gp-cover-out { from { opacity: 1; } to { opacity: 0; } }
-@media (prefers-reduced-motion: reduce) { .gp-cover-in, .gp-cover-out { animation: none; } }
-
-/* ── 27b. Controller open / close: the gamepad icon (2026-11-11) ──────────────────────────────────────────────────
-   App.tsx iconThrough / CoverLayer. A plain cover fades in (.gp-cover-in) and the screen turns under it. Then the icon
-   pops up matching how the phone is held (--r0, its rotation on the screen), and turns to the target (--r1) if it is
-   not there already, then the cover and the still icon fade together (.gp-cover-reveal). Deliberately unhurried
-   (owner: "keep more delays", he will ask for faster): pop .35 s, still .25 s, turn .6 s, still .3 s, fade .4 s.
-   The icon is one layer, transform + opacity only, so the graphics chip runs it on its own. */
-.gp-cover { display: flex; align-items: center; justify-content: center; }
-.gp-cover-reveal { animation: gp-cover-out .4s ease-in-out both; pointer-events: none; }
-.gp-cover-icon { width: 150px; height: 150px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
-  transform: rotate(var(--r1, 0deg)); will-change: transform, opacity; }
-.gp-icon-pop { animation: gp-icon-pop .7s both; }
-.gp-icon-turn { animation: gp-icon-turn 1.5s both; }
-@keyframes gp-icon-pop {
-  0%   { opacity: 0; transform: rotate(var(--r0)) scale(.4); animation-timing-function: cubic-bezier(.3, 1.45, .6, 1); }
-  50%  { opacity: 1; transform: rotate(var(--r0)) scale(1); }
-  100% { opacity: 1; transform: rotate(var(--r0)) scale(1); }
-}
-@keyframes gp-icon-turn {
-  0%   { opacity: 0; transform: rotate(var(--r0)) scale(.4); animation-timing-function: cubic-bezier(.3, 1.45, .6, 1); }
-  23%  { opacity: 1; transform: rotate(var(--r0)) scale(1); animation-timing-function: linear; }
-  40%  { opacity: 1; transform: rotate(var(--r0)) scale(1); animation-timing-function: cubic-bezier(.65, 0, .35, 1); }
-  80%  { opacity: 1; transform: rotate(var(--r1)) scale(1); }
-  100% { opacity: 1; transform: rotate(var(--r1)) scale(1); }
-}
-
 /* ── 28. Controller: fill-up while a button is held (2026-11-10, replaces the ring) ──────────────────────────────
    Widgets.tsx BtnBase. A layer of the controller colour, clipped to the button, rises from the bottom while the
    button is held (after 0.18 s, so a quick tap shows nothing) and drains quickly on release. transform only. */

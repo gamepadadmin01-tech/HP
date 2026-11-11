@@ -991,79 +991,6 @@ function TabFade({ animate, children }: { animate: boolean; children: React.Reac
   return <div className={cls}>{children}</div>;
 }
 
-// ─── Controller open / close: a plain fade (owner, 2026-11-10: "keep it simple as much as possible") ───────────
-// One full-screen layer in the controller's colour fades in (0.12 s), the phone turns and the next screen is built
-// behind it, and it fades out (0.15 s) while the pad zooms in a little (redesign.css section 27). No circle, no
-// rings, nothing measured. The one rule that matters (from the owner's screen recording): the turn and the build
-// happen WHILE the cover is on, never after it, because Android needs about 0.2 s to turn the screen.
-// It lives outside React's App state (a tiny store) so that starting it never redraws the whole app first.
-const COVER_COLOR = CONTROLLER.page.startsWith("#") ? CONTROLLER.page : "#170d09";
-// in / out: the plain fade (the layout editor, and the start of the controller's open / close). icon: the solid cover
-// with the gamepad icon (it pops up, and turns if the phone is not held the target way). reveal: the cover and the
-// still icon fade out together, showing the screen underneath.
-type Cover = "in" | "out" | "icon" | "reveal" | null;
-let coverNow: Cover = null;
-/** The icon's rotation ON THE SCREEN, in degrees: where it pops up (r0) and where it ends (r1). */
-let coverIcon: { r0: number; r1: number } | null = null;
-const coverSubs = new Set<() => void>();
-function setCover(c: Cover) { coverNow = c; coverSubs.forEach((f) => f()); }
-const subscribeCover = (f: () => void) => { coverSubs.add(f); return () => { coverSubs.delete(f); }; };
-// One-shot waits on a real animationend, each with a time limit so nothing can hang. Waiting on the animation itself
-// (not a timer) means the next step starts only when the step before has really finished, however busy the phone is.
-type Waiter = { fn: (() => void) | null };
-const coverSolid: Waiter = { fn: null }, iconDone: Waiter = { fn: null }, coverFaded: Waiter = { fn: null };
-function waitFor(w: Waiter, fn: () => void, maxMs: number) {
-  let done = false;
-  const run = () => { if (done) return; done = true; if (w.fn === run) w.fn = null; fn(); };
-  w.fn = run;
-  window.setTimeout(run, maxMs);                             // never wait longer than this
-}
-const whenCoverSolid = (fn: () => void, maxMs: number) => waitFor(coverSolid, fn, maxMs);
-/** How the player holds the phone (upright or sideways, from the motion sensor) and how the screen's picture therefore
- *  looks turned TO THE PLAYER (clockwise degrees: 0 / 90 / 180 / 270). null when unknown (lying flat, old app shell). */
-function howHeld(): { upright: boolean; turned: number } | null {
-  try {
-    const b = (window as any).AndroidBridge;
-    const held = b?.getHeldRotation?.(), shown = b?.getDisplayRotation?.();
-    if (typeof held === "number" && held >= 0 && typeof shown === "number") return { upright: held % 180 === 0, turned: (held + shown) % 360 };
-  } catch (e) { console.error(e); }
-  return null;
-}
-// CONTROLLER OPEN / CLOSE (owner, 2026-11-11). The icon always matches how the player HOLDS the phone: it appears
-// standing up if the phone is held upright, lying flat if it is held sideways. Opening, it then turns flat if it was
-// standing (the controller is played sideways); closing, it turns upright if it was flat (Home is upright). If the phone
-// is already held the target way it does not turn. The screen itself turns BEFORE the icon appears, under a plain
-// cover, so a turn can never twist the icon. The icon is ONE layer (transform + opacity only). Timings: redesign.css 27b.
-function CoverLayer() {
-  const cover = useSyncExternalStore(subscribeCover, () => coverNow, () => coverNow);
-  if (!cover) return null;
-  const fade = cover === "out" ? "gp-cover-out" : cover === "reveal" ? "gp-cover-reveal" : "gp-cover-in";
-  const ic = (cover === "icon" || cover === "reveal") ? coverIcon : null;
-  const motion = cover !== "icon" || !ic ? "" : ic.r0 === ic.r1 ? " gp-icon-pop" : " gp-icon-turn";
-  return (
-    <div className={`gp-cover ${fade}`} style={{ background: COVER_COLOR }} aria-hidden="true"
-      onAnimationEnd={(e) => { if (e.target !== e.currentTarget) return;
-        if (e.animationName === "gp-cover-in") coverSolid.fn?.(); else if (e.animationName === "gp-cover-out") coverFaded.fn?.(); }}>
-      {ic && (
-        <div className={"gp-cover-icon" + motion}
-          style={{ background: `radial-gradient(circle, rgba(${CONTROLLER.rgb},0.30), transparent 68%)`, ["--r0" as any]: `${ic.r0}deg`, ["--r1" as any]: `${ic.r1}deg` }}
-          onAnimationEnd={(e) => { e.stopPropagation(); if (e.animationName === "gp-icon-pop" || e.animationName === "gp-icon-turn") iconDone.fn?.(); }}>
-          <Gamepad2 strokeWidth={1.6} style={{ width: 76, height: 76, color: `rgb(${CONTROLLER.rgb})` }} />
-        </div>
-      )}
-    </div>
-  );
-}
-/** html[data-ctl-pop="wait"] while the controller is built behind the icon (the window is still turning): the touch
- *  layer is not given the pad's position until it is cleared, so it gets it once, at the final landscape size. */
-function setCtlPop(v: "wait" | null) {
-  const d = document.documentElement.dataset;
-  if (v) { d.ctlPop = v; return; }
-  if (!d.ctlPop) return;
-  delete d.ctlPop;
-  window.dispatchEvent(new Event("gp-pad-settled"));         // the controller is in place: give the touch layer its position
-}
-
 function ControllerScreen({ onBack, isActive: screenActive, activeMapping, customPad, controllerLayout, gyroOn, setGyroOn, gyroMaxAngle, gyroWheel, gyroMode, gyroDeadzone, gyroHaptic, gyroThrottle, gyroIdleDetect, rumbleOn }: {
   onBack: () => void; isActive: boolean;
   activeMapping: Partial<Record<BtnId, string>>;
@@ -1609,7 +1536,6 @@ function ControllerScreen({ onBack, isActive: screenActive, activeMapping, custo
     };
     const tryActivate = () => {
       if (cancelled || usbWS.isOpen()) return;
-      if (document.documentElement.dataset.ctlPop) return;     // opening: wait for "gp-pad-settled" (final size)
       const svg = svgRef.current;
       const m = svg && svg.getScreenCTM();
       if (!m) return;
@@ -1624,7 +1550,6 @@ function ControllerScreen({ onBack, isActive: screenActive, activeMapping, custo
     };
     // Double-rAF so the svg's CTM is read after layout has settled.
     raf1 = requestAnimationFrame(() => { raf2 = requestAnimationFrame(tryActivate); });
-    window.addEventListener("gp-pad-settled", tryActivate);
     const transportPoll = setInterval(() => {
       if (cancelled) return;
       if (usbWS.isOpen()) deactivate();
@@ -1633,7 +1558,6 @@ function ControllerScreen({ onBack, isActive: screenActive, activeMapping, custo
     return () => {
       cancelled = true;
       cancelAnimationFrame(raf1); cancelAnimationFrame(raf2);
-      window.removeEventListener("gp-pad-settled", tryActivate);
       clearInterval(transportPoll);
       deactivate();
     };
@@ -2557,7 +2481,9 @@ function TabHome({ realTelemetry, onLaunch, onConnect, onLaunchEditor, selectedP
           here — a fixed element under this CSS-transformed tab container would
           anchor to the transform and let the dashboard bleed through. */}
 
-      <AnimatePresence>
+      {/* Rendered at the body level (2026-11-11): inside this tab's moving (transformed) container a "fixed" layer
+          only covers the container, which cut the dark backdrop short above the bottom tabs and below the top bar. */}
+      {createPortal(<AnimatePresence>
       {shareState && (
         <motion.div key="share" {...backdropIn} transition={FADE} className="fixed inset-0 z-[120] flex items-center justify-center bg-black/70 px-6" onClick={() => setShareState(null)}>
           <motion.div ref={shareRef} {...cardIn} transition={SPRING} role="dialog" aria-modal="true" aria-label="Share controller layout" className="calm-surface border border-white/10 rounded-3xl p-6 w-full max-w-[320px] shadow-2xl" onClick={e => e.stopPropagation()}>
@@ -2582,7 +2508,7 @@ function TabHome({ realTelemetry, onLaunch, onConnect, onLaunchEditor, selectedP
           </motion.div>
         </motion.div>
       )}
-      </AnimatePresence>
+      </AnimatePresence>, document.body)}
 
 
     </div>
@@ -3376,121 +3302,16 @@ export default function App() {
     };
   }, []);
 
-  // Timers of the running open/close, so a new one (or the failsafe) can clear them.
-  const coverTimers = useRef<number[]>([]);
-  const later = (ms: number, fn: () => void) => { coverTimers.current.push(window.setTimeout(fn, ms)); };
-  /** Run `fn` once the window has the shape for `landscape` (the phone finished turning), or after `ms` anyway. */
-  const whenShape = (landscape: boolean, ms: number, fn: () => void) => {
-    let done = false;
-    const ok = () => (landscape ? window.innerWidth > window.innerHeight : window.innerHeight >= window.innerWidth);
-    const go = () => { if (done) return; done = true; window.removeEventListener("resize", onResize); fn(); };
-    const onResize = () => { if (ok()) go(); };
-    // Nothing can turn the screen here (a browser, or an old app shell): do not wait for a turn that never comes.
-    if (ok() || !(window as any).AndroidBridge?.setScreenOrientation) { go(); return; }
-    window.addEventListener("resize", onResize);
-    later(ms, go);
-  };
-  const turn = (to: string) => {
-    try { (window as any).AndroidBridge?.setScreenOrientation?.(to); } catch (e) { console.error(e); }
-  };
-  // ONE BASIC FADE (owner, 2026-11-11: "keep basic smooth animation for controller opening and closing").
-  // The screen fades to the controller's colour, the phone turns and the next screen is built behind it, and the
-  // screen fades back in. Nothing else moves. The same fade opens and closes the controller and the layout editor.
-  // Two rules make it smooth (both measured): the next screen is built only once the screen is fully dark (the
-  // cover's own animationend, not a timer), and it is revealed only after the phone has turned and drawn it twice.
-  const after2Frames = (fn: () => void) => requestAnimationFrame(() => requestAnimationFrame(fn));
-  function coverThrough(orientation: string, landscape: boolean, swap: () => void) {
-    transitioningRef.current = true;
-    setCtlPop(null);
-    coverTimers.current.forEach(clearTimeout); coverTimers.current = [];
-    setCover("in");
-    turn(orientation);
-    whenCoverSolid(() => {
-      try { swap(); } catch (e) { console.error(e); }
-      whenShape(landscape, 700, () => after2Frames(() => {
-        setCover("out");
-        transitioningRef.current = false;                      // the new screen is visible: Back works from here on
-        later(260, () => setCover(null));
-      }));
-    }, 450);
-    later(2500, () => { setCover(null); transitioningRef.current = false; });   // never stuck
-  }
-  /** Run `fn` once the window has stopped changing size for `quietMs` (the turn, then the system bars hiding or showing,
-   *  each resize the page), or after `maxMs` anyway. Revealing before that let the screen redraw mid-fade (a glitch). */
-  const whenSettled = (quietMs: number, maxMs: number, fn: () => void) => {
-    let done = false, t = 0;
-    const go = () => { if (done) return; done = true; window.removeEventListener("resize", bump); clearTimeout(t); fn(); };
-    const bump = () => { clearTimeout(t); t = window.setTimeout(go, quietMs); };
-    window.addEventListener("resize", bump);
-    bump();
-    later(maxMs, go);
-  };
-  /**
-   * The controller's open and close (owner, 2026-11-11). Step by step:
-   *  1. a plain cover in the controller's colour fades in (no icon yet);
-   *  2. under it the screen turns and the next screen is built; wait until the window stops changing size;
-   *  3. the gamepad icon pops up matching how the phone is HELD (upright: standing; sideways: lying flat);
-   *  4. if that is not the target (`target`: 0 = flat for the controller, 90 = standing for Home), it turns to it;
-   *  5. the icon and the cover fade together and reveal the screen underneath.
-   */
-  function iconThrough(orientation: string, landscape: boolean, target: 0 | 90, swap: () => void) {
-    transitioningRef.current = true;                          // Back and taps wait until it has finished
-    coverTimers.current.forEach(clearTimeout); coverTimers.current = [];
-    setCtlPop(null);
-    let finished = false;
-    const finish = () => { if (finished) return; finished = true; setCtlPop(null); setCover(null); coverIcon = null; transitioningRef.current = false; };
-    coverIcon = null;
-    setCover("in");                                           // 1.
-    whenCoverSolid(() => {
-      turn(orientation);                                      // 2. (a plain colour: the turn shows nothing)
-      if (landscape) setCtlPop("wait");                       //    the touch layer waits for the final size
-      try { swap(); } catch (e) { console.error(e); }
-      whenShape(landscape, 900, () => whenSettled(300, 1500, () => after2Frames(() => {
-        // 3. How the player holds the phone right now. Unknown: assume it is already held the target way (no turn).
-        const h = howHeld();
-        const start = h === null ? target : h.upright ? 90 : 0;  // as the player sees it: 90 = standing, 0 = flat
-        // The picture looks turned by h.turned to the player, so on the screen the icon is rotated by (start - turned).
-        const r0 = ((start - (h?.turned ?? 0)) % 360 + 540) % 360 - 180;   // -180..179
-        coverIcon = { r0, r1: r0 + (target - start) };          // 4. turns by +90 / -90, or not at all
-        setCover("icon");
-        waitFor(iconDone, () => {
-          setCtlPop(null);                                    //    the screen is in place: the touch layer gets its position
-          setCover("reveal");                                 // 5.
-          waitFor(coverFaded, finish, 900);
-        }, 3000);
-      })));
-    }, 500);
-    later(8000, finish);                                      // never stuck
-  }
-  function openController() {
-    iconThrough("landscape-locked", true, 0, () => {
-      fromControllerRef.current = false;
-      setView("controller"); viewRef.current = "controller";
-    });
-  }
-  function closeController() {
-    iconThrough("portrait", false, 90, () => {
-      fromControllerRef.current = true;
-      setView("dashboard"); viewRef.current = "dashboard";
-    });
-  }
-  /** The same fade for the layout editor (open and close). */
-  function coverSwap(orientation: string, landscape: boolean, swap: () => void) {
-    coverThrough(orientation, landscape, swap);
-  }
-  const reducedMotionNow = () => !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-
   function navigateTo(target: View) {
     if (target === "controller") noteControllerOpened();   // starts the session clock; opening the controller never asks for a rating
     // The CURRENT screen, read live: the Android back button keeps the first render's navigateTo, whose `view` is
     // forever "dashboard", so system Back from the controller used to skip the animation (2026-11-10).
     const from = viewRef.current;
     if ((from === "dashboard" && target === "controller") || (from === "controller" && target === "dashboard")) {
-      // One basic fade (owner, 2026-11-11); reduced motion keeps the LOADING cover.
-      const reducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-      if (!reducedMotion) {
-        if (!transitioningRef.current) (target === "controller" ? openController : closeController)();
-      } else runCurtainSequence(() => {
+      // AS IN 1.4.16 (owner, 2026-11-11): the curtain fades in, 0.1 s later the phone turns and the next screen is set,
+      // 0.18 s later the curtain lifts. Android's own turn animation covers the turn itself.
+      runCurtainSequence(() => {
+        fromControllerRef.current = target === "dashboard";
         const bridge = (window as any).AndroidBridge;
         if (bridge && bridge.setScreenOrientation) {
           try {
@@ -3530,7 +3351,6 @@ export default function App() {
   // curtain fades in first and hides the device's physical rotation, instead of
   // the editor visibly CSS-spinning while Android rotates underneath it.
   function openEditor(pad: CustomPad) {
-    if (!reducedMotionNow()) { if (!transitioningRef.current) coverSwap("landscape", true, () => setEditingPad(pad)); return; }
     runCurtainSequence(() => {
       const bridge = (window as any).AndroidBridge;
       try { bridge?.setScreenOrientation?.("landscape"); } catch (e) {}
@@ -3538,11 +3358,6 @@ export default function App() {
     });
   }
   function closeEditor() {
-    if (!reducedMotionNow()) {
-      const toController = viewRef.current === "controller";
-      if (!transitioningRef.current) coverSwap(toController ? "landscape-locked" : "portrait", toController, () => setEditingPad(null));
-      return;
-    }
     runCurtainSequence(() => {
       const bridge = (window as any).AndroidBridge;
       try { bridge?.setScreenOrientation?.(viewRef.current === "controller" ? "landscape-locked" : "portrait"); } catch (e) {}
@@ -3717,13 +3532,13 @@ export default function App() {
         )}
       </AnimatePresence>
 
-      <CoverLayer />
       {/* Black Curtain for Orientation Transitions */}
       <AnimatePresence>
         {isCurtainDown && (
           <motion.div
             {...backdropIn}
-            transition={{ duration: 0.09, ease: EASE }}   /* opaque before the swap at 100 ms, so the rotation never shows through */
+            transition={FADE}   /* as in 1.4.16 */
+            data-testid="curtain"
             className="absolute inset-0 z-50 flex items-center justify-center"
             style={{ background: CONTROLLER.page }}
           >
@@ -3785,7 +3600,7 @@ export default function App() {
         {view === "controller" && (
           <motion.div
             key="controller"
-            initial={false}                                   /* revealed when the cover lifts; the pad zooms in (CoverLayer) */
+            initial={false}                                   /* revealed when the curtain lifts */
             exit={{ opacity: 0, transition: { duration: 0 } }}
             style={{ background: CONTROLLER.page }}
             className="absolute inset-0 z-20 gp-ctl-wrap"
