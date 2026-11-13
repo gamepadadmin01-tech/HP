@@ -11,6 +11,8 @@
 .gp-shell {
   --calm-paper: #1a1210; --calm-surface: #251a17; --calm-soft: #36261f; --calm-line: #3f2e28;
   --calm-ink: #f6ede9; --calm-muted: #b8a59d; --calm-tint: #3d1e10; --calm-art: #140d0b;
+  /* Warning in the warm theme (2026-11-13: the old lemon #ffc400 clashed with the brown and orange): a soft gold, still clearly a warning, and distinct from the orange accent beside it ("See why?"). */
+  --calm-warning: #f0b45a; --calm-warning-bg: #2e2214;
   --console-blue: var(--calm-accent); --console-blue-tint: var(--calm-tint); --console-blue-line: var(--calm-line);
   --console-violet: var(--calm-accent); --console-violet-tint: var(--calm-tint); --console-violet-line: var(--calm-line);
   --console-violet-fill: var(--calm-accent); --console-field: var(--calm-surface);
