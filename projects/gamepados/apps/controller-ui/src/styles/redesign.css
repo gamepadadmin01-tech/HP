@@ -107,6 +107,8 @@
 .gp-shell .calm-why-link { display: inline-block; margin: -10px -6px -10px 4px; padding: 10px 6px; border: 0; background: none;
   color: var(--calm-accent); font: 600 13px var(--calm-body); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
 .gp-shell .calm-connection .calm-why-link { display: block; margin: -6px -6px -10px -6px; }
+.gp-shell .calm-why-causes { list-style: decimal; padding-left: 20px; }
+.gp-shell .calm-why-causes li { margin-bottom: 6px; padding-left: 2px; }
 
 .gp-shell .calm-section-heading { margin: 0 0 12px; }
 .gp-shell .calm-section-heading h2 { font: 600 14px var(--calm-body); letter-spacing: 0; color: var(--calm-accent); }

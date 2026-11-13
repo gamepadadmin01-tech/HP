@@ -39,7 +39,7 @@ try {
         btnColor: el.querySelector('[data-testid="connection-see-why"]') ? getComputedStyle(el.querySelector('[data-testid="connection-see-why"]')).color : "",
         accent: getComputedStyle(el).getPropertyValue("--calm-accent").trim() } : null; }, scope);
       assert.ok(v, `${name} / ${where}: the connection status is on screen`);
-      const longReason = /isn't answering|stopped answering/.test(v.text);
+      const longReason = /isn't answering|stopped answering|Usually one of these|GamepadOS Server isn't open|Server was closed/.test(v.text);
       if (!problem) {
         assert.ok(!v.btn, `${name} / ${where}: no "See why?" when there is no problem`);
       } else {
@@ -50,9 +50,12 @@ try {
         await page.click(`${scope} [data-testid="connection-see-why"]`); await pause(700);
         const d = await page.evaluate(() => { const dlg = document.querySelector('[data-testid="connection-why-dialog"]'); if (!dlg) return null; const b = dlg.parentElement.getBoundingClientRect();
           const cs = getComputedStyle(dlg); return { text: dlg.textContent, bg: cs.backgroundColor, box: [b.left, b.top, b.width, b.height].map(Math.round), vw: innerWidth, vh: innerHeight,
-          ink: getComputedStyle(dlg.querySelector("h3")).color }; });
+          ink: getComputedStyle(dlg.querySelector("h3")).color, causes: [...dlg.querySelectorAll("ol li")].map((li) => li.textContent) }; });
         assert.ok(d, `${name} / ${where}: tapping "See why?" opens the pop-up`);
-        assert.ok(/isn't answering|stopped answering/.test(d.text), `${name} / ${where}: the pop-up explains the reason`);
+        // The likely causes as a numbered list, the server not running / closed FIRST (owner, 2026-11-13).
+        assert.ok(d.causes.length >= 4, `${name} / ${where}: the pop-up lists the likely causes (${d.causes.length})`);
+        assert.ok(/GamepadOS Server (isn't open|was closed)/.test(d.causes[0]), `${name} / ${where}: the first cause is the server not being open / closed ("${d.causes[0]}")`);
+        assert.ok(d.causes.some((c) => /same Wi-Fi|Wi-Fi dropped/.test(c)) && d.causes.some((c) => /QR code/.test(c)), `${name} / ${where}: it covers Wi-Fi and a changed PC address`);
         assert.ok(!/rgba\(0, 0, 0, 0\)|transparent/.test(d.bg), `${name} / ${where}: the pop-up card is solid, in the app's colour (${d.bg})`);
         assert.deepEqual(d.box, [0, 0, d.vw, d.vh], `${name} / ${where}: its backdrop covers the whole screen`);
         await page.evaluate(() => [...document.querySelectorAll('[data-testid="connection-why-dialog"] button')].find((b) => b.textContent.trim() === "OK").click()); await pause(600);

@@ -84,3 +84,31 @@ export function linkHint(s: LinkState): string {
   }
 }
 
+/** The "See why?" pop-up (owner, 2026-11-13: the old texts named only one or two causes, and blamed a VPN when the
+ *  server simply was not open). What is happening in one line, then the likely causes, most likely first, each with
+ *  what to do. "no-reply" = the app is sending but no reply has EVER come back (often: no server running);
+ *  "stalled" = replies came back, then stopped (often: the server was closed or the PC slept). */
+export function linkCauses(s: LinkState): { summary: string; causes: string[] } {
+  if (s === "no-reply") return {
+    summary: "The app is trying to reach your PC, but no reply has come back yet.",
+    causes: [
+      "GamepadOS Server isn't open on your PC. Open it and wait a few seconds.",
+      "Your phone and PC are on different Wi-Fi networks, or the phone is on mobile data. Put both on the same Wi-Fi.",
+      "The PC is asleep, or it restarted and the server didn't open. Wake the PC and open the server.",
+      "Your Wi-Fi router gave the PC a new address. Scan the QR code on the PC again.",
+      "A firewall, antivirus or VPN on the PC is blocking the replies. Allow GamepadOS Server, or turn the VPN off.",
+    ],
+  };
+  if (s === "stalled") return {
+    summary: "Your PC was answering, then stopped.",
+    causes: [
+      "GamepadOS Server was closed. Open it again on your PC.",
+      "The PC went to sleep or restarted. Wake it and open the server.",
+      "The phone's Wi-Fi dropped, or it switched to mobile data or another network. Check the phone's Wi-Fi.",
+      "The phone is too far from the Wi-Fi router. Move closer.",
+      "Your Wi-Fi router gave the PC a new address. Scan the QR code on the PC again.",
+    ],
+  };
+  return { summary: linkHint(s), causes: [] };
+}
+

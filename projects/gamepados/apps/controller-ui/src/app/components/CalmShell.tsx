@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { ArrowRight, ChevronRight, Clock3, Monitor, Wifi, X } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { FADE, SPRING, backdropIn, cardIn } from "../motion";
-import { linkHint, linkState, type LinkTelemetry } from "../linkState";
+import { linkCauses, linkHint, linkState, type LinkTelemetry } from "../linkState";
 import { guestTrial } from "../store/guestTrial";
 import { formatDuration } from "../store/billing";
 import { getSession, onSessionChange } from "../store/account";
@@ -21,7 +21,7 @@ export function connectionName(telemetry?: LinkTelemetry | null) {
 /** "See why?" (owner, 2026-11-13): when the PC is not replying or the connection broke, the long reason no longer
  *  sits in the page. A small text button in the accent colour appears beside the short status instead, and opens
  *  the reason in a pop-up. It exists only while there is a problem. */
-function SeeWhy({ title, reason }: { title: string; reason: string }) {
+function SeeWhy({ title, reason }: { title: string; reason: { summary: string; causes: string[] } }) {
   const [open, setOpen] = useState(false);
   return <>
     <button type="button" className="calm-why-link" data-testid="connection-see-why" onClick={() => setOpen(true)}>See why?</button>
@@ -34,7 +34,13 @@ function SeeWhy({ title, reason }: { title: string; reason: string }) {
               <h3 className="calm-ink font-bold text-base pr-2">{title}</h3>
               <button type="button" onClick={() => setOpen(false)} aria-label="Close" className="w-8 h-8 rounded-full bg-white/5 calm-muted flex items-center justify-center active:scale-90 flex-shrink-0"><X size={15} /></button>
             </div>
-            <p className="calm-muted text-sm leading-relaxed mb-4">{reason}</p>
+            <p className="calm-muted text-sm leading-relaxed mb-3">{reason.summary}</p>
+            {reason.causes.length > 0 && <>
+              <p className="calm-ink text-xs font-bold mb-2">Usually one of these:</p>
+              <ol className="calm-why-causes calm-muted text-sm leading-relaxed mb-4">
+                {reason.causes.map((c) => <li key={c}>{c}</li>)}
+              </ol>
+            </>}
             <button type="button" onClick={() => setOpen(false)} className="w-full py-2.5 rounded-xl bg-white/5 border border-white/10 calm-ink text-xs font-bold active:scale-95 transition-all">OK</button>
           </motion.div>
         </motion.div>
@@ -65,11 +71,11 @@ export function ConnectionSummary({ telemetry, onClick }: { telemetry?: LinkTele
     </motion.button>
     <p id={descriptionId} data-testid="connect-pc-status" className="console-connect-status" role="status">
       <span className="console-connect-status-dot" aria-hidden="true" />
-      <span>{state === 'off' ? 'No PC connected' : problem ? <>{title}<SeeWhy key={state} title={title} reason={detail} /></> : <>{title}<span className="console-connect-detail">{detail}</span></>}</span>
+      <span>{state === 'off' ? 'No PC connected' : problem ? <>{title}<SeeWhy key={state} title={title} reason={linkCauses(state)} /></> : <>{title}<span className="console-connect-detail">{detail}</span></>}</span>
     </p>
   </div>;
   const body = <><span className="calm-connection-icon"><Icon size={21} aria-hidden="true" /></span>
-    <span className="calm-grow"><strong>{title}</strong>{problem ? <SeeWhy key={state} title={title} reason={detail} /> : <small>{detail}</small>}</span></>;
+    <span className="calm-grow"><strong>{title}</strong>{problem ? <SeeWhy key={state} title={title} reason={linkCauses(state)} /> : <small>{detail}</small>}</span></>;
   return <div className="calm-connection" data-link-state={state} role="status">{body}</div>;
 }
 
