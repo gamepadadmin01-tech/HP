@@ -32,6 +32,8 @@ pub struct Status {
     /// Fatal error encountered on the server thread (e.g. ViGEmBus driver missing),
     /// to be displayed prominently in the UI.
     fatal_error: Mutex<Option<String>>,
+    /// The playing phones with their names (crate::player), refreshed on the server's idle tick.
+    players: Mutex<Vec<crate::player::PlayerRow>>,
 }
 
 impl Status {
@@ -49,6 +51,11 @@ impl Status {
     pub fn set_running(&self, v: bool) {
         self.running.store(v, Ordering::Relaxed);
     }
+    pub fn set_players(&self, rows: Vec<crate::player::PlayerRow>) {
+        if let Ok(mut g) = self.players.lock() {
+            *g = rows;
+        }
+    }
     pub fn set_fatal_error(&self, e: String) {
         if let Ok(mut guard) = self.fatal_error.lock() {
             *guard = Some(e);
@@ -64,6 +71,9 @@ impl Status {
     }
     pub fn running(&self) -> bool {
         self.running.load(Ordering::Relaxed)
+    }
+    pub fn players(&self) -> Vec<crate::player::PlayerRow> {
+        self.players.lock().map(|g| g.clone()).unwrap_or_default()
     }
     pub fn fatal_error(&self) -> Option<String> {
         self.fatal_error.lock().ok().and_then(|guard| guard.clone())

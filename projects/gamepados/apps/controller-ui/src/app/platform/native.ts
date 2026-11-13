@@ -355,3 +355,22 @@ export function sendPlaytimeTicket(base64Ticket: string): boolean {
     return false;
   }
 }
+
+/** "Connected players" on the PC server (owner, 2026-11-13): tell the PC who is playing. The 48-byte NAME frame of
+ *  pc-server-rs/src/player.rs: "GPN", version 1, name length, the name in UTF-8, zero padding.
+ *  It rides the same raw send as the playtime ticket: the bridge decodes base64 and sends the bytes unchanged on
+ *  the input socket (MainActivity.sendPlaytimeTicket -> nativeGrxSendRaw), so no app-shell change is needed. A PC
+ *  server older than 2.1.5 ignores the frame (unknown length). Returns false when there is no bridge. */
+export function sendPlayerName(name: string): boolean {
+  const LEN = 48, MAX = LEN - 5;
+  const enc = new TextEncoder();
+  let text = (name || "").replace(/[\u0000-\u001f\u007f]/g, "").trim().slice(0, 24) || "Guest";
+  let bytes = enc.encode(text);
+  while (bytes.length > MAX) { text = Array.from(text).slice(0, -1).join(""); bytes = enc.encode(text); }
+  const frame = new Uint8Array(LEN);
+  frame.set([0x47, 0x50, 0x4e, 1, bytes.length]);   // "GPN", version 1, length
+  frame.set(bytes, 5);
+  let bin = "";
+  frame.forEach((v) => { bin += String.fromCharCode(v); });
+  return sendPlaytimeTicket(btoa(bin));
+}

@@ -25,6 +25,7 @@ pub mod net;
 pub mod netdetect;
 pub mod pairing;
 pub mod pktinfo;
+pub mod player;
 pub mod qr;
 pub mod session;
 pub mod singleton;

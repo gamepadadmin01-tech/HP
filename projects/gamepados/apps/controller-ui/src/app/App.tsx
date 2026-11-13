@@ -21,7 +21,7 @@ import { ShellMotion } from "./components/ShellMotion";
 import { ShellScreenTransition } from "./components/ShellScreenTransition";
 import { SignInScreen } from "./components/SignInScreen";
 import { Ticket } from "lucide-react";
-import { playSellsNothing } from "./platform/native";
+import { playSellsNothing, sendPlayerName } from "./platform/native";
 import { motion, AnimatePresence, useIsPresent, useReducedMotion } from "framer-motion";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -1020,6 +1020,15 @@ function ControllerScreen({ onBack, isActive: screenActive, activeMapping, custo
   // a session, so React bails out until it actually changes.
   const present = useIsPresent();
   const isActive = screenActive && present;
+  // Connected players (owner, 2026-11-13): while the controller is open, tell the PC server who is playing, now and
+  // every 5 s (UDP can drop one; the PC forgets a name not repeated for 30 s). Signed out: "Guest".
+  useEffect(() => {
+    if (!isActive) return;
+    const send = () => { sendPlayerName(getSession()?.user?.displayName?.trim() || "Guest"); };
+    send();
+    const id = window.setInterval(send, 5000);
+    return () => window.clearInterval(id);
+  }, [isActive]);
   const outOfTime = useSyncExternalStore(onPlaytimeChange, isBlocked, isBlocked);
   // A fresh install could open this screen and stream real input with no
   // account at all — playtime was never tracked because nothing checked for

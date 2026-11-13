@@ -218,7 +218,15 @@ pub struct Server<S: PadSink> {
     pub held_releases: u64,
     /// Anti-stuck resets after 0.5 s of silence.
     pub neutralized: u64,
+    /// Player names the phones sent (crate::player), by session key, with when they were last heard. A phone
+    /// with the controller open repeats its name every 5 s; one not heard for NAME_KEEP is forgotten.
+    names: std::collections::HashMap<String, (String, Instant)>,
 }
+
+/// How long a player name is kept without being repeated (the phone repeats it every 5 s).
+pub const NAME_KEEP: std::time::Duration = std::time::Duration::from_secs(30);
+/// At most this many names are remembered (only 4 phones can play; the rest is room for phones coming and going).
+const MAX_NAMES: usize = 16;
 
 impl<S: PadSink> Server<S> {
     pub fn new(sink: S, auth: AuthConfig) -> Self {
@@ -242,7 +250,38 @@ impl<S: PadSink> Server<S> {
             merged_presses: 0,
             held_releases: 0,
             neutralized: 0,
+            names: std::collections::HashMap::new(),
         }
+    }
+
+    /// Remember the player name a phone sent (crate::player). Keyed like its session, so it attaches to the
+    /// phone's pad as soon as (or whenever) that exists.
+    pub fn set_player_name(&mut self, key: &str, name: String, now: Instant) {
+        if !self.names.contains_key(key) && self.names.len() >= MAX_NAMES {
+            // Full of stale entries from phones that came and went: drop the oldest.
+            if let Some(oldest) = self.names.iter().min_by_key(|(_, (_, t))| *t).map(|(k, _)| k.clone()) {
+                self.names.remove(&oldest);
+            }
+        }
+        self.names.insert(key.to_string(), (name, now));
+    }
+
+    /// The phones that are playing (one per pad), with their names, in XInput order (Player 1 first).
+    pub fn players(&self) -> Vec<crate::player::PlayerRow> {
+        let mut rows: Vec<crate::player::PlayerRow> = self
+            .sessions
+            .keys()
+            .filter_map(|k| {
+                let s = self.sessions.get(k)?;
+                Some(crate::player::PlayerRow {
+                    slot: s.slot,
+                    name: self.names.get(k).map(|(n, _)| n.clone()),
+                    usb: !crate::session::is_udp_key(k) || is_usb_tether(k, &self.auth.tether_subnets),
+                })
+            })
+            .collect();
+        rows.sort_by_key(|r| r.slot);
+        rows
     }
 
     /// Decode one input datagram (GRX-encrypted or cleartext) into a packet,
@@ -609,6 +648,7 @@ impl<S: PadSink> Server<S> {
 
     /// Anti-stuck + reap. Call ~1 Hz.
     pub fn idle_tick(&mut self, now: Instant) {
+        self.names.retain(|_, (_, t)| now.saturating_duration_since(*t) < NAME_KEEP);
         for action in self.sessions.idle_tick(now) {
             match action {
                 crate::session::IdleAction::Neutralize { slot, key } => {
@@ -896,6 +936,47 @@ mod tests {
             s.handle_frame(&pkt(i, 0x0001, 0xABCD_1234), a, now);
         }
         assert_eq!(s.sink.acquired, 1, "pad must be created once, not per packet");
+    }
+
+    #[test]
+    fn player_names_attach_to_their_phone_in_slot_order() {
+        let mut s = server();
+        let t0 = Instant::now();
+        // Two phones start playing (cleartext, token 0 is accepted off-LAN in the test config).
+        s.handle_frame(&pkt(1, 0, 0), from("10.9.0.2"), t0);
+        s.handle_frame(&pkt(1, 0, 0), from("10.9.0.3"), t0);
+        // The second one sends its name; the first never does.
+        s.set_player_name("10.9.0.3", "Akhil".into(), t0);
+        let rows = s.players();
+        assert_eq!(rows.len(), 2);
+        assert_eq!(rows[0].slot, 0);
+        assert_eq!(rows[0].name, None, "a phone that sent no name has none");
+        assert_eq!(rows[1].name.as_deref(), Some("Akhil"));
+        // A name that arrives before the phone has a pad is kept and shows once it does.
+        s.set_player_name("10.9.0.4", "Guest".into(), t0);
+        s.handle_frame(&pkt(1, 0, 0), from("10.9.0.4"), t0);
+        assert_eq!(s.players()[2].name.as_deref(), Some("Guest"));
+    }
+
+    #[test]
+    fn player_names_are_forgotten_when_not_repeated() {
+        let mut s = server();
+        let t0 = Instant::now();
+        s.set_player_name("10.9.0.9", "Old".into(), t0);
+        s.idle_tick(t0 + NAME_KEEP + std::time::Duration::from_secs(1));
+        s.handle_frame(&pkt(1, 0, 0), from("10.9.0.9"), t0 + NAME_KEEP + std::time::Duration::from_secs(1));
+        assert_eq!(s.players()[0].name, None);
+    }
+
+    #[test]
+    fn player_name_memory_is_bounded() {
+        let mut s = server();
+        let t0 = Instant::now();
+        for i in 0..40u64 {
+            s.set_player_name(&format!("10.9.1.{i}"), format!("P{i}"), t0 + std::time::Duration::from_millis(i));
+        }
+        assert!(s.names.len() <= MAX_NAMES);
+        assert!(s.names.contains_key("10.9.1.39"), "the newest is kept");
     }
 
     #[test]

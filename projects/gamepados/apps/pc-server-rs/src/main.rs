@@ -672,6 +672,8 @@ fn run_udp<S: pc_server_rs::net::PadSink + Send + 'static>(
     // uses — so a lapsed gate maps straight onto the session it must end.
     let mut gates = pc_server_rs::ticket::TicketRegistry::new();
     let mut tickets: Vec<(String, [u8; pc_server_rs::ticket::TICKET_LEN])> = Vec::new();
+    // Player NAME frames (player.rs) collected during a drain; applied after the input, like tickets.
+    let mut names: Vec<(String, [u8; pc_server_rs::player::NAME_FRAME_LEN])> = Vec::new();
     let mut last_tick = Instant::now();
     let mut last_report = Instant::now();
     // ── Self-instrumentation (the Phase 0 lesson applied to the server) ──────
@@ -752,6 +754,7 @@ fn run_udp<S: pc_server_rs::net::PadSink + Send + 'static>(
                 frames.clear();
                 handshakes.clear();
                 tickets.clear();
+                names.clear();
                 // Sorts one datagram: handshake, ticket, or input frame.
                 let mut sort = |data: &[u8], addr, local| {
                     if pc_server_rs::grx::is_handshake(data) {
@@ -763,6 +766,11 @@ fn run_udp<S: pc_server_rs::net::PadSink + Send + 'static>(
                         let mut t = [0u8; pc_server_rs::ticket::TICKET_LEN];
                         t.copy_from_slice(data);
                         tickets.push((pc_server_rs::net::session_key(&addr), t));
+                    } else if pc_server_rs::player::looks_like_name(data) {
+                        // The player's name for the window (player.rs). Parsed after the drain.
+                        let mut f = [0u8; pc_server_rs::player::NAME_FRAME_LEN];
+                        f.copy_from_slice(data);
+                        names.push((pc_server_rs::net::session_key(&addr), f));
                     } else {
                         push_frame(&mut frames, addr, data, local);
                     }
@@ -824,6 +832,12 @@ fn run_udp<S: pc_server_rs::net::PadSink + Send + 'static>(
                     }
                     if args.verbose && replies.ack.is_some() {
                         println!("frame from {a} -> ACK (batch of {drained})");
+                    }
+                }
+                // ── Player names (after the input, so they never delay a frame) ──
+                for (key, frame) in names.iter() {
+                    if let Some(n) = pc_server_rs::player::parse_name(frame) {
+                        server.set_player_name(key, n, now);
                     }
                 }
                 // ── Playtime ────────────────────────────────────────────────
@@ -900,6 +914,7 @@ fn run_udp<S: pc_server_rs::net::PadSink + Send + 'static>(
                 // both missed linked-idle phones and would double-count a
                 // streaming one against live_links().
                 status.set_devices(s.sessions.udp_count() + pc_server_rs::ws::live_links());
+                status.set_players(s.players());
             }
         }
         if auto_detect_tether && now.duration_since(last_detect) >= DETECT_EVERY {

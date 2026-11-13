@@ -441,6 +441,17 @@ impl eframe::App for App {
                             .color(if n == 0 { TEXT } else { ORANGE })
                             .strong(),
                     );
+                    // Connected players (player.rs, owner 2026-11-13): one small line per playing phone, Player 1
+                    // first, with the name its app sent ("Guest" when signed out). A phone that cannot send one
+                    // (USB debugging, or an older app) shows as "Phone".
+                    for p in self.status.players() {
+                        let who = p.name.clone().unwrap_or_else(|| if p.usb { "Phone (USB)".to_owned() } else { "Phone".to_owned() });
+                        ui.label(
+                            egui::RichText::new(format!("Player {} · {}", p.slot + 1, who))
+                                .size(12.0)
+                                .color(INK),
+                        );
+                    }
                 } else {
                     ui.colored_label(
                         BAD,
