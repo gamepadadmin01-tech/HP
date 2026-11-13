@@ -441,16 +441,45 @@ impl eframe::App for App {
                             .color(if n == 0 { TEXT } else { ORANGE })
                             .strong(),
                     );
-                    // Connected players (player.rs, owner 2026-11-13): one small line per playing phone, Player 1
-                    // first, with the name its app sent ("Guest" when signed out). A phone that cannot send one
-                    // (USB debugging, or an older app) shows as "Phone".
-                    for p in self.status.players() {
-                        let who = p.name.clone().unwrap_or_else(|| if p.usb { "Phone (USB)".to_owned() } else { "Phone".to_owned() });
-                        ui.label(
-                            egui::RichText::new(format!("Player {} · {}", p.slot + 1, who))
-                                .size(12.0)
-                                .color(INK),
-                        );
+                    // Connected players (player.rs, owner 2026-11-13/14): ALL on ONE line, side by side ("P1 Akhil
+                    // P2 Guest ..."). At most four phones can play, so each gets an equal share of the width; a name
+                    // that does not fit keeps as many letters as fit, followed by ".." so it is clear it was cut.
+                    // A phone that cannot send a name (USB debugging, or an older app) shows as "Phone".
+                    let players = self.status.players();
+                    if !players.is_empty() {
+                        let font = egui::FontId::proportional(12.0);
+                        let gap = 10.0;
+                        let n = players.len() as f32;
+                        let cell = ((ui.available_width() - gap * (n - 1.0)) / n).max(30.0);
+                        let width = |ui: &egui::Ui, s: &str| ui.painter().layout_no_wrap(s.to_owned(), font.clone(), INK).size().x;
+                        ui.horizontal(|ui| {
+                            ui.spacing_mut().item_spacing.x = gap;
+                            for p in &players {
+                                let tag = format!("P{} ", p.slot + 1);
+                                let name = p.name.clone().unwrap_or_else(|| "Phone".to_owned());
+                                let room = cell - width(ui, &tag);
+                                let shown = if width(ui, &name) <= room {
+                                    name
+                                } else {
+                                    let chars: Vec<char> = name.chars().collect();
+                                    (1..chars.len())
+                                        .rev()
+                                        .map(|k| format!("{}..", chars[..k].iter().collect::<String>().trim_end()))
+                                        .find(|s| width(ui, s) <= room)
+                                        .unwrap_or_else(|| "..".to_owned())
+                                };
+                                ui.allocate_ui_with_layout(
+                                    egui::vec2(cell, 16.0),
+                                    egui::Layout::top_down(egui::Align::Center),
+                                    |ui| {
+                                        let mut job = egui::text::LayoutJob::default();
+                                        job.append(&tag, 0.0, egui::TextFormat { font_id: font.clone(), color: ORANGE, ..Default::default() });
+                                        job.append(&shown, 0.0, egui::TextFormat { font_id: font.clone(), color: INK, ..Default::default() });
+                                        ui.label(job);
+                                    },
+                                );
+                            }
+                        });
                     }
                 } else {
                     ui.colored_label(
