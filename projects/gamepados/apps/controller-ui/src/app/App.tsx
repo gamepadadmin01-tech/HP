@@ -2486,7 +2486,7 @@ function TabHome({ realTelemetry, onLaunch, onConnect, onLaunchEditor, selectedP
       {createPortal(<AnimatePresence>
       {shareState && (
         <motion.div key="share" {...backdropIn} transition={FADE} className="fixed inset-0 z-[120] flex items-center justify-center bg-black/70 px-6" onClick={() => setShareState(null)}>
-          <motion.div ref={shareRef} {...cardIn} transition={SPRING} role="dialog" aria-modal="true" aria-label="Share controller layout" className="calm-surface border border-white/10 rounded-3xl p-6 w-full max-w-[320px] shadow-2xl" onClick={e => e.stopPropagation()}>
+          <motion.div ref={shareRef} {...cardIn} transition={SPRING} role="dialog" aria-modal="true" aria-label="Share controller layout" className="gp-shell border border-white/10 rounded-3xl p-6 w-full max-w-[320px] shadow-2xl" style={{ background: "var(--calm-surface)" }} onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="calm-ink font-bold text-base truncate pr-2">Share "{shareState.padName}"</h3>
               <button onClick={() => setShareState(null)} className="w-8 h-8 rounded-full bg-white/5 calm-muted flex items-center justify-center active:scale-90 flex-shrink-0">
@@ -3198,7 +3198,13 @@ export default function App() {
     const finish = () => { setIsCurtainDown(false); transitioningRef.current = false; };
     const t1 = setTimeout(() => {
       try { mid(); } catch (e) { console.error(e); }   // fade in fully, then swap view/orientation
-      curtainTimers.current.push(setTimeout(finish, 180));   // cover physical rotation, without a decorative loading pause
+      // As in 1.4.16 the curtain lifts 0.18 s after the swap, with one safety rule added (2026-11-13): never before the
+      // new screen has been drawn (two frames). On a slow phone the build takes longer than 0.18 s, and the lift used
+      // to play out while nothing was drawn, so the curtain jumped away instead of fading. Fast phones: no change.
+      let waited = false, drawn = false;
+      const lift = () => { if (waited && drawn) finish(); };
+      curtainTimers.current.push(setTimeout(() => { waited = true; lift(); }, 180));
+      requestAnimationFrame(() => requestAnimationFrame(() => { drawn = true; lift(); }));
     }, 100);
     const tFailsafe = setTimeout(finish, 1200);        // never leave the curtain stuck down
     curtainTimers.current.push(t1, tFailsafe);
@@ -3537,7 +3543,7 @@ export default function App() {
         {isCurtainDown && (
           <motion.div
             {...backdropIn}
-            transition={FADE}   /* as in 1.4.16 */
+            transition={{ duration: 0.09, ease: EASE }}   /* solid before the swap at 0.1 s (version of 2026-11-09); it lifts with backdropIn's exit, as in 1.4.16 */
             data-testid="curtain"
             className="absolute inset-0 z-50 flex items-center justify-center"
             style={{ background: CONTROLLER.page }}

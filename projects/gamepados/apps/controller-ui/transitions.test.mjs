@@ -29,10 +29,19 @@ await (async () => {
     window.__geo = []; window.__turns = [];
     window.AndroidBridge = { onUiReady() {}, exitApp() {}, getDistributionChannel: () => "direct", getAppVersionName: () => "1.4.16", getAppVersionCode: () => 70,
       getNetworkTelemetryJson: () => JSON.stringify({ engineRunning: true, linkAlive: true, connectionType: "wireless" }), getUsbBroadcastAddress: () => "", stopEngine() {},
-      setScreenOrientation(o) { window.__turns.push(o); window.__turn(o); },
+      setScreenOrientation(o) { window.__turns.push(o); (window.__ev || (window.__ev = [])).push([performance.now(), "turn"]); window.__turn(o); },
       setNativeInputGeometry(j) { window.__geo.push(JSON.parse(j).matrix[0]); }, setNativeInputActive() {}, setNativeGyroConfig() {} };
+    // Exact moments the curtain / each screen is added or removed (a MutationObserver: no frames needed).
+    document.addEventListener("DOMContentLoaded", () => {
+      const was = {};
+      new MutationObserver(() => {
+        const now = { curtain: !!document.querySelector('[data-testid="curtain"]'), home: !!document.querySelector('[data-screen="home"]'),
+          pad: !!document.querySelector('[data-screen="pad"]'), editor: !!document.querySelector('[data-screen="editor"]') };
+        for (const k in now) if (now[k] !== !!was[k]) { (window.__ev || (window.__ev = [])).push([performance.now(), k + (now[k] ? "+" : "-")]); was[k] = now[k]; }
+      }).observe(document.body, { childList: true, subtree: true });
+    });
     window.__arm = () => {
-      window.__f = []; const t0 = performance.now(); window.__turns.length = 0;
+      window.__f = []; const t0 = performance.now(); window.__turns.length = 0; window.__ev = [];
       const op = (sel) => { const e = document.querySelector(sel); return e ? +getComputedStyle(e).opacity : 0; };
       const tick = () => {
         const curtain = op('[data-testid="curtain"]');
@@ -65,7 +74,13 @@ await (async () => {
     const turns = await page.evaluate(() => window.__turns.slice());
     const sawCurtain = f.some((x) => x.curtain > 0.9 && x.loading);
     const k = f.findIndex((x) => x.screen === to);
-    const switchedCovered = k > 0 && f[k].curtain > 0.5;
+    // Order of the exact moments: the curtain is added, then the turn is asked for and the next screen is added, and
+    // only after that is the curtain removed (sampled frames can miss all of this on a busy machine; these cannot).
+    const ev = await page.evaluate(() => window.__ev.slice());
+    const at = (name) => { const e = ev.find((x) => x[1] === name); return e ? e[0] : null; };
+    // Home stays on the page under the layout editor, so closing the editor is seen as the editor being removed.
+    const cOn = at("curtain+"), tAsk = at("turn"), scrOn = at(to + "+") ?? at(from + "-"), cOff = at("curtain-");
+    const switchedCovered = cOn !== null && tAsk !== null && scrOn !== null && cOff !== null && cOn <= tAsk && cOn <= scrOn && scrOn < cOff;
     const blank = f.filter((x) => x.curtain + x.shown < 0.9);
     const up = f.find((x) => x.curtain > 0.02), gone = up && f.find((x) => x.abs > up.abs && x.curtain === 0 && x.screen === to);
     let worst = 0, worstAt = 0;
@@ -83,7 +98,8 @@ await (async () => {
       home: !!document.querySelector('[data-testid="home-heading"]'), pad: !!document.querySelector('[data-screen="pad"]'), editor: !!document.querySelector('[data-screen="editor"]') }));
     const atEnd = to === "home" ? state.home && !state.pad && !state.editor : to === "pad" ? state.pad && !state.editor : state.editor;
     check(sawCurtain, `${label}: the LOADING curtain shows`);
-    check(switchedCovered, `${label}: the screen switches from ${from} to ${to} while the curtain covers it${k > 0 ? ` (curtain ${f[k].curtain.toFixed(2)} at ${Math.round(f[k].t)} ms)` : " (never switched)"}`);
+    const rel = (x) => (x === null || cOn === null ? "-" : Math.round(x - cOn));
+    check(switchedCovered, `${label}: under the curtain: turn asked +${rel(tAsk)} ms, ${at(to + "+") !== null ? to + " added" : from + " removed"} +${rel(scrOn)} ms, curtain removed +${rel(cOff)} ms (from the curtain's arrival)`);
     check(turns.length >= 1 && turns.every((t) => t === turnTo), `${label}: the phone is asked to turn to ${turnTo}, and only that way (${JSON.stringify(turns)})`);
     check(blank.length === 0, `${label}: no blank frame${blank.length ? ` (${blank.length}, first at ${Math.round(blank[0].t)} ms)` : ""}`);
     check(atEnd && !state.curtain, `${label}: ends clean on ${to} (curtain gone: ${!state.curtain})`);

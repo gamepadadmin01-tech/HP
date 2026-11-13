@@ -1,6 +1,8 @@
 import React, { useEffect, useState, useSyncExternalStore } from "react";
-import { ArrowRight, ChevronRight, Clock3, Monitor, Wifi } from "lucide-react";
-import { motion, useReducedMotion } from "framer-motion";
+import { createPortal } from "react-dom";
+import { ArrowRight, ChevronRight, Clock3, Monitor, Wifi, X } from "lucide-react";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { FADE, SPRING, backdropIn, cardIn } from "../motion";
 import { linkHint, linkState, type LinkTelemetry } from "../linkState";
 import { guestTrial } from "../store/guestTrial";
 import { formatDuration } from "../store/billing";
@@ -16,11 +18,37 @@ export function connectionName(telemetry?: LinkTelemetry | null) {
   return "PC connection";
 }
 
+/** "See why?" (owner, 2026-11-13): when the PC is not replying or the connection broke, the long reason no longer
+ *  sits in the page. A small text button in the accent colour appears beside the short status instead, and opens
+ *  the reason in a pop-up. It exists only while there is a problem. */
+function SeeWhy({ title, reason }: { title: string; reason: string }) {
+  const [open, setOpen] = useState(false);
+  return <>
+    <button type="button" className="calm-why-link" data-testid="connection-see-why" onClick={() => setOpen(true)}>See why?</button>
+    {createPortal(<AnimatePresence>
+      {open && (
+        <motion.div key="why" {...backdropIn} transition={FADE} className="fixed inset-0 z-[120] flex items-center justify-center bg-black/70 px-6" onClick={() => setOpen(false)}>
+          <motion.div {...cardIn} transition={SPRING} role="dialog" aria-modal="true" aria-label={title} data-testid="connection-why-dialog"
+            className="gp-shell border border-white/10 rounded-3xl p-6 w-full max-w-[320px] shadow-2xl" style={{ background: "var(--calm-surface)" }} onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="calm-ink font-bold text-base pr-2">{title}</h3>
+              <button type="button" onClick={() => setOpen(false)} aria-label="Close" className="w-8 h-8 rounded-full bg-white/5 calm-muted flex items-center justify-center active:scale-90 flex-shrink-0"><X size={15} /></button>
+            </div>
+            <p className="calm-muted text-sm leading-relaxed mb-4">{reason}</p>
+            <button type="button" onClick={() => setOpen(false)} className="w-full py-2.5 rounded-xl bg-white/5 border border-white/10 calm-ink text-xs font-bold active:scale-95 transition-all">OK</button>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>, document.body)}
+  </>;
+}
+
 /** Preserve all four real link states; transmitting is not proof of a reply. */
 export function ConnectionSummary({ telemetry, onClick }: { telemetry?: LinkTelemetry | null; onClick?: () => void }) {
   const reduced = useReducedMotion();
   const descriptionId = React.useId();
   const state = linkState(telemetry);
+  const problem = state === "no-reply" || state === "stalled";
   const title = state === "connected" ? "You’re connected" : state === "no-reply" ? "PC not replying"
     : state === "stalled" ? "Connection interrupted" : "No PC connected";
   const detail = state === "connected" ? `${connectionName(telemetry)} · Ready to play`
@@ -37,11 +65,11 @@ export function ConnectionSummary({ telemetry, onClick }: { telemetry?: LinkTele
     </motion.button>
     <p id={descriptionId} data-testid="connect-pc-status" className="console-connect-status" role="status">
       <span className="console-connect-status-dot" aria-hidden="true" />
-      <span>{state === 'off' ? 'No PC connected' : <>{title}<span className="console-connect-detail">{detail}</span></>}</span>
+      <span>{state === 'off' ? 'No PC connected' : problem ? <>{title}<SeeWhy key={state} title={title} reason={detail} /></> : <>{title}<span className="console-connect-detail">{detail}</span></>}</span>
     </p>
   </div>;
   const body = <><span className="calm-connection-icon"><Icon size={21} aria-hidden="true" /></span>
-    <span className="calm-grow"><strong>{title}</strong><small>{detail}</small></span></>;
+    <span className="calm-grow"><strong>{title}</strong>{problem ? <SeeWhy key={state} title={title} reason={detail} /> : <small>{detail}</small>}</span></>;
   return <div className="calm-connection" data-link-state={state} role="status">{body}</div>;
 }
 

@@ -100,6 +100,11 @@
 .gp-shell .console-connect-status { flex: 1 1 auto; min-width: 0; display: block; justify-content: flex-start; padding: 0; text-align: left; font: 500 16px/1.35 var(--calm-body); color: var(--calm-muted); }
 .gp-shell .console-connect-status-dot { display: none; }
 .gp-shell .console-connect-detail { display: block; margin-top: 2px; font-size: 13px; font-weight: 400; color: var(--calm-muted); }
+/* "See why?" (2026-11-13): a small accent text button beside the short connection problem; the reason opens in a
+   pop-up instead of filling the page. The padding gives it a full finger-sized tap area without moving anything. */
+.gp-shell .calm-why-link { display: inline-block; margin: -10px -6px -10px 4px; padding: 10px 6px; border: 0; background: none;
+  color: var(--calm-accent); font: 600 13px var(--calm-body); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.gp-shell .calm-connection .calm-why-link { display: block; margin: -6px -6px -10px -6px; }
 
 .gp-shell .calm-section-heading { margin: 0 0 12px; }
 .gp-shell .calm-section-heading h2 { font: 600 14px var(--calm-body); letter-spacing: 0; color: var(--calm-accent); }
