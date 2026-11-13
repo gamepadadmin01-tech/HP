@@ -51,15 +51,24 @@ const REPAINT_EVERY: Duration = Duration::from_millis(500);
 // growing the type pushed the feedback row off the bottom and the cards off
 // both sides. It compiled perfectly and was only wrong once you opened it.
 // Changing paint cannot change layout; changing metrics can.
-// Calm companion palette. ORANGE retains its historical identifier locally;
-// its value is now the same quiet blue as the Android shell.
-const PAPER: egui::Color32 = egui::Color32::from_rgb(0x14, 0x17, 0x19);
-const SURFACE: egui::Color32 = egui::Color32::from_rgb(0x20, 0x25, 0x27);
-const SURFACE_2: egui::Color32 = egui::Color32::from_rgb(0x29, 0x2F, 0x31);
-const INK: egui::Color32 = egui::Color32::from_rgb(0xF0, 0xF2, 0xED);
-const TEXT: egui::Color32 = egui::Color32::from_rgb(0xD7, 0xDD, 0xD9);
-const ORANGE: egui::Color32 = egui::Color32::from_rgb(0xAB, 0xC8, 0xDB);
-const BORDER: egui::Color32 = egui::Color32::from_rgb(0x34, 0x3C, 0x3F);
+//
+// The phone app's current theme (2026-11-13, owner: "update the PC server theme ... to latest, good looking as
+// phone"): the warm brown page, cards and lines, and the orange accent of controller-ui/src/styles/redesign.css
+// (--calm-paper / --calm-surface / --calm-soft / --calm-line / --calm-ink / --calm-muted / --calm-accent).
+// Still colours and corner rounding only.
+const PAPER: egui::Color32 = egui::Color32::from_rgb(0x1A, 0x12, 0x10);     // --calm-paper
+const SURFACE: egui::Color32 = egui::Color32::from_rgb(0x25, 0x1A, 0x17);   // --calm-surface
+const SURFACE_2: egui::Color32 = egui::Color32::from_rgb(0x36, 0x26, 0x1F); // --calm-soft
+const INK: egui::Color32 = egui::Color32::from_rgb(0xF6, 0xED, 0xE9);       // --calm-ink
+const TEXT: egui::Color32 = egui::Color32::from_rgb(0xEA, 0xDE, 0xD8);      // body text, a touch softer than ink
+const ORANGE: egui::Color32 = egui::Color32::from_rgb(0xFF, 0x55, 0x00);    // --calm-accent (the app icon's orange)
+const BORDER: egui::Color32 = egui::Color32::from_rgb(0x3F, 0x2E, 0x28);    // --calm-line
+const ART: egui::Color32 = egui::Color32::from_rgb(0x14, 0x0D, 0x0B);       // --calm-art: text-entry wells
+/// Problems and success, readable on the brown page (the old #c0392b / #1e8e3e were too dark on it).
+const BAD: egui::Color32 = egui::Color32::from_rgb(0xFF, 0x6B, 0x5B);
+const GOOD: egui::Color32 = egui::Color32::from_rgb(0x4C, 0xD9, 0x7B);
+/// Rounded like the phone app's buttons and cards.
+const ROUND: egui::CornerRadius = egui::CornerRadius::same(12);
 
 /// Paint egui in the product's colours. Called once at startup.
 fn apply_theme(ctx: &egui::Context) {
@@ -69,7 +78,7 @@ fn apply_theme(ctx: &egui::Context) {
     let mut v = egui::Visuals::dark();
     v.panel_fill = PAPER;
     v.window_fill = PAPER;
-    v.extreme_bg_color = egui::Color32::from_rgb(0x04, 0x05, 0x08); // text-edit wells
+    v.extreme_bg_color = ART; // text-edit wells
     v.faint_bg_color = SURFACE;
     v.override_text_color = Some(TEXT);
     v.hyperlink_color = ORANGE;
@@ -100,6 +109,13 @@ fn apply_theme(ctx: &egui::Context) {
 
     v.selection.bg_fill = ORANGE.gamma_multiply(0.35);
     v.selection.stroke = Stroke::new(1.0, INK);
+
+    // Rounded corners like the phone app (paint only: corner radius never changes a widget's size).
+    for w in [&mut v.widgets.noninteractive, &mut v.widgets.inactive, &mut v.widgets.hovered, &mut v.widgets.active, &mut v.widgets.open] {
+        w.corner_radius = ROUND;
+    }
+    v.window_corner_radius = egui::CornerRadius::same(16);
+    v.menu_corner_radius = ROUND;
 
     ctx.set_visuals(v);
     let mut style = (*ctx.style_of(ctx.theme())).clone();
@@ -345,6 +361,12 @@ impl App {
 }
 
 impl eframe::App for App {
+    /// The page colour. eframe 0.35 draws straight onto the window (there is no panel to paint `panel_fill`), so
+    /// without this the window showed eframe's own near-black (12,12,12) instead of the theme (2026-11-13).
+    fn clear_color(&self, _visuals: &egui::Visuals) -> [f32; 4] {
+        PAPER.to_normalized_gamma_f32()
+    }
+
     // eframe 0.35 hands the app a `Ui` directly; the older `update(ctx, frame)`
     // + explicit CentralPanel form no longer exists.
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
@@ -396,7 +418,7 @@ impl eframe::App for App {
                     });
                 } else {
                     ui.colored_label(
-                        egui::Color32::from_rgb(0xc0, 0x39, 0x2b),
+                        BAD,
                         "Pairing QR unavailable — Wi-Fi pairing will not work.",
                     );
                 }
@@ -408,7 +430,7 @@ impl eframe::App for App {
             ui.vertical_centered(|ui| {
                 if let Some(err) = self.status.fatal_error() {
                     ui.colored_label(
-                        egui::Color32::from_rgb(0xc0, 0x39, 0x2b),
+                        BAD,
                         err,
                     );
                 } else if self.status.running() {
@@ -421,7 +443,7 @@ impl eframe::App for App {
                     );
                 } else {
                     ui.colored_label(
-                        egui::Color32::from_rgb(0xc0, 0x39, 0x2b),
+                        BAD,
                         "Server is not running — see the console for the reason.",
                     );
                 }
@@ -443,7 +465,9 @@ impl eframe::App for App {
                 let downloading = self.update_state == UpdateState::Downloading;
 
                 if self.update_state == UpdateState::Available {
-                    if ui.add_sized(button_size, egui::Button::new("Install update")).clicked() {
+                    // The one main action gets the phone's main-button look: orange, dark text (same size as before).
+                    let install = egui::Button::new(egui::RichText::new("Install update").color(PAPER).strong()).fill(ORANGE);
+                    if ui.add_sized(button_size, install).clicked() {
                         self.start_download(&ctx);
                     }
                 } else if ui.add_enabled_ui(!checking && !downloading, |ui| {
@@ -460,8 +484,8 @@ impl eframe::App for App {
             });
             ui.vertical_centered(|ui| {
                 let color = match self.update_state {
-                    UpdateState::Failed => egui::Color32::from_rgb(0xc0, 0x39, 0x2b),
-                    UpdateState::Available => egui::Color32::from_rgb(0x1e, 0x8e, 0x3e),
+                    UpdateState::Failed => BAD,
+                    UpdateState::Available => GOOD,
                     _ => ui.visuals().weak_text_color(),
                 };
                 ui.colored_label(color, egui::RichText::new(&self.update_msg).size(11.0));
@@ -531,9 +555,9 @@ impl App {
 
                 if !self.feedback_status.is_empty() {
                     let color = if self.feedback_ok {
-                        egui::Color32::from_rgb(0x1e, 0x8e, 0x3e)
+                        GOOD
                     } else {
-                        egui::Color32::from_rgb(0xc0, 0x39, 0x2b)
+                        BAD
                     };
                     ui.colored_label(color, egui::RichText::new(&self.feedback_status).size(11.0));
                 }
