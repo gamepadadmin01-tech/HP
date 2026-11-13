@@ -76,8 +76,11 @@ class RazorpayActivity : Activity(), PaymentResultWithDataListener {
         src.optString("prefillEmail").takeIf { it.isNotBlank() }?.let { prefill.put("email", it) }
         src.optString("prefillName").takeIf { it.isNotBlank() }?.let { prefill.put("name", it) }
         if (prefill.length() > 0) out.put("prefill", prefill)
+        // Fewer fields to fill (owner, 2026-11-13): the account's email is locked, so the buyer does not retype it.
+        if (prefill.has("email")) out.put("readonly", JSONObject().put("email", true))
 
-        out.put("theme", JSONObject().put("color", "#5D90CB"))
+        // The app's orange (the warm theme), not the old blue.
+        out.put("theme", JSONObject().put("color", "#FF5500"))
         // Closing the sheet must come back to us as a cancellation rather than
         // leaving the Activity sitting there with nothing on it.
         out.put("modal", JSONObject().put("backdropclose", false))
