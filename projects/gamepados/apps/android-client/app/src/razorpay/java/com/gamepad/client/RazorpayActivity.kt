@@ -79,8 +79,23 @@ class RazorpayActivity : Activity(), PaymentResultWithDataListener {
         // Fewer fields to fill (owner, 2026-11-13): the account's email is locked, so the buyer does not retype it.
         if (prefill.has("email")) out.put("readonly", JSONObject().put("email", true))
 
-        // The app's orange (the warm theme), not the old blue.
-        out.put("theme", JSONObject().put("color", "#FF5500"))
+        // The app's warm brown, the same as the website's payment window (2026-11-13).
+        out.put("theme", JSONObject().put("color", "#1A1210"))
+        // A lighter checkout for a small rupee payment (owner, 2026-11-13; same as the website): only UPI (first)
+        // and Cards. Dollar payments keep Razorpay's own list: UPI is India-only, and a fixed list would hide
+        // PayPal from buyers abroad if it is linked later.
+        if (src.optString("currency", "INR").ifBlank { "INR" } == "INR") {
+            val blocks = JSONObject()
+                .put("upi", JSONObject().put("name", "Pay via UPI")
+                    .put("instruments", org.json.JSONArray().put(JSONObject().put("method", "upi"))))
+                .put("cards", JSONObject().put("name", "Pay via Card")
+                    .put("instruments", org.json.JSONArray().put(JSONObject().put("method", "card"))))
+            val display = JSONObject()
+                .put("blocks", blocks)
+                .put("sequence", org.json.JSONArray().put("block.upi").put("block.cards"))
+                .put("preferences", JSONObject().put("show_default_blocks", false))
+            out.put("config", JSONObject().put("display", display))
+        }
         // Closing the sheet must come back to us as a cancellation rather than
         // leaving the Activity sitting there with nothing on it.
         out.put("modal", JSONObject().put("backdropclose", false))
