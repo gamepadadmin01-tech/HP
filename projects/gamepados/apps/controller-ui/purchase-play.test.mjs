@@ -13,6 +13,11 @@ const stubs = {
       if (globalThis.__verifyThrows) throw new (globalThis.ApiError)("Google could not confirm it.", "provider_error");
       return globalThis.__verifyAnswer;
     };
+    export const reportPlayAttempt = async (token, attempt) => {
+      globalThis.__t.reported.push([token, attempt]);
+      if (globalThis.__reportThrows) throw new Error("server down");
+      return { success: true };
+    };
     export const createRazorpayOrder = async () => { throw new Error("razorpay must not be used on Play"); };
     export const verifyRazorpay = async () => { throw new Error("razorpay must not be used on Play"); };`,
   "../api/account": `export const ApiError = globalThis.ApiError;`,
@@ -44,7 +49,8 @@ class ApiError extends Error { constructor(m, code) { super(m); this.code = code
 globalThis.ApiError = ApiError;
 globalThis.window = globalThis;
 const reset = () => {
-  globalThis.__t = { verified: [], refreshed: 0, cleared: 0, started: [], restored: 0, acked: [] };
+  globalThis.__t = { verified: [], refreshed: 0, cleared: 0, started: [], restored: 0, acked: [], reported: [] };
+  globalThis.__reportThrows = false;
   globalThis.__session = { token: "tok", user: { id: "u1", email: "a@x.invalid", displayName: "A" } };
   globalThis.__channel = "playstore"; globalThis.__canPlay = true; globalThis.__sheetOpens = true;
   globalThis.__verifyThrows = false;
@@ -156,5 +162,38 @@ assert.match(r.message, /already own/i, "and the player is told why the sheet di
 reset(); answer({ status: "error", message: "Google Play billing is unavailable on this device." });
 r = await mod.purchase(LIFETIME);
 assert.equal(globalThis.__t.restored, 0, "any other error does not trigger a restore");
+// ── Why a purchase did not finish: reported to the server (2026-11-14) ──────────────────────
+// Thiago's case: his cards were refused inside Google's sheet and he closed it after 9 s, from Play country AR.
+reset(); answer({ status: "cancelled", diag: { stage: "sheet", code: "USER_CANCELED", country: "AR", ms: 9000, productId: "gpos_lifetime" } });
+r = await mod.purchase(LIFETIME);
+assert.deepEqual([r.ok, r.cancelled], [false, true]);
+await new Promise((x) => setTimeout(x, 10));
+assert.equal(globalThis.__t.reported.length, 1, "a closed Play sheet is reported");
+assert.deepEqual(globalThis.__t.reported[0], ["tok", { outcome: "cancelled", stage: "sheet", code: "USER_CANCELED", subCode: undefined, debug: undefined,
+  message: undefined, country: "AR", ms: 9000, productId: "gpos_lifetime", appVersion: "1.4.13" }], "with what Google told the app");
+
+reset(); answer({ status: "error", message: "Payment declined", diag: { stage: "sheet", code: "ERROR", subCode: "PAYMENT_DECLINED_DUE_TO_INSUFFICIENT_FUNDS", debug: "x".repeat(400), country: "IN", ms: 4200.6 } });
+r = await mod.purchase(LIFETIME);
+await new Promise((x) => setTimeout(x, 10));
+const rep1 = globalThis.__t.reported[0][1];
+assert.equal(rep1.subCode, "PAYMENT_DECLINED_DUE_TO_INSUFFICIENT_FUNDS", "Google's sub-reason is passed on");
+assert.equal(rep1.debug.length, 300, "long texts are cut to what the server accepts");
+assert.equal(rep1.ms, 4201, "time rounded to whole milliseconds");
+assert.equal(rep1.productId, "gpos_lifetime", "the product comes from the plan when the phone did not say");
+
+reset(); answer({ status: "error", message: "The payment screen didn't come back." });
+r = await mod.purchase(LIFETIME);
+await new Promise((x) => setTimeout(x, 10));
+assert.equal(globalThis.__t.reported[0][1].stage, "timeout", "a sheet that never answered is reported as a timeout");
+
+reset(); globalThis.__reportThrows = true; answer({ status: "cancelled", diag: { stage: "sheet", code: "USER_CANCELED" } });
+r = await mod.purchase(LIFETIME);
+await new Promise((x) => setTimeout(x, 10));
+assert.deepEqual([r.ok, r.cancelled], [false, true], "a report that fails changes nothing for the buyer");
+
+reset(); answer({ status: "ok", provider: "play", purchaseToken: "PT-7" });
+r = await mod.purchase(LIFETIME);
+await new Promise((x) => setTimeout(x, 10));
+assert.equal(globalThis.__t.reported.length, 0, "a successful purchase is not reported");
 console.log("purchase-play.test.mjs — all assertions passed");
 process.exit(0);

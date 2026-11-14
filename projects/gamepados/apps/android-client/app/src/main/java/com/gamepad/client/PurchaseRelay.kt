@@ -34,13 +34,16 @@ object PurchaseRelay {
     // description or an SDK error message can contain quotes and newlines, and
     // this string is about to be embedded in a JavaScript call.
 
-    fun cancelled(): String =
-        JSONObject().put("status", "cancelled").toString()
+    /** [diag]: what the payment SDK reported, for the server's "purchases that didn't finish" list
+     *  (Google Play only, 2026-11-14; see playbilling BillingBridge.diag). Absent elsewhere. */
+    fun cancelled(diag: JSONObject? = null): String =
+        JSONObject().put("status", "cancelled").apply { if (diag != null) put("diag", diag) }.toString()
 
-    fun error(message: String?): String =
+    fun error(message: String?, diag: JSONObject? = null): String =
         JSONObject()
             .put("status", "error")
             .put("message", message ?: "The payment was not completed.")
+            .apply { if (diag != null) put("diag", diag) }
             .toString()
 
     // The Razorpay success payload is built in src/razorpay/RazorpayActivity, not

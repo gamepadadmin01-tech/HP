@@ -292,6 +292,18 @@ export function verifyGoogle(token: string, purchaseToken: string) {
   }>("/api/billing/google/purchase", { body: { purchaseToken }, token });
 }
 
+/** A Google Play purchase that did not finish, with what Google told the app (code, sub-reason, Play country, time
+ *  on Google's sheet), for the portal's "Google Play purchases that didn't finish" list (2026-11-14). */
+export type PlayAttempt = {
+  outcome: "cancelled" | "error";
+  stage: "setup" | "query" | "launch" | "sheet" | "pending" | "timeout";
+  code?: string; subCode?: string; debug?: string; message?: string; country?: string; ms?: number;
+  productId?: string; appVersion?: string;
+};
+export function reportPlayAttempt(token: string, attempt: PlayAttempt) {
+  return request<{ success: true }>("/api/billing/google/attempt", { body: attempt, token });
+}
+
 // ─── Play session lifecycle ───────────────────────────────────────────────────
 //
 // One call before play, one per minute during, one after. Never on the input

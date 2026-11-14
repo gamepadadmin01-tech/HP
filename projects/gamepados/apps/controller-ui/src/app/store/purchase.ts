@@ -35,8 +35,10 @@ type NativeResult =
   | { status: "ok"; provider: "razorpay"; razorpay_payment_id: string; razorpay_order_id?: string;
       razorpay_subscription_id?: string; razorpay_signature: string }
   | { status: "ok"; provider: "play"; purchaseToken: string; productId?: string; orderId?: string }
-  | { status: "cancelled" }
-  | { status: "error"; message?: string };
+  | { status: "cancelled"; diag?: PlayDiag }
+  | { status: "error"; message?: string; diag?: PlayDiag };
+/** What Google Play told the app about a purchase that did not finish (playbilling BillingBridge.diag). */
+type PlayDiag = { stage?: string; code?: string; subCode?: string; debug?: string; country?: string; ms?: number; productId?: string };
 
 export type PurchaseOutcome = {
   ok: boolean;
@@ -196,6 +198,7 @@ async function buyWithPlay(plan: api.CataloguePlan): Promise<PurchaseOutcome> {
     return failed("This version of the app cannot take payments. Update from Google Play.");
   }
   const r = await awaitResult();
+  if (r.status === "cancelled" || r.status === "error") reportPlayAttempt(r, plan.playProductId);
   if (r.status === "cancelled") return CANCELLED;
   if (r.status === "error") {
     // Play says this account already owns Lifetime (a purchase the server never confirmed, e.g. it was down or refused):
@@ -205,6 +208,25 @@ async function buyWithPlay(plan: api.CataloguePlan): Promise<PurchaseOutcome> {
   }
   if (r.provider !== "play") return failed("The payment app answered unexpectedly.");
   return creditPlayPurchase(r.purchaseToken);
+}
+
+/** Tell the server why a Play purchase did not finish (owner, 2026-11-14: "we should know the reason behind Google
+ *  Play"). Fire and forget: a report that cannot be sent changes nothing for the buyer. */
+function reportPlayAttempt(r: { status: "cancelled" | "error"; message?: string; diag?: PlayDiag }, productId?: string) {
+  const session = getSession();
+  if (!session) return;
+  const d = r.diag || {};
+  const STAGES = ["setup", "query", "launch", "sheet", "pending", "timeout"] as const;
+  const stage = (STAGES as readonly string[]).includes(d.stage || "") ? (d.stage as api.PlayAttempt["stage"])
+    : r.status === "error" && /didn't come back/.test(r.message || "") ? "timeout" : "sheet";
+  const cut = (v: unknown, n: number) => (typeof v === "string" && v ? v.slice(0, n) : undefined);
+  void api.reportPlayAttempt(session.token, {
+    outcome: r.status, stage,
+    code: cut(d.code, 40), subCode: cut(d.subCode, 60), debug: cut(d.debug, 300),
+    message: r.status === "error" ? cut(r.message, 300) : undefined,
+    country: cut(d.country, 8), ms: typeof d.ms === "number" ? Math.max(0, Math.min(3600000, Math.round(d.ms))) : undefined,
+    productId: cut(d.productId || productId, 64), appVersion: cut(getAppInfo().version, 32),
+  }).catch(() => {});
 }
 
 /** On opening the plan screen: ask Play for purchases made while the app was closed, so a paid-for

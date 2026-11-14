@@ -6,6 +6,7 @@ import com.android.billingclient.api.BillingClient
 import com.android.billingclient.api.BillingClientStateListener
 import com.android.billingclient.api.BillingFlowParams
 import com.android.billingclient.api.BillingResult
+import com.android.billingclient.api.GetBillingConfigParams
 import com.android.billingclient.api.PendingPurchasesParams
 import com.android.billingclient.api.ProductDetails
 import com.android.billingclient.api.Purchase
@@ -13,6 +14,7 @@ import com.android.billingclient.api.PurchasesUpdatedListener
 import com.android.billingclient.api.QueryProductDetailsParams
 import com.android.billingclient.api.QueryPurchasesParams
 import java.security.MessageDigest
+import org.json.JSONObject
 
 // playstore flavour: Lifetime is bought through Google Play Billing and nowhere else (Google Play
 // requires its own billing for digital goods). Brought back on 2026-11-02 from the version archived at
@@ -46,9 +48,63 @@ open class BillingBridge(activity: MainActivity) : UpdaterBridge(activity) {
                 if (list.isEmpty()) PurchaseRelay.post(PurchaseRelay.cancelled())
                 else list.forEach { report(it) }
             }
-            BillingClient.BillingResponseCode.USER_CANCELED -> PurchaseRelay.post(PurchaseRelay.cancelled())
-            else -> PurchaseRelay.post(PurchaseRelay.error(readable(result)))
+            BillingClient.BillingResponseCode.USER_CANCELED -> PurchaseRelay.post(PurchaseRelay.cancelled(diag("sheet", result)))
+            else -> PurchaseRelay.post(PurchaseRelay.error(readable(result), diag("sheet", result)))
         }
+    }
+
+    // ── Why a purchase did not finish (owner, 2026-11-14) ─────────────────────
+    // Google never tells a developer why it refused a buyer's card, but the library does give the app a result code,
+    // a debug message, sometimes a sub-reason (insufficient funds, user not eligible) and the buyer's Google Play
+    // country. Every purchase that stops early carries these to the page, which reports them to the server
+    // (POST /api/billing/google/attempt) for the portal's "Google Play purchases that didn't finish" list.
+    // Diagnostics only: nothing here decides anything.
+    @Volatile private var flowStartedAt = 0L
+    @Volatile private var playCountry: String? = null
+    @Volatile private var flowProduct: String? = null
+
+    private fun diag(stage: String, result: BillingResult?): JSONObject = JSONObject().apply {
+        put("stage", stage)
+        if (result != null) {
+            put("code", codeName(result.responseCode))
+            subCodeName(result)?.let { put("subCode", it) }
+            result.debugMessage.takeIf { it.isNotBlank() }?.let { put("debug", it.take(300)) }
+        }
+        playCountry?.let { put("country", it) }
+        flowProduct?.let { put("productId", it) }
+        if (flowStartedAt > 0) put("ms", (System.currentTimeMillis() - flowStartedAt).coerceIn(0, 3_600_000))
+    }
+
+    private fun codeName(code: Int): String = when (code) {
+        BillingClient.BillingResponseCode.OK -> "OK"
+        BillingClient.BillingResponseCode.USER_CANCELED -> "USER_CANCELED"
+        BillingClient.BillingResponseCode.SERVICE_UNAVAILABLE -> "SERVICE_UNAVAILABLE"
+        BillingClient.BillingResponseCode.BILLING_UNAVAILABLE -> "BILLING_UNAVAILABLE"
+        BillingClient.BillingResponseCode.ITEM_UNAVAILABLE -> "ITEM_UNAVAILABLE"
+        BillingClient.BillingResponseCode.DEVELOPER_ERROR -> "DEVELOPER_ERROR"
+        BillingClient.BillingResponseCode.ERROR -> "ERROR"
+        BillingClient.BillingResponseCode.ITEM_ALREADY_OWNED -> "ITEM_ALREADY_OWNED"
+        BillingClient.BillingResponseCode.ITEM_NOT_OWNED -> "ITEM_NOT_OWNED"
+        BillingClient.BillingResponseCode.SERVICE_DISCONNECTED -> "SERVICE_DISCONNECTED"
+        BillingClient.BillingResponseCode.FEATURE_NOT_SUPPORTED -> "FEATURE_NOT_SUPPORTED"
+        BillingClient.BillingResponseCode.NETWORK_ERROR -> "NETWORK_ERROR"
+        else -> "CODE_$code"
+    }
+
+    /** The sub-reason Billing 8+ attaches to a failed purchase, when Google gives one. */
+    private fun subCodeName(result: BillingResult): String? = when (result.onPurchasesUpdatedSubResponseCode) {
+        BillingClient.OnPurchasesUpdatedSubResponseCode.PAYMENT_DECLINED_DUE_TO_INSUFFICIENT_FUNDS -> "PAYMENT_DECLINED_DUE_TO_INSUFFICIENT_FUNDS"
+        BillingClient.OnPurchasesUpdatedSubResponseCode.USER_INELIGIBLE -> "USER_INELIGIBLE"
+        else -> null
+    }
+
+    /** The buyer's Google Play country (e.g. "AR"), asked once per purchase; best effort. */
+    private fun fetchPlayCountry() {
+        try {
+            client.getBillingConfigAsync(GetBillingConfigParams.newBuilder().build()) { result, config ->
+                if (result.responseCode == BillingClient.BillingResponseCode.OK) playCountry = config?.countryCode
+            }
+        } catch (_: Throwable) {}
     }
 
     private val client: BillingClient by lazy {
@@ -67,7 +123,7 @@ open class BillingBridge(activity: MainActivity) : UpdaterBridge(activity) {
         client.startConnection(object : BillingClientStateListener {
             override fun onBillingSetupFinished(result: BillingResult) {
                 if (result.responseCode == BillingClient.BillingResponseCode.OK) block()
-                else PurchaseRelay.post(PurchaseRelay.error(readable(result)))
+                else PurchaseRelay.post(PurchaseRelay.error(readable(result), diag("setup", result)))
             }
             // Not retried in a loop: the next player action calls connected() again.
             override fun onBillingServiceDisconnected() {}
@@ -80,7 +136,10 @@ open class BillingBridge(activity: MainActivity) : UpdaterBridge(activity) {
      *  rather than in JS because the WebView's only hash (crypto.subtle) is async. */
     @JavascriptInterface
     fun startPlayPurchase(productId: String, accountId: String) {
+        flowStartedAt = System.currentTimeMillis()
+        flowProduct = productId
         connected {
+            fetchPlayCountry()
             val params = QueryProductDetailsParams.newBuilder()
                 .setProductList(listOf(
                     QueryProductDetailsParams.Product.newBuilder()
@@ -91,14 +150,15 @@ open class BillingBridge(activity: MainActivity) : UpdaterBridge(activity) {
             client.queryProductDetailsAsync(params) { result, queryResult ->
                 val product = queryResult.productDetailsList.firstOrNull()
                 if (result.responseCode != BillingClient.BillingResponseCode.OK) {
-                    PurchaseRelay.post(PurchaseRelay.error(readable(result)))
+                    PurchaseRelay.post(PurchaseRelay.error(readable(result), diag("query", result)))
                 } else if (product == null) {
                     // Google Play does not know this item for THIS install. Typical reasons: the app was installed
                     // from a file instead of Google Play (purchases only work in the Play-installed version), the
                     // version uploaded to Play does not carry billing yet, or the product is not active.
                     PurchaseRelay.post(PurchaseRelay.error(
                         "Google Play does not offer this item to this install. Buying only works in the version " +
-                        "installed from Google Play. If you installed from a file, install it from Play instead."))
+                        "installed from Google Play. If you installed from a file, install it from Play instead.",
+                        diag("query", result)))
                 } else {
                     launch(product, accountId)
                 }
@@ -170,7 +230,7 @@ open class BillingBridge(activity: MainActivity) : UpdaterBridge(activity) {
         activity.runOnUiThread {
             val result = client.launchBillingFlow(activity, flow)
             if (result.responseCode != BillingClient.BillingResponseCode.OK) {
-                PurchaseRelay.post(PurchaseRelay.error(readable(result)))
+                PurchaseRelay.post(PurchaseRelay.error(readable(result), diag("launch", result)))
             }
             // On OK the answer arrives through purchasesUpdated, not here.
         }
@@ -186,7 +246,7 @@ open class BillingBridge(activity: MainActivity) : UpdaterBridge(activity) {
                 PurchaseRelay.post(PurchaseRelay.play(purchase.purchaseToken, productId, purchase.orderId))
             }
             Purchase.PurchaseState.PENDING ->
-                PurchaseRelay.post(PurchaseRelay.error("Your payment is still being processed. It will appear once it completes."))
+                PurchaseRelay.post(PurchaseRelay.error("Your payment is still being processed. It will appear once it completes.", diag("pending", null)))
             else -> Unit
         }
     }
