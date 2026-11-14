@@ -280,8 +280,13 @@ android {
         // 70 = 1.4.16 (2026-11-05): Google Play purchases that were paid but not yet confirmed by the server are now
         //      handed over when the Plans tab opens, even after the app was restarted (the page used to drop them),
         //      and "You already own this" triggers the same hand-over. Nothing else changed from 1.4.15.
-        versionCode = 70
-        versionName = "1.4.16"
+        // 71 = 1.4.17 (2026-11-14): the redesign. Warm flat theme across the app; controller and layout editor open
+        //      and close with the 1.4.16 LOADING curtain; "See why?" for connection problems (the likely causes, in
+        //      order); Razorpay checkout lighter (UPI + cards, email filled in and locked, app colours); stronger
+        //      haptics (80% of the motor's maximum); the player's name sent to the PC server (2.1.5 shows it); Google
+        //      Play purchases that do not finish report why; the Play build's ad network switchable from the portal.
+        versionCode = 71
+        versionName = "1.4.17"
 
         // AdMob test IDs by default; the release build type swaps in the live ones (see top of file).
         buildConfigField("String", "ADMOB_REWARDED_ID", "\"$admobTestRewardedId\"")
