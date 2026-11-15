@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Dark + white (owner, 2026-11-15: "dark + white, not indigo"). The same values are in MainActivity's constants. -->
+<resources>
+    <color name="admin_bg">#0B0B0C</color>
+    <color name="admin_ink">#FFFFFF</color>
+</resources>

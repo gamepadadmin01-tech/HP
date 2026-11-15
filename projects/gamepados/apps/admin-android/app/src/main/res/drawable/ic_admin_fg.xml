@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Launcher foreground: the white GamepadOS "G" on the admin app's near-black, so it is told apart from the
+     orange controller app on the home screen. 108dp canvas, glyph inside the 66dp safe circle. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group
+        android:translateX="27"
+        android:translateY="27"
+        android:scaleX="2.25"
+        android:scaleY="2.25">
+        <path android:fillColor="#FFFFFF" android:pathData="M4,4h7v4H8v8h8v-3h-4V9h8v11H4V4Z" />
+        <path android:fillColor="#FFFFFF" android:pathData="M15,4h5v3h-5z" />
+    </group>
+</vector>

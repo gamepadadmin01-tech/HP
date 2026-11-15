@@ -1,0 +1,10 @@
+<resources>
+    <style name="AppTheme" parent="android:style/Theme.Material.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <!-- Dark + white (owner, 2026-11-15): white cursor, switches and dialog buttons instead of indigo. -->
+        <item name="android:colorAccent">#FFFFFF</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+        <item name="android:windowBackground">@color/admin_bg</item>
+    </style>
+</resources>
