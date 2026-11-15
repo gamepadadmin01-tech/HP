@@ -78,6 +78,9 @@ class RazorpayActivity : Activity(), PaymentResultWithDataListener {
         if (prefill.length() > 0) out.put("prefill", prefill)
         // Fewer fields to fill (owner, 2026-11-13): the account's email is locked, so the buyer does not retype it.
         if (prefill.has("email")) out.put("readonly", JSONObject().put("email", true))
+        // No phone number (owner, 2026-11-15): Razorpay switched on "optional contact" for this account (ticket
+        // #21819918), so the phone field is hidden.
+        out.put("hidden", JSONObject().put("contact", true))
 
         // The app's warm brown, the same as the website's payment window (2026-11-13).
         out.put("theme", JSONObject().put("color", "#1A1210"))
