@@ -7,7 +7,7 @@ import { getSession, onSessionChange } from "../store/account";
 import { guestTrial } from "../store/guestTrial";
 import { formatDuration } from "../store/billing";
 import { requestSignIn } from "../store/navIntent";
-import { PlanCard } from "./PlanPanel";
+import { GooglePlayCard, PlanCard } from "./PlanPanel";
 import { getAdState, onAdChange } from "../store/rewardedAd";
 import { getAppConfig, onAppConfigChange, outOfTimeText } from "../store/appConfig";
 import { FreeCard, FreeDivider, freePlayAvailable } from "./FreePlay";
@@ -65,6 +65,8 @@ export function GuestPlans() {
     ? <div className="console-plans-loading" role="status" aria-label="Loading plans" data-testid="plans-loading"><motion.div animate={reduced ? {} : { opacity: [.4, 1, .4] }} transition={{ duration: 1.4, repeat: Infinity }}><i /><i /></motion.div></div>
     : error
       ? <motion.div className="console-plans-error" initial={{ opacity: 0 }} animate={{ opacity: 1 }}><CloudOff size={26} /><p role="status" className="text-sm calm-muted">{error}</p><button data-testid="plans-retry-button" className="guest-back mt-2" onClick={() => setAttempt(a => a + 1)}>Try again</button></motion.div>
+      : catalogue?.buyOnGooglePlay
+        ? <GooglePlayCard url={catalogue.playStoreUrl} guest />
       : catalogue?.purchasable && offers.length
         ? <div className="space-y-2">
           {offers.map(plan => <PlanCard key={plan.code} plan={plan} onChoose={() => requestSignIn()} />)}

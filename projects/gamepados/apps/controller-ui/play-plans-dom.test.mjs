@@ -32,7 +32,8 @@ const requested = [];
 
 const browser = await puppeteer.launch({ executablePath: "C:/Program Files/Google/Chrome/Application/chrome.exe", headless: true });
 const errors = [];
-async function open({ channel, billing, playPrice = null, tz = "Asia/Kolkata", langs = null }) {
+// intl: Razorpay takes payments from abroad (RAZORPAY_INTERNATIONAL on). Off = the server sends buyers abroad to Google Play.
+async function open({ channel, billing, playPrice = null, tz = "Asia/Kolkata", langs = null, intl = true }) {
   const page = await browser.newPage();
   page.on("pageerror", (e) => errors.push(e.message));
   await page.emulateTimezone(tz);
@@ -42,6 +43,7 @@ async function open({ channel, billing, playPrice = null, tz = "Asia/Kolkata", l
     const bridge = {
       getDistributionChannel: () => channel, getAppVersionName: () => "1.4.13", getAppVersionCode: () => 67,
       adsAvailable: () => true, adNetwork: () => "unity",
+      openUrl: (u) => { window.__opened = u; },
     };
     if (billing) bridge.startPlayPurchase = () => {};
     // Google Play's answer to "what does gpos_lifetime cost?" (null = Play cannot say, e.g. a test install)
@@ -56,11 +58,14 @@ async function open({ channel, billing, playPrice = null, tz = "Asia/Kolkata", l
     if (u.pathname === "/api/billing/plans") {
       const ch = u.searchParams.get("channel");
       // the real server's rule: the Play build is only offered the shop when it says playBilling=1
-      const purchasable = ch === "direct" || ch === "uptodown" || (ch === "playstore" && u.searchParams.get("playBilling") === "1");
       const cur = (u.searchParams.get("currency") || "INR").toUpperCase();
+      // and (2026-11-15) a buyer abroad on the website/Uptodown builds is sent to Google Play while international is off
+      const playOnly = !intl && (ch === "direct" || ch === "uptodown") && cur !== "INR";
+      const purchasable = !playOnly && (ch === "direct" || ch === "uptodown" || (ch === "playstore" && u.searchParams.get("playBilling") === "1"));
       requested.push(cur);
       return json({
         success: true, channel: ch, currency: cur, purchasable,
+        ...(playOnly ? { buyOnGooglePlay: true, playStoreUrl: "https://play.google.com/store/apps/details?id=com.gamepad.client" } : {}),
         plans: [{ code: "LIFETIME", displayName: "Lifetime", currency: cur, priceMinor: cur === "USD" ? 50 : 1900, unlimited: true, dailySeconds: null,
           durationHours: null, durationMonths: null, purchasable, priceFromStore: ch === "playstore", playProductId: ch === "playstore" ? "gpos_lifetime" : undefined }],
       });
@@ -139,6 +144,26 @@ try {
     const g = await open({ channel: "uptodown", billing: false, tz: "Europe/Berlin" });
     assert.match(await text(g), /\$0\.50/, "the other non-Play builds follow the same rule (Germany: $0.50)");
     await g.close();
+  }
+  // (d) Razorpay takes Indian payments only (2026-11-15): abroad, the website and Uptodown builds show Lifetime on
+  //     Google Play instead of a $0.50 that would fail; India is unchanged.
+  {
+    for (const channel of ["direct", "uptodown"]) {
+      const p = await open({ channel, billing: false, tz: "America/New_York", langs: ["en-US"], intl: false });
+      const t = await text(p);
+      assert.match(t, /Lifetime/, `${channel} abroad: Lifetime is still offered`);
+      assert.match(t, /outside India are made on Google Play/, "and it says why it is on Google Play");
+      assert.doesNotMatch(t, /\$0\.50|₹/, "with no price of ours that would fail");
+      assert.equal(await p.$('[data-testid="choose-lifetime-button"]'), null, "and no Razorpay buy button");
+      await p.click('[data-testid="google-play-button"]');
+      assert.equal(await p.evaluate(() => window.__opened), "https://play.google.com/store/apps/details?id=com.gamepad.client", "the button opens GamepadOS on Google Play");
+      await p.close();
+    }
+    const india = await open({ channel: "direct", billing: false, tz: "Asia/Kolkata", intl: false });
+    const t = await text(india);
+    assert.match(t, /₹\s?19\b/, "India still pays ₹19 here");
+    assert.doesNotMatch(t, /Google Play/, "and is not sent to Google Play");
+    await india.close();
   }
   assert.ok(requested.includes("USD") && requested.includes("INR"), "the catalogue was asked for dollars and for rupees");
   assert.deepEqual(errors, [], "no page errors");

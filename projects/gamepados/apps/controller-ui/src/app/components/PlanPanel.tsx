@@ -34,6 +34,7 @@ import { localUsedSeconds } from "../store/playtime";
 import { FADE } from "../motion";
 import { FreeCard, FreeDivider, freePlayAvailable } from "./FreePlay";
 import { getAppConfig, onAppConfigChange, ruleWords } from "../store/appConfig";
+import { openUrl } from "../platform/native";
 
 const ACCENT = "var(--calm-accent, #abc8db)";
 const MUTED = "var(--calm-muted, #a6b0b3)";
@@ -187,6 +188,8 @@ export function PlanPanel() {
         p.purchasable &&
         (PLAN_RANK[p.code] ?? 0) > (PLAN_RANK[ent.plan] ?? 0)
     );
+  // Outside India (2026-11-15): Lifetime is bought on Google Play for now, so that card stands in for the plans.
+  const onPlay = !!catalogue?.buyOnGooglePlay && !ent.unlimited && ent.plan !== "LIFETIME";
 
   return (
     <>
@@ -259,10 +262,15 @@ export function PlanPanel() {
           offers={offers}
         />
       )}
+      {onPlay && (
+        <InCardSection title="Play without the limit">
+          <GooglePlayCard url={catalogue?.playStoreUrl} />
+        </InCardSection>
+      )}
 
       {/* ── Then free: one card with the ads message and the ad button. ── */}
       {!ent.unlimited && freePlayAvailable() && <>
-        {offers.length > 0 && <FreeDivider />}
+        {(offers.length > 0 || onPlay) && <FreeDivider />}
         <FreeCard />
       </>}
 
@@ -291,6 +299,36 @@ function PlansHero({ title, offers }: { title: string; offers: CataloguePlan[] }
         </p>
       </div>
     </InCardSection>
+  );
+}
+
+/** Lifetime for a player outside India (owner, 2026-11-15). Razorpay takes Indian payments only for now, so
+ *  instead of a dollar price that would fail, this sends the player to GamepadOS on Google Play. A Play purchase
+ *  belongs to the account, so it works on every phone they sign in on. This build and the Play one share the app
+ *  id but not the signature, so Google Play may ask to remove this copy first. */
+export function GooglePlayCard({ url, guest = false }: { url?: string; guest?: boolean }) {
+  return (
+    <motion.div className="console-plan-card" data-plan="LIFETIME" data-testid="plan-google-play-card"
+      initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ type: 'spring', stiffness: 320, damping: 28 }}>
+      <p className="text-sm font-bold calm-ink">Lifetime</p>
+      <ul className="mt-1.5 space-y-0.5">
+        {["Unlimited playtime", "Yours forever"].map((b) => (
+          <li key={b} className="text-xs" style={{ color: MUTED }}><Check size={12} aria-hidden="true" />{b}</li>
+        ))}
+      </ul>
+      <p className="text-xs mt-2.5 leading-relaxed" style={{ color: MUTED }}>
+        Payments from outside India are made on Google Play for now. Get GamepadOS from Google Play,
+        {guest ? " sign in" : " sign in with this same account"} and buy Lifetime there. It then works on every
+        phone you sign in on. If Google Play can't install it, remove this copy first.
+      </p>
+      <button
+        data-testid="google-play-button"
+        onClick={() => openUrl(url || "https://play.google.com/store/apps/details?id=com.gamepad.client")}
+        className="console-plan-buy mt-3 w-full py-3 rounded-xl text-sm font-semibold transition-colors"
+        style={{ background: "rgba(255,104,38,0.14)", border: "1px solid rgba(255,104,38,0.35)", color: ACCENT }}>
+        Get it on Google Play
+      </button>
+    </motion.div>
   );
 }
 

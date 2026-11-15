@@ -46,6 +46,10 @@ export type Catalogue = {
   currency: string;
   purchasable: boolean;
   plans: CataloguePlan[];
+  /** Outside India while Razorpay takes Indian payments only (2026-11-15): nothing is sold here; the player is
+   *  sent to Google Play (`playStoreUrl`) instead. */
+  buyOnGooglePlay?: boolean;
+  playStoreUrl?: string;
 };
 
 /** GET /api/billing/me — the effective entitlement plus today's usage. */
