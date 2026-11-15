@@ -76,7 +76,7 @@ export interface AndroidBridge {
   /** Ask Play for these products' prices; answers on `window.onPlayPrices` as { productId: "₹19.00" }. */
   queryPlayPrices?(idsCsv: string): void;
   acknowledgeIfServerCredited?(purchaseToken: string): void;
-  /** Google Play's in-app rating card: only the Play build (1.4.18+) has it. Google decides whether it shows. */
+  /** Google Play's in-app rating card: only the Play build (2.0.0+) has it. Google decides whether it shows. */
   requestPlayReview?(): void;
 
   /** Playtime: forward a capability ticket to the PC over the input socket.
