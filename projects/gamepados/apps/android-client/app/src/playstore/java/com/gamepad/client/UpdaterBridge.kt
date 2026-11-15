@@ -5,6 +5,7 @@ import com.google.android.play.core.appupdate.AppUpdateManagerFactory
 import com.google.android.play.core.appupdate.AppUpdateOptions
 import com.google.android.play.core.install.model.AppUpdateType
 import com.google.android.play.core.install.model.UpdateAvailability
+import com.google.android.play.core.review.ReviewManagerFactory
 
 // playstore flavor: updates come from GOOGLE PLAY ONLY. This build never consults
 // the website's /api/version for its update banner — the site can advertise a
@@ -60,6 +61,24 @@ open class UpdaterBridge(activity: MainActivity) : AdsBridge(activity) {
     // UpdateChecker re-runs checkPlayUpdate() when the app returns to the
     // foreground (visibilitychange), and both check + start above accept the
     // IN_PROGRESS state — so the banner reappears and resumes the flow.
+
+    // ── Rate us on Google Play (owner, 2026-11-15) ─────────────────────────────────────────────
+    // Google's own rating card, shown inside the app; the stars go straight to the Play listing. The page
+    // decides WHEN (FeatureIntroOverlay.askForRating: after a real session the player ended, rarely) and
+    // never asks "do you like the app?" first (Play forbids sending only happy players to the card).
+    // Google decides whether the card actually appears (it limits how often a person sees it) and never
+    // says whether they rated, so there is nothing to report back.
+    private val reviewManager by lazy { ReviewManagerFactory.create(activity) }
+
+    @JavascriptInterface
+    fun requestPlayReview() {
+        activity.runOnUiThread {
+            reviewManager.requestReviewFlow().addOnCompleteListener { task ->
+                if (!task.isSuccessful || activity.isFinishing || activity.isDestroyed) return@addOnCompleteListener
+                try { reviewManager.launchReviewFlow(activity, task.result) } catch (_: Exception) { }
+            }
+        }
+    }
 
     private fun emit(available: Boolean, code: Int) {
         activity.evalJs("window.__onPlayUpdate && window.__onPlayUpdate($available, $code)")

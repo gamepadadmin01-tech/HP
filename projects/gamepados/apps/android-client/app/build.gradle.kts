@@ -285,8 +285,11 @@ android {
         //      order); Razorpay checkout lighter (UPI + cards, email filled in and locked, app colours); stronger
         //      haptics (80% of the motor's maximum); the player's name sent to the PC server (2.1.5 shows it); Google
         //      Play purchases that do not finish report why; the Play build's ad network switchable from the portal.
-        versionCode = 71
-        versionName = "1.4.17"
+        // 72 = 1.4.18 (2026-11-15): the Google Play build asks for a rating with Google's own in-app card (stars go
+        //      straight to the Play listing) instead of our popup; same rare, after-a-real-session timing. Outside
+        //      India, the website/Uptodown builds show "Lifetime on Google Play" (server-driven, already in 1.4.17).
+        versionCode = 72
+        versionName = "1.4.18"
 
         // AdMob test IDs by default; the release build type swaps in the live ones (see top of file).
         buildConfigField("String", "ADMOB_REWARDED_ID", "\"$admobTestRewardedId\"")
@@ -558,6 +561,8 @@ dependencies {
     // Must never leak into direct/other-store builds: Play-services update UI in
     // a non-Play build is dead weight and confuses store reviews.
     add("playstoreImplementation", "com.google.android.play:app-update:2.1.0")
+    // Play In-App Review (2026-11-15): Google's rating card, playstore ONLY (src/playstore UpdaterBridge).
+    add("playstoreImplementation", "com.google.android.play:review:2.0.2")
 
     // ── Billing, per flavor ──────────────────────────────────────────────────
     // Deliberately NOT in the shared `implementation` block. Each store forbids

@@ -76,6 +76,8 @@ export interface AndroidBridge {
   /** Ask Play for these products' prices; answers on `window.onPlayPrices` as { productId: "₹19.00" }. */
   queryPlayPrices?(idsCsv: string): void;
   acknowledgeIfServerCredited?(purchaseToken: string): void;
+  /** Google Play's in-app rating card: only the Play build (1.4.18+) has it. Google decides whether it shows. */
+  requestPlayReview?(): void;
 
   /** Playtime: forward a capability ticket to the PC over the input socket.
    *  Present on every flavour — quota is not a store-specific concern. */
@@ -282,6 +284,24 @@ export function showAdPrivacyOptions(): void {
 export function canBuyWithPlay(): boolean {
   const b = bridge();
   return !!b && typeof b.startPlayPurchase === "function";
+}
+
+/** True only in a Play build that can show Google Play's in-app rating card. */
+export function canAskPlayReview(): boolean {
+  const b = bridge();
+  return !!b && typeof b.requestPlayReview === "function";
+}
+
+/** Ask Google Play to show its rating card. False = this build cannot (nothing was asked). */
+export function requestPlayReview(): boolean {
+  const b = bridge();
+  if (!b || typeof b.requestPlayReview !== "function") return false;
+  try {
+    b.requestPlayReview();
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /** The Play build WITHOUT billing (an older one, or any build where Play Billing is missing): it sells

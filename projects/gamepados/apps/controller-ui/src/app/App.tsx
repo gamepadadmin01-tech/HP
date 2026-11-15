@@ -28,7 +28,7 @@ import { motion, AnimatePresence, useIsPresent, useReducedMotion } from "framer-
 import { View, BtnId, DashTab, GamepadPreset, CustomPad, CustomBtnDef, WidgetType, WidgetShape, WidgetAnchor } from "./types";
 import { CONTROLLER } from "./themeVariant";
 import { CustomPadEditor } from "./components/CustomPadEditor";
-import { FeatureIntroOverlay, recordSessionEnd, noteControllerOpened, suppressIntroOnce, introRated } from "./FeatureIntroOverlay";
+import { FeatureIntroOverlay, recordSessionEnd, noteControllerOpened, suppressIntroOnce, introRated, askForRating } from "./FeatureIntroOverlay";
 import { FEEDBACK_URL, initFeedbackSync, markFeedbackSent } from "./feedback";
 import { stickFeel, stickResponse, installStickFeelToggle } from "./stickFeel";
 // Saved layouts are owned by the store, not by this component. mkUid lives
@@ -3339,7 +3339,8 @@ export default function App() {
       // #3: a Controller<->Dashboard move is the paced trigger for the
       // feature-intro rating prompt (no-op once rated).
       // Only when the player CLOSES the controller after a real session, and a moment after the curtain, never during it.
-      if (target === "dashboard" && recordSessionEnd()) window.setTimeout(() => { if (viewRef.current === "dashboard") setShowIntro(true); }, 1200);
+      // The Google Play build shows Google's rating card instead of our popup (askForRating).
+      if (target === "dashboard" && recordSessionEnd()) window.setTimeout(() => { if (viewRef.current === "dashboard") askForRating(() => setShowIntro(true)); }, 1200);
     } else {
       fromControllerRef.current = false;
       setView(target);

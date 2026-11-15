@@ -29,7 +29,7 @@ import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Star, Send, Instagram } from "lucide-react";
 import { submitRating } from "./feedback";
-import { openUrl } from "./platform/native";
+import { openUrl, canAskPlayReview, requestPlayReview } from "./platform/native";
 import { INSTAGRAM_URL } from "./social";
 import { useOverlayFocus } from "./components/useOverlayFocus";
 
@@ -138,6 +138,18 @@ export function recordSessionEnd(now: number = Date.now()): boolean {
     writeInt(NEXT_KEY, sessions + REPEAT_INTERVAL);
   }
   return show;
+}
+
+/**
+ * It is time to ask (recordSessionEnd said yes). The Google Play build shows GOOGLE'S rating card, so the stars
+ * land on the Play listing (owner, 2026-11-15); every other build shows our own popup (stars go to support).
+ * The Play card is shown on its own, never after a question of ours: Play's policy forbids asking "do you like
+ * the app?" and sending only the happy players to it. Returns which one was used.
+ */
+export function askForRating(showOwnPopup: () => void): "play" | "own" {
+  if (__PLAY__ && canAskPlayReview() && requestPlayReview()) return "play";
+  showOwnPopup();
+  return "own";
 }
 
 // Motion: one spring, used for the card and the star pops, so everything on
