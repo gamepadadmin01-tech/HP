@@ -400,12 +400,12 @@ public class MainActivity extends Activity {
         web.setWebViewClient(new WebViewClient(){
             @Override public boolean shouldOverrideUrlLoading(WebView v,WebResourceRequest r){
                 if(!r.isForMainFrame())return false;Uri u=r.getUrl();
-                if(trusted(u.toString())){if(u.getPath()!=null&&u.getPath().startsWith("/admin/login")){lock(true);return true;}return false;}
+                if(trusted(u.toString())){if(isLoginPath(u.getPath())){lock(true);return true;}return false;}
                 if(r.hasGesture()&&("https".equals(u.getScheme())||"mailto".equals(u.getScheme())))external(u);return true;
             }
             @Override public void onPageFinished(WebView v,String url){
                 if(web!=v||!trusted(url))return;
-                if(Uri.parse(url).getPath().startsWith("/admin/login")){lock(true);return;}
+                if(isLoginPath(Uri.parse(url).getPath())){lock(true);return;}
                 try{v.evaluateJavascript(readAsset("mobile.js"),null);}catch(Exception e){say("Mobile enhancements could not load.");}
             }
             @Override public void onReceivedError(WebView v,WebResourceRequest r,WebResourceError e){if(r.isForMainFrame()&&web==v)new AlertDialog.Builder(MainActivity.this).setTitle("Portal unavailable").setMessage("Check your internet connection. Your work is stored on the server.").setPositiveButton("Retry",(d,w)->v.reload()).setNegativeButton("Sign in",(d,w)->lock(false)).show();}
@@ -431,10 +431,13 @@ public class MainActivity extends Activity {
                 ((android.app.DownloadManager)getSystemService(DOWNLOAD_SERVICE)).enqueue(request);say("Download started.");
             }catch(Exception e){say("Unable to download this attachment.");}
         });
-        web.loadUrl(ORIGIN+"/admin");
+        web.loadUrl(ORIGIN+"/staff");
     }
     private static byte[] readBytes(InputStream in)throws IOException{ByteArrayOutputStream out=new ByteArrayOutputStream();byte[] buffer=new byte[8192];int n;while((n=in.read(buffer))!=-1)out.write(buffer,0,n);return out.toByteArray();}
     private String readAsset(String name)throws IOException{try(InputStream in=getAssets().open(name)){return new String(readBytes(in),StandardCharsets.UTF_8);}}
+    // The portal moved from /admin to /staff (2026-11-15); the old address forwards. Either sign-in page means the
+    // session ended, so the app locks and shows its own face / fingerprint screen instead of the web form.
+    private static boolean isLoginPath(String p){return p!=null&&(p.startsWith("/staff/login")||p.startsWith("/admin/login"));}
     private boolean trusted(String url){try{Uri u=Uri.parse(url);return "https".equals(u.getScheme())&&"supportportal.gamepad.space".equals(u.getHost())&&(u.getPort()==-1||u.getPort()==443)&&u.getUserInfo()==null;}catch(Exception e){return false;}}
     private void external(Uri uri){try{startActivity(new Intent(Intent.ACTION_VIEW,uri));}catch(Exception e){say("No app can open this link.");}}
     private void approve(String payload,JsPromptResult result){
