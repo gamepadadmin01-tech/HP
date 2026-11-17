@@ -1,0 +1,13 @@
+{
+  "lang": "en",
+  "shots": [
+    { "file": "controller", "shape": "landscape", "title": "Your phone is now a {PC gamepad}", "sub": "Play PC games with the phone already in your hands." },
+    { "file": "home", "shape": "portrait", "title": "Ready-made {layouts}", "sub": "Tap a layout and play. Standard and Racing built in." },
+    { "file": "connect", "shape": "portrait", "title": "{Wi-Fi} or {USB}", "sub": "Scan the code on your PC. Low latency, no dongle." },
+    { "file": "racing", "shape": "landscape", "title": "Tilt to {steer}", "sub": "Gyro steering for racing games." },
+    { "file": "editor", "shape": "landscape", "title": "Build your own {layout}", "sub": "Move, resize and add buttons, sticks and a touchpad." },
+    { "file": "settings", "shape": "portrait", "title": "Tune every {stick}", "sub": "Steering, right stick sensitivity and vibration, your way." },
+    { "file": "why", "shape": "portrait", "title": "Help when the PC {doesn't answer}", "sub": "\"See why?\" shows the likely causes, in order." },
+    { "file": "plans", "shape": "portrait", "title": "{Free} to start", "sub": "Free play time, and ads only when you choose to watch one." }
+  ]
+}
