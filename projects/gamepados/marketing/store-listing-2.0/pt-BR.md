@@ -48,8 +48,10 @@ Os comandos do controle vão direto do celular para o PC, pela sua própria rede
 
 ★ COMPATÍVEL COM
 • PCs com Windows 10 e Windows 11 com o Gamepad Server gratuito.
-• Steam, emuladores e qualquer jogo de PC que aceite controle.
+• Emuladores e qualquer jogo de PC que aceite controle.
 • Jogos de corrida, ação, esporte, luta e plataforma.
+
+Observação: por enquanto o app está em inglês. O português chega em uma próxima atualização.
 
 Precisa de ajuda? Acesse gamepad.space/support ou use Contato no app. Respondemos todas as mensagens.
 

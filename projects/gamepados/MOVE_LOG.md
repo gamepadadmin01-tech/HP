@@ -162,3 +162,97 @@ Moves only, nothing deleted. releases/ was reorganised separately: see releases/
   slow once), `marketing/instagram/reel-mg/renders` and `marketing/instagram/reel-web/renders`
   (PNG frame sequences + render logs; no videos — the finished reels in instagram/*.mp4 are kept,
   and the render scripts regenerate the frames). None of it was in git.
+
+
+# 2026-11-18 — every GamepadOS file outside HP brought in
+
+Owner: "outside HP we should not have a single file". All plain renames on the same drive (D:), nothing copied,
+nothing deleted. Destinations are git-ignored (`releases/`, `test-builds/`, `docs/design-reference-*/`,
+`marketing/videos/`; `archive-local/` and `keys/` at the HP root). Scripts that wrote to `D:\DOWNLOADS`
+(`finish.py`, `make_translations.py`, admin-android README) now write into `releases/`.
+
+Left outside on purpose: `D:\Gamepad Server\` (the installed PC server, a program install).
+Empty shells Windows kept open: `D:\DOWNLOADS\GamepadOS-2.0-store-graphics\` and `D:\GamepadOS-private\`.
+
+```
+D:/DOWNLOADS/GamepadOS-2.0.0-release -> HP/projects/gamepados/releases/2.0.0
+LOCKED /d/DOWNLOADS/GamepadOS-2.0-store-graphics
+D:/DOWNLOADS/GamepadOS-2.0-videos -> HP/projects/gamepados/releases/2.0.0/videos
+D:/DOWNLOADS/GamepadOS-1.4.18-play -> HP/projects/gamepados/releases/1.4.18-play
+D:/DOWNLOADS/GamepadOS-1.4.17-release -> HP/projects/gamepados/releases/1.4.17
+D:/DOWNLOADS/GamepadOS-1.4.16-release -> HP/projects/gamepados/releases/1.4.16
+D:/DOWNLOADS/OLD-1.4.15-release-DO-NOT-UPLOAD -> HP/projects/gamepados/releases/OLD-1.4.15-DO-NOT-UPLOAD
+D:/DOWNLOADS/OLD-1.4.14-release-DO-NOT-UPLOAD -> HP/projects/gamepados/releases/OLD-1.4.14-DO-NOT-UPLOAD
+D:/DOWNLOADS/GamepadOS-old-versions -> HP/projects/gamepados/releases/old-versions
+D:/DOWNLOADS/GamepadOS-Admin -> HP/projects/gamepados/releases/admin-app
+D:/DOWNLOADS/GamepadServer-Setup-2.1.0.exe -> HP/projects/gamepados/releases/pc-server-old/GamepadServer-Setup-2.1.0.exe
+D:/DOWNLOADS/GamepadServer-Setup-2.1.2.exe -> HP/projects/gamepados/releases/pc-server-old/GamepadServer-Setup-2.1.2.exe
+D:/DOWNLOADS/GamepadServer.exe -> HP/projects/gamepados/releases/pc-server-old/GamepadServer-2026-06-14.exe
+D:/DOWNLOADS/GamepadOS-colour-TEST -> HP/projects/gamepados/test-builds/colour-TEST
+D:/DOWNLOADS/GamepadOS-redesign-TEST -> HP/projects/gamepados/test-builds/redesign-TEST
+D:/DOWNLOADS/GamepadServer-TEST -> HP/projects/gamepados/test-builds/GamepadServer-TEST
+D:/DOWNLOADS/GamepadOS-1.4.12-touchpad-test.apk -> HP/projects/gamepados/test-builds/loose-apks-2026-08-to-11/GamepadOS-1.4.12-touchpad-test.apk
+D:/DOWNLOADS/GamepadOS-1.4.12-unity-test.apk -> HP/projects/gamepados/test-builds/loose-apks-2026-08-to-11/GamepadOS-1.4.12-unity-test.apk
+D:/DOWNLOADS/GamepadOS-1.4.13-ad-compensation.apk -> HP/projects/gamepados/test-builds/loose-apks-2026-08-to-11/GamepadOS-1.4.13-ad-compensation.apk
+D:/DOWNLOADS/GamepadOS-1.4.13-clean.apk -> HP/projects/gamepados/test-builds/loose-apks-2026-08-to-11/GamepadOS-1.4.13-clean.apk
+D:/DOWNLOADS/GamepadOS-1.4.13-playstore-account.apk -> HP/projects/gamepados/test-builds/loose-apks-2026-08-to-11/GamepadOS-1.4.13-playstore-account.apk
+D:/DOWNLOADS/GamepadOS-1.4.13-playstore-billing.apk -> HP/projects/gamepados/test-builds/loose-apks-2026-08-to-11/GamepadOS-1.4.13-playstore-billing.apk
+D:/DOWNLOADS/GamepadOS-1.4.13-playstore-cleanpad.apk -> HP/projects/gamepados/test-builds/loose-apks-2026-08-to-11/GamepadOS-1.4.13-playstore-cleanpad.apk
+D:/DOWNLOADS/GamepadOS-1.4.13-playstore-final.apk -> HP/projects/gamepados/test-builds/loose-apks-2026-08-to-11/GamepadOS-1.4.13-playstore-final.apk
+D:/DOWNLOADS/GamepadOS-1.4.13-playstore-newtools.apk -> HP/projects/gamepados/test-builds/loose-apks-2026-08-to-11/GamepadOS-1.4.13-playstore-newtools.apk
+D:/DOWNLOADS/GamepadOS-1.4.13-playstore-plans.apk -> HP/projects/gamepados/test-builds/loose-apks-2026-08-to-11/GamepadOS-1.4.13-playstore-plans.apk
+D:/DOWNLOADS/GamepadOS-1.4.13-playstore-rating.apk -> HP/projects/gamepados/test-builds/loose-apks-2026-08-to-11/GamepadOS-1.4.13-playstore-rating.apk
+D:/DOWNLOADS/GamepadOS-1.4.13-playstore-sensitivity.apk -> HP/projects/gamepados/test-builds/loose-apks-2026-08-to-11/GamepadOS-1.4.13-playstore-sensitivity.apk
+D:/DOWNLOADS/GamepadOS-1.4.13-playstore-test.apk -> HP/projects/gamepados/test-builds/loose-apks-2026-08-to-11/GamepadOS-1.4.13-playstore-test.apk
+D:/DOWNLOADS/GamepadOS-1.4.13-playstore-unity.apk -> HP/projects/gamepados/test-builds/loose-apks-2026-08-to-11/GamepadOS-1.4.13-playstore-unity.apk
+D:/DOWNLOADS/GamepadOS-1.4.13-website-account.apk -> HP/projects/gamepados/test-builds/loose-apks-2026-08-to-11/GamepadOS-1.4.13-website-account.apk
+D:/DOWNLOADS/GamepadOS-1.4.13-website-cleanpad.apk -> HP/projects/gamepados/test-builds/loose-apks-2026-08-to-11/GamepadOS-1.4.13-website-cleanpad.apk
+D:/DOWNLOADS/GamepadOS-1.4.13-website-final.apk -> HP/projects/gamepados/test-builds/loose-apks-2026-08-to-11/GamepadOS-1.4.13-website-final.apk
+D:/DOWNLOADS/GamepadOS-1.4.13-website-newtools.apk -> HP/projects/gamepados/test-builds/loose-apks-2026-08-to-11/GamepadOS-1.4.13-website-newtools.apk
+D:/DOWNLOADS/GamepadOS-1.4.13-website-plans.apk -> HP/projects/gamepados/test-builds/loose-apks-2026-08-to-11/GamepadOS-1.4.13-website-plans.apk
+D:/DOWNLOADS/GamepadOS-1.4.13-website-rating.apk -> HP/projects/gamepados/test-builds/loose-apks-2026-08-to-11/GamepadOS-1.4.13-website-rating.apk
+D:/DOWNLOADS/GamepadOS-1.4.13-website-sensitivity.apk -> HP/projects/gamepados/test-builds/loose-apks-2026-08-to-11/GamepadOS-1.4.13-website-sensitivity.apk
+D:/DOWNLOADS/GamepadOS-1.4.13-website-test.apk -> HP/projects/gamepados/test-builds/loose-apks-2026-08-to-11/GamepadOS-1.4.13-website-test.apk
+D:/DOWNLOADS/GamepadOS-1.4.13-website.apk -> HP/projects/gamepados/test-builds/loose-apks-2026-08-to-11/GamepadOS-1.4.13-website.apk
+D:/DOWNLOADS/GamepadOS-1.4.14-uptodown-DEBUG-test-only.apk -> HP/projects/gamepados/test-builds/loose-apks-2026-08-to-11/GamepadOS-1.4.14-uptodown-DEBUG-test-only.apk
+D:/DOWNLOADS/GamepadOS-1.4.14-website-DEBUG-test-only.apk -> HP/projects/gamepados/test-builds/loose-apks-2026-08-to-11/GamepadOS-1.4.14-website-DEBUG-test-only.apk
+D:/DOWNLOADS/GamepadOS-playstore-120fps.apk -> HP/projects/gamepados/test-builds/loose-apks-2026-08-to-11/GamepadOS-playstore-120fps.apk
+D:/DOWNLOADS/GamepadOS-playstore-chip.apk -> HP/projects/gamepados/test-builds/loose-apks-2026-08-to-11/GamepadOS-playstore-chip.apk
+D:/DOWNLOADS/GamepadOS-playstore-popup.apk -> HP/projects/gamepados/test-builds/loose-apks-2026-08-to-11/GamepadOS-playstore-popup.apk
+D:/DOWNLOADS/GamepadOS-playstore-split.apk -> HP/projects/gamepados/test-builds/loose-apks-2026-08-to-11/GamepadOS-playstore-split.apk
+D:/DOWNLOADS/GamepadOS-playstore-touchpad2.apk -> HP/projects/gamepados/test-builds/loose-apks-2026-08-to-11/GamepadOS-playstore-touchpad2.apk
+D:/DOWNLOADS/GamepadOS-playstore-touchpad3.apk -> HP/projects/gamepados/test-builds/loose-apks-2026-08-to-11/GamepadOS-playstore-touchpad3.apk
+D:/DOWNLOADS/GamepadOS-website-120fps.apk -> HP/projects/gamepados/test-builds/loose-apks-2026-08-to-11/GamepadOS-website-120fps.apk
+D:/DOWNLOADS/GamepadOS-website-chip.apk -> HP/projects/gamepados/test-builds/loose-apks-2026-08-to-11/GamepadOS-website-chip.apk
+D:/DOWNLOADS/GamepadOS-website-popup.apk -> HP/projects/gamepados/test-builds/loose-apks-2026-08-to-11/GamepadOS-website-popup.apk
+D:/DOWNLOADS/GamepadOS-website-split.apk -> HP/projects/gamepados/test-builds/loose-apks-2026-08-to-11/GamepadOS-website-split.apk
+D:/DOWNLOADS/GamepadOS-website-touchpad2.apk -> HP/projects/gamepados/test-builds/loose-apks-2026-08-to-11/GamepadOS-website-touchpad2.apk
+D:/DOWNLOADS/GamepadOS-website-touchpad3.apk -> HP/projects/gamepados/test-builds/loose-apks-2026-08-to-11/GamepadOS-website-touchpad3.apk
+D:/DOWNLOADS/OLD-GamepadOS-1.4.14-playstore-has-layout2.apk -> HP/projects/gamepados/test-builds/loose-apks-2026-08-to-11/OLD-GamepadOS-1.4.14-playstore-has-layout2.apk
+D:/DOWNLOADS/GamepadOS1.4.1wheelmodeTESTdirect.apk -> HP/projects/gamepados/test-builds/loose-apks-2026-08-to-11/GamepadOS1.4.1wheelmodeTESTdirect.apk
+D:/DOWNLOADS/backup -> HP/archive-local/website-backup-2026-06
+D:/DOWNLOADS/GamepadOS_Project_Optimized.zip -> HP/archive-local/GamepadOS_Project_Optimized-2026-06.zip
+D:/DOWNLOADS/gamepad.space-Performance-on-Search-2026-10-11.zip -> HP/archive-local/gamepad.space-Performance-on-Search-2026-10-11.zip
+D:/DOWNLOADS/GamepadOS-video-assets -> HP/archive-local/emergent-video-assets-2026-11-17
+D:/DOWNLOADS/GamepadOS-video-assets.zip -> HP/archive-local/emergent-video-assets-2026-11-17.zip
+D:/DOWNLOADS/unigram -> HP/projects/gamepados/docs/design-reference-2026-11
+D:/AKHIL/VEDIOS & RECORDING/GamepadOS_Professional_Redo_v1.mp4 -> HP/projects/gamepados/marketing/videos/GamepadOS_Professional_Redo_v1.mp4
+D:/DOWNLOADS/Supabase Snippet Users list.csv -> HP/keys/user-data/supabase-users-list-2026-11-02.csv
+D:/GamepadOS-private/admin-candidates-2026-10-03.txt -> HP/keys/user-data/admin-candidates-2026-10-03.txt
+D:/DOWNLOADS/GamepadOS-2.0-store-graphics/en/01-controller-3840x2160.png -> HP/projects/gamepados/releases/2.0.0/play-store-graphics/en/01-controller-3840x2160.png
+D:/DOWNLOADS/GamepadOS-2.0-store-graphics/en/02-home-2160x3840.png -> HP/projects/gamepados/releases/2.0.0/play-store-graphics/en/02-home-2160x3840.png
+D:/DOWNLOADS/GamepadOS-2.0-store-graphics/en/03-connect-2160x3840.png -> HP/projects/gamepados/releases/2.0.0/play-store-graphics/en/03-connect-2160x3840.png
+D:/DOWNLOADS/GamepadOS-2.0-store-graphics/en/04-racing-3840x2160.png -> HP/projects/gamepados/releases/2.0.0/play-store-graphics/en/04-racing-3840x2160.png
+D:/DOWNLOADS/GamepadOS-2.0-store-graphics/en/05-editor-3840x2160.png -> HP/projects/gamepados/releases/2.0.0/play-store-graphics/en/05-editor-3840x2160.png
+D:/DOWNLOADS/GamepadOS-2.0-store-graphics/en/06-settings-2160x3840.png -> HP/projects/gamepados/releases/2.0.0/play-store-graphics/en/06-settings-2160x3840.png
+D:/DOWNLOADS/GamepadOS-2.0-store-graphics/en/07-why-2160x3840.png -> HP/projects/gamepados/releases/2.0.0/play-store-graphics/en/07-why-2160x3840.png
+D:/DOWNLOADS/GamepadOS-2.0-store-graphics/en/08-plans-2160x3840.png -> HP/projects/gamepados/releases/2.0.0/play-store-graphics/en/08-plans-2160x3840.png
+D:/DOWNLOADS/GamepadOS-2.0-store-graphics/en/app-icon-512.png -> HP/projects/gamepados/releases/2.0.0/play-store-graphics/en/app-icon-512.png
+D:/DOWNLOADS/GamepadOS-2.0-store-graphics/en/feature-graphic-1024x500.png -> HP/projects/gamepados/releases/2.0.0/play-store-graphics/en/feature-graphic-1024x500.png
+D:/DOWNLOADS/GamepadOS-2.0-store-graphics/feature-graphic-options/option-A-1024x500.png -> HP/projects/gamepados/releases/2.0.0/play-store-graphics/feature-graphic-options/option-A-1024x500.png
+D:/DOWNLOADS/GamepadOS-2.0-store-graphics/feature-graphic-options/option-B-1024x500.png -> HP/projects/gamepados/releases/2.0.0/play-store-graphics/feature-graphic-options/option-B-1024x500.png
+D:/DOWNLOADS/GamepadOS-2.0-store-graphics/feature-graphic-options/option-C-1024x500.png -> HP/projects/gamepados/releases/2.0.0/play-store-graphics/feature-graphic-options/option-C-1024x500.png
+D:/DOWNLOADS/GamepadOS-2.0-store-graphics/feature-graphic-options-preview.png -> HP/projects/gamepados/releases/2.0.0/play-store-graphics/feature-graphic-options-preview.png
+D:/DOWNLOADS/GamepadOS-2.0-store-graphics/play-translations-20-languages.txt -> HP/projects/gamepados/releases/2.0.0/play-store-graphics/play-translations-20-languages.txt
+D:/DOWNLOADS/GamepadOS-2.0-store-graphics/play-translations-6-languages.txt -> HP/projects/gamepados/releases/2.0.0/play-store-graphics/play-translations-6-languages.txt
+```

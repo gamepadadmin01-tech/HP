@@ -15,7 +15,7 @@ const TEXT = {
 const OUT = path.join(HERE, 'out', LANG);
 fs.mkdirSync(OUT, { recursive: true });
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-const img = pathToFileURL(path.join(HERE, LANG === 'en' ? 'raw' : `raw-${LANG}`, 'controller.png')).href;
+const img = pathToFileURL(path.join(HERE, process.env.RAW || (LANG === 'en' ? 'raw' : `raw-${LANG}`), 'controller.png')).href;
 const icon = pathToFileURL(path.join(HERE, '..', 'play-icon-512.png')).href;
 
 const html = `<!doctype html><html><head><meta charset="utf-8">
@@ -43,12 +43,12 @@ const html = `<!doctype html><html><head><meta charset="utf-8">
 
 const browser = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: true, args: ['--force-color-profile=srgb'] });
 const p = await browser.newPage();
-await p.setViewport({ width: 1024, height: 500, deviceScaleFactor: 1 });
+await p.setViewport({ width: 1024, height: 500, deviceScaleFactor: Number(process.env.SCALE || 1) });   // SCALE=4: drawn 4x, shrunk by finish.py for crisp edges
 const tmp = path.join(OUT, '_feature.html');
 fs.writeFileSync(tmp, html);
 await p.goto(pathToFileURL(tmp).href, { waitUntil: 'networkidle0' });
 await p.evaluate(() => document.fonts.ready);
-await p.screenshot({ path: path.join(OUT, 'feature-graphic-1024x500.png') });
+await p.screenshot({ path: path.join(OUT, process.env.SCALE > 1 ? 'feature-graphic-hires.png' : 'feature-graphic-1024x500.png') });
 fs.unlinkSync(tmp);
 console.log(`out/${LANG}/feature-graphic-1024x500.png`);
 await browser.close();

@@ -14,8 +14,14 @@ const puppeteer = require('puppeteer');
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const LANG = process.argv[2] || 'en';
 const cap = JSON.parse(fs.readFileSync(path.join(HERE, `captions.${LANG}.json`), 'utf8'));
-const RAW = path.join(HERE, LANG === 'en' ? 'raw' : `raw-${LANG}`);
-const OUT = path.join(HERE, 'out', LANG);
+// SCALE=2 RAW=raw-4k -> 4K store images (2160x3840 / 3840x2160), the largest Google Play accepts
+const SCALE = Number(process.env.SCALE || 1);
+const RAW = path.join(HERE, process.env.RAW || (LANG === 'en' ? 'raw' : `raw-${LANG}`));
+// PHONE=poco: the phone in the picture has the shape of a normal modern Android phone (20:9, POCO X6 Pro), and its
+// screens come from raw-poco/ (shoot with PHONE=poco RAW_DIR=raw-poco SCALE=4 node shoot.mjs). The picture itself stays
+// 9:16 / 16:9, the shape Google Play recommends for screenshots (Play refuses anything longer than 2:1).
+const POCO = process.env.PHONE === 'poco';
+const OUT = path.join(HERE, 'out', `${LANG}${SCALE > 1 ? '-4k' : ''}${POCO ? '-poco' : ''}`);
 fs.mkdirSync(OUT, { recursive: true });
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -40,7 +46,8 @@ function html(shot, img) {
     font-size:${land ? 76 : 88}px; line-height:1.08; letter-spacing:-0.02em; }
   h1 em { font-style:normal; color:#FF5500; }
   p { margin-top:${land ? 28 : 30}px; font-size:${land ? 34 : 40}px; line-height:1.35; color:#C9BCB6; }
-  .phone { position:relative; ${land ? 'margin-left:20px; width:1120px; height:630px;' : 'margin-top:90px; width:740px; height:1316px;'}
+  .phone { position:relative; ${land ? (POCO ? 'margin-left:20px; width:1180px; height:551px;' : 'margin-left:20px; width:1120px; height:630px;')
+      : (POCO ? 'margin-top:72px; width:621px; height:1332px;' : 'margin-top:90px; width:740px; height:1316px;')}
     border-radius:${land ? 64 : 72}px; padding:${land ? 18 : 20}px; background:#0C0807;
     box-shadow:0 0 0 2px rgba(255,255,255,0.10), 0 40px 120px rgba(0,0,0,0.65), 0 0 90px rgba(255,85,0,0.18); }
   .phone img { width:100%; height:100%; object-fit:cover; object-position:top; border-radius:${land ? 48 : 54}px; display:block; }
@@ -56,13 +63,13 @@ for (const shot of cap.shots) {
   n++;
   const land = shot.shape === 'landscape';
   const p = await browser.newPage();
-  await p.setViewport({ width: land ? 1920 : 1080, height: land ? 1080 : 1920, deviceScaleFactor: 1 });
+  await p.setViewport({ width: land ? 1920 : 1080, height: land ? 1080 : 1920, deviceScaleFactor: SCALE });
   const img = pathToFileURL(path.join(RAW, shot.file + '.png')).href;
   const tmp = path.join(OUT, `_tmp_${shot.file}.html`);
   fs.writeFileSync(tmp, html(shot, img));
   await p.goto(pathToFileURL(tmp).href, { waitUntil: 'networkidle0' });
   await p.evaluate(() => document.fonts.ready);
-  const name = `${String(n).padStart(2, '0')}-${shot.file}-${land ? '1920x1080' : '1080x1920'}.png`;
+  const name = `${String(n).padStart(2, '0')}-${shot.file}-${land ? `${1920 * SCALE}x${1080 * SCALE}` : `${1080 * SCALE}x${1920 * SCALE}`}.png`;
   await p.screenshot({ path: path.join(OUT, name) });
   fs.unlinkSync(tmp);
   console.log(`out/${LANG}/${name}`);

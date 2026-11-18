@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url';
 const require = createRequire('D:/AKHIL/HP/projects/gamepados/apps/controller-ui/package.json');
 const puppeteer = require('puppeteer');
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const RAW = path.join(HERE, 'raw');
+const RAW = path.join(HERE, process.env.RAW_DIR || 'raw');   // RAW_DIR=raw-4k SCALE=5 for the video
 fs.mkdirSync(RAW, { recursive: true });
 const DIST = 'D:/AKHIL/HP/projects/gamepados/apps/controller-ui/dist-play/index.html';
 const PORT = 5198;
@@ -50,7 +50,7 @@ function bridgeScript({ remaining, link }) {
 
 async function page({ w, h, remaining = 1500, link = 'off', storage = {} }) {
   const p = await browser.newPage();
-  await p.setViewport({ width: w, height: h, deviceScaleFactor: 2.5, isMobile: true, hasTouch: true });
+  await p.setViewport({ width: w, height: h, deviceScaleFactor: Number(process.env.SCALE || 2.5), isMobile: true, hasTouch: true });
   await p.setRequestInterception(true);
   p.on('request', r => {
     const u = r.url();
@@ -89,7 +89,10 @@ async function clickText(p, sel, re) {
   return ok;
 }
 
-const PORTRAIT = { w: 432, h: 768 }, LANDSCAPE = { w: 768, h: 432 };
+// Screen shape. Default 9:16; PHONE=poco shoots the shape of a normal modern Android phone (POCO X6 Pro:
+// 1220x2712 px = 20:9, about 407x904 in CSS pixels), so the phone in the store images looks like a real phone.
+const SHAPE = process.env.PHONE === 'poco' ? { w: 407, h: 904 } : { w: 432, h: 768 };
+const PORTRAIT = { w: SHAPE.w, h: SHAPE.h }, LANDSCAPE = { w: SHAPE.h, h: SHAPE.w };
 const SHOTS = {
   async controller() {          // the Standard controller, connected
     const p = await page({ ...LANDSCAPE, link: 'connected' });

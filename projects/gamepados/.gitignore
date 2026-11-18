@@ -78,6 +78,9 @@ tools/*
 *.avi
 *.psd
 releases/
+test-builds/
+docs/design-reference-*/
+marketing/videos/
 marketing/ad-footage/
 photos/
 Screenshots/

@@ -38,6 +38,11 @@ Full detail: **`context/INVENTORY.md`** (the folder map) and **`context/README.m
    to LF, and `cmd.exe` misparses a `.bat` with LF endings — the errors it produces
    (`'M' is not recognized`, `JAVA_HOME is set to an invalid directory`) point nowhere near the
    real cause. `.bat` must be CRLF; `.sh` must stay LF. Prefer the Edit tool.
+9. **Every GamepadOS file lives inside `D:\AKHIL\HP` — never in `D:\DOWNLOADS` or anywhere else.**
+   (Owner, 2026-11-18: "outside HP we should not have a single file".) Builds, APKs, AABs, store
+   graphics, videos and test builds go to `projects/gamepados/releases/<version>/` (or `test-builds/`,
+   `releases/admin-app/`), all git-ignored. The one exception is the *installed* PC server
+   (`D:\Gamepad Server\`), which is a program install, not a project file.
 
 ## Folder map
 
@@ -53,7 +58,10 @@ D:\AKHIL\HP\
 │   │   ├── apps/             <- android-client, controller-ui, pc-server, pc-server-rs, ios-client
 │   │   ├── website/          <- its own repo: gamepadadmin01-tech/gamepad
 │   │   ├── tools/            <- pinned JDK 17 + Gradle 9.8.2 (do not delete)
-│   │   ├── releases/  marketing/  store-assets/  docs/
+│   │   ├── releases/         <- every build by version (2.0.0/, 1.4.18-play/, …, old-versions/,
+│   │   │                        admin-app/, pc-server-old/); 2.0.0/ also holds play-store-graphics/ + videos/
+│   │   ├── test-builds/      <- throwaway test APKs (DO-NOT-UPLOAD); git-ignored
+│   │   ├── marketing/  store-assets/  docs/   (docs/design-reference-2026-11 = the UI reference shots)
 │   ├── flexsquares/          <- sell-the-white-space site
 │   ├── daily-news-app/       <- echonews-ai, unrelated
 │   └── spotify-corizo/       <- Corizo academic project
@@ -62,8 +70,14 @@ D:\AKHIL\HP\
 │   └── android-cli/          <- was "Android/AndroidCLI"
 ├── media/capcut/
 ├── installers/
+├── archive-local/            <- untracked old copies (June website backup, June project zip WITH .env)
 └── keys/                     <- PLAINTEXT SECRETS. Never commit, never upload.
+                                 keys/user-data/ = exported user lists (personal data)
 ```
+
+**2026-11-18:** 64 GamepadOS items gathered from `D:\DOWNLOADS`, `D:\GamepadOS-private` and
+`D:\AKHIL\VEDIOS & RECORDING` into the places above — the full list is in
+`projects/gamepados/MOVE_LOG.md`.
 
 **HP is 22.32 GB / 97,774 files** — down from 60.2 GB / ~390,000 on 2026-08-13.
 

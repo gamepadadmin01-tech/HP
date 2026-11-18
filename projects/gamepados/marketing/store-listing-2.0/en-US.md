@@ -48,7 +48,7 @@ Your controller input goes straight from your phone to your PC over your own net
 
 ★ WORKS WITH
 • Windows 10 and Windows 11 PCs with the free Gamepad Server.
-• Steam, emulators and any PC game that supports a game controller.
+• Emulators and any PC game that supports a game controller.
 • Racing, action, sports, fighting and platform games.
 
 Need help? Visit gamepad.space/support or use Contact in the app. We answer every message.

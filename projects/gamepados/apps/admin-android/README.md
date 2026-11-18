@@ -3,7 +3,7 @@
 **Where things live (moved 2026-11-15 from the Codex folder on C:):** this source is
 `D:/AKHIL/HP/projects/gamepados/apps/admin-android`; the PRIVATE signing key is
 `D:/AKHIL/HP/keys/admin-android/` (`admin-release.jks` + `release.properties`), which the build reads directly. The key
-is never committed. Without it the installed app cannot be updated in place. Built APKs go to `D:/DOWNLOADS/GamepadOS-Admin/`.
+is never committed. Without it the installed app cannot be updated in place. Built APKs go to `projects/gamepados/releases/admin-app/` (inside HP, git-ignored).
 
 **1.3.0 (2026-11-15):** dark + white sign-in screen, top bar and bottom menu; **face sign-in**. The POCO's face unlock is
 camera-only ("weak" to Android), which cannot unlock a Keystore key, so the saved login (vault v2) is encrypted with a

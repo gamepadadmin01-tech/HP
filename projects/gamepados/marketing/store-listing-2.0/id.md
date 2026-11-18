@@ -48,8 +48,10 @@ Input kontroler kamu langsung dikirim dari HP ke PC lewat jaringan atau kabel mi
 
 ★ BISA DIPAKAI UNTUK
 • PC Windows 10 dan Windows 11 dengan Gamepad Server gratis.
-• Steam, emulator, dan semua game PC yang mendukung kontroler.
+• Emulator dan semua game PC yang mendukung kontroler.
 • Game balap, aksi, olahraga, fighting, dan platformer.
+
+Catatan: untuk saat ini aplikasinya masih berbahasa Inggris. Bahasa Indonesia akan hadir di pembaruan berikutnya.
 
 Butuh bantuan? Kunjungi gamepad.space/support atau pakai menu Kontak di aplikasi. Kami membalas setiap pesan.
 
