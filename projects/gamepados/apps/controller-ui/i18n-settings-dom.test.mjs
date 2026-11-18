@@ -51,9 +51,11 @@ try {
   assert.equal(await text(page, '[data-testid="settings-heading"]'), "Settings");
   assert.equal(await label(page, "tilt-steering-switch"), "Tilt steering");
   assert.ok(await page.$('[data-testid="steering-sensitivity-slider"]'), "steering sensitivity is on the page");
-  assert.ok(await page.$('[data-testid="right-stick-sensitivity-slider"]'), "right stick sensitivity is on the page");
+  assert.equal(await hidden(page, "ignore-small-tilts-slider"), false, "ignore small tilts is on the page (owner, 2026-11-18)");
   assert.ok(await page.$('[data-testid="game-rumble-switch"]'), "game rumble is on the page");
-  // rare settings: under More settings, closed
+  assert.equal(await page.$('[data-testid="tilt-throttle-switch"]'), null, "tilt throttle is gone");
+  // rare settings: under More settings, closed (Aim moved there too)
+  assert.equal(await hidden(page, "right-stick-sensitivity-slider"), true, "right stick sensitivity is under More settings");
   assert.equal(await hidden(page, "wheel-mode-switch"), true, "wheel mode starts hidden under More settings");
   assert.equal(await hidden(page, "pause-when-laid-flat-switch"), true);
   await page.click('[data-testid="more-settings"]'); await pause(350);

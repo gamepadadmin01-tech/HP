@@ -3386,7 +3386,9 @@ export default function App() {
   const [gyroHaptic, setGyroHaptic] = useState(savedGyro.haptic);
   // Racing tilt-throttle: pitch (tilt forward/back) drives the LEFT stick Y so
   // you can accelerate/brake by tilting — 3D mode is unaffected.
-  const [gyroThrottle, setGyroThrottle] = useState(savedGyro.throttle);
+  // 2.1 (owner, 2026-11-18): the switch is gone from Settings (the Racing layout has its own gas pedal), so it is
+  // always OFF now, also for anyone who had turned it on: nobody may be left with it on and no way to turn it off.
+  const [gyroThrottle, setGyroThrottle] = useState(false);
   // Automatic Gyro Idle Detection (#2). When off, gyro never idles from pose and
   // streams continuously — some players prefer that.
   const [gyroIdleDetect, setGyroIdleDetect] = useState(savedGyro.idleDetect);

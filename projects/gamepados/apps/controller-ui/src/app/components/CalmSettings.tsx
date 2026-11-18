@@ -112,10 +112,8 @@ export function CalmSettings(p:CalmSettingsProps) {
         {p.gyroWheel ? <div className="calm-setting-detail"><h3>{t("Lock-to-lock range")}</h3>
           <div className="calm-segment" role="group" aria-label={t("Wheel range")}>{WHEEL_RANGES.map(r=><button key={r} aria-pressed={p.gyroWheelRange===r} onClick={()=>p.setGyroWheelRange(r)}>{r}°</button>)}</div>
         </div> : <Range label="Steering sensitivity" min={1} max={90} value={p.gyroMaxAngle} onChange={p.setGyroMaxAngle}/>}
+        <Range label="Ignore small tilts" min={0} max={30} value={p.gyroDeadzone} onChange={p.setGyroDeadzone}/>
       </motion.div>}</AnimatePresence>
-    </div></section>
-    <section data-tone="blue" className="calm-settings-section"><h2><Crosshair size={15} />{t("Aim")}</h2><div className="calm-settings-panel">
-      <RightStickSensitivity />
     </div></section>
     <section data-tone="violet" className="calm-settings-section"><h2><Vibrate size={15} />{t("Feel")}</h2><div className="calm-settings-panel">
       <CalmSwitch label="App vibration" on={p.gyroHaptic} onChange={p.setGyroHaptic}/>
@@ -131,14 +129,15 @@ export function CalmSettings(p:CalmSettingsProps) {
         <span className="calm-help-chevron" aria-hidden="true"><ChevronRight size={16} /></span>{t("More settings")}
       </button>
       <Collapse open={more} id={moreId}>
+        <section data-tone="blue" className="calm-settings-section"><h2><Crosshair size={15} />{t("Aim")}</h2><div className="calm-settings-panel">
+          <RightStickSensitivity />
+        </div></section>
         {p.gyroOn && <section data-tone="blue" className="calm-settings-section"><h2><Gauge size={15} />{t("Tilt steering")}</h2><div className="calm-settings-panel">
           <CalmSwitch label="Wheel mode" on={p.gyroWheel} onChange={p.setGyroWheel}/>
-          <Range label="Ignore small tilts" min={0} max={30} value={p.gyroDeadzone} onChange={p.setGyroDeadzone}/>
           <div className="calm-setting-detail"><h3>{t("Motion mode")}</h3><div className="calm-segment" role="group" aria-label={t("Motion mode")}>
             <button aria-pressed={p.gyroMode==="racing"} onClick={()=>p.setGyroMode("racing")}>{t("Racing")}</button>
             <button aria-pressed={p.gyroMode==="3d"} onClick={()=>p.setGyroMode("3d")}>{t("3D aim")}</button>
           </div></div>
-          {p.gyroMode==="racing" && <CalmSwitch label="Tilt throttle" on={p.gyroThrottle} onChange={p.setGyroThrottle}/>}
           <CalmSwitch label="Pause when laid flat" on={p.gyroIdleDetect} onChange={p.setGyroIdleDetect}/>
         </div></section>}
         <section className="calm-settings-section"><h2><Cpu size={15} />{t("Your device")}</h2><div className="calm-settings-panel"><div className="calm-setting-row"><div className="calm-grow"><span className="calm-setting-label">{t("Temperature")}</span></div><output className="calm-temperature">{temp>0?`${temp.toFixed(1)}°C`:t("Unavailable")}</output></div></div></section>
