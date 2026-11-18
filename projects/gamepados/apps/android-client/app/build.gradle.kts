@@ -295,8 +295,12 @@ android {
         //      no Arabic), Settings reorganised (most-used on top, the rest under More settings, Tilt throttle
         //      removed), Settings backed up to the account, Game rumble remembered, portal notifications in the
         //      player's language, the app language sent to the PC server in the NAME frame.
-        versionCode = 73
-        versionName = "2.1.0"
+        //      Uploaded to Play but replaced before review, so that number is spent.
+        // 74 = 2.1.1 (2026-11-19): 2.1.0 plus: "Don't share" in Google's sign-in sheet stays in the app (it opened
+        //      the browser), Wi-Fi hardware optional (Play warning), Spain-Spanish/Portugal-Portuguese text fixes,
+        //      drop-downs close on a softer curve (closing More settings while scrolled down jumped).
+        versionCode = 74
+        versionName = "2.1.1"
 
         // AdMob test IDs by default; the release build type swaps in the live ones (see top of file).
         buildConfigField("String", "ADMOB_REWARDED_ID", "\"$admobTestRewardedId\"")

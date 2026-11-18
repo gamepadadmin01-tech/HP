@@ -428,8 +428,11 @@
 /* ── 20. One kind of motion per kind of action (2026-11-08) ─────────────────────────────────────────────────────
    Motion.tsx. Drop-downs (Collapse): the row height eases open/closed (grid rows 0fr <-> 1fr) and the content
    fades, both 0.26 s on the app's ease. Swapped content (SwapIn): a quick 0.22 s fade-up. The browser runs these
-   itself, so they stay smooth in the phone's WebView. */
-.gp-shell .calm-collapse { display: grid; grid-template-rows: 0fr; opacity: 0; transition: grid-template-rows .26s cubic-bezier(.16, 1, .3, 1), opacity .18s ease; }
+   itself, so they stay smooth in the phone's WebView.
+   CLOSING has its own soft-in, soft-out curve (2026-11-19, owner report): closing while scrolled down makes the
+   whole page scroll back by the section's height (More settings: ~420 px), and on the opening curve most of that
+   happened in the first few frames, so it looked glitchy and fast. Opening is unchanged. */
+.gp-shell .calm-collapse { display: grid; grid-template-rows: 0fr; opacity: 0; transition: grid-template-rows .34s cubic-bezier(.45, 0, .2, 1), opacity .24s ease; }
 .gp-shell .calm-collapse[data-open='1'] { grid-template-rows: 1fr; opacity: 1; transition: grid-template-rows .26s cubic-bezier(.16, 1, .3, 1), opacity .22s ease .04s; }
 .gp-shell .calm-collapse-inner { overflow: hidden; min-height: 0; }
 .gp-shell .calm-swap-in { animation: calm-swap-in .22s cubic-bezier(.16, 1, .3, 1) both; }
