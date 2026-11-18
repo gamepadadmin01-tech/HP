@@ -37,7 +37,8 @@ const NOTICE_KINDS: NoticeActionKind[] = ["link", "plans", "connect", "settings"
 export type AppConfig = {
   ads: { available: boolean; message: string; network: "" | "admob" | "unity" };
   guest: { welcomeSeconds: number; adRewardSeconds: number; adCapSeconds: number; freeTime: FreeTimeConfig };
-  notice: { id: string; text: string; action?: NoticeAction } | null;
+  /** translations: the notice in other app languages (2.1; portal "Translate"), by language code. */
+  notice: { id: string; text: string; action?: NoticeAction; translations?: Record<string, { text: string; label?: string }> } | null;
   kill: { message: string; storeUrl: string } | null;
 };
 
@@ -80,6 +81,20 @@ function noticeAction(a: any): { action?: NoticeAction } {
   return { action: { kind: "link", label, url: url.slice(0, 400) } };
 }
 
+/** The notice in other languages (2.1): short plain strings per language code, anything else dropped. */
+function noticeTranslations(t: any): { translations?: Record<string, { text: string; label?: string }> } {
+  if (!t || typeof t !== "object" || Array.isArray(t)) return {};
+  const out: Record<string, { text: string; label?: string }> = {};
+  for (const [code, v] of Object.entries(t).slice(0, 30)) {
+    if (!/^[A-Za-z0-9-]{2,6}$/.test(code) || !v || typeof v !== "object") continue;
+    const text = str((v as any).text, 800);
+    if (!text) continue;
+    const label = str((v as any).label, 30);
+    out[code] = label ? { text, label } : { text };
+  }
+  return Object.keys(out).length ? { translations: out } : {};
+}
+
 function sanitize(raw: any): AppConfig {
   const d = DEFAULT_CONFIG;
   const g = raw?.guest ?? {};
@@ -107,7 +122,7 @@ function sanitize(raw: any): AppConfig {
       },
     },
     notice: n && typeof n.text === "string" && n.text.trim()
-      ? { id: str(n.id, 32) || "notice", text: str(n.text, 800), ...noticeAction(n.action) }
+      ? { id: str(n.id, 32) || "notice", text: str(n.text, 800), ...noticeAction(n.action), ...noticeTranslations(n.translations) }
       : null,
     kill: k && k.killed === true && typeof k.storeUrl === "string" && /^https:\/\//.test(k.storeUrl)
       ? { message: str(k.message, 600) || "This version is no longer supported. Please update to keep playing.", storeUrl: k.storeUrl }

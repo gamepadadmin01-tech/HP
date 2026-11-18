@@ -22,6 +22,7 @@ import { requestSignIn } from "../store/navIntent";
 import { adNetwork, getAppInfo, nativeCreditGuestFreeTime, openUrl } from "../platform/native";
 import { getInstallId } from "../feedback";
 import { KEYS, readString, writeString } from "../store/storage";
+import { useLang } from "../i18n";
 
 // Theme tokens (styles/calm-shell.css). Sheets render into <body>, so Sheet wraps them in a
 // .gp-shell element: these resolve exactly as on the page.
@@ -235,9 +236,14 @@ export function FreeTimeButton({ onSignIn }: { onSignIn?: () => void }) {
 
 export function NoticeBell({ onAction }: { onAction: (action: NoticeAction) => void }) {
   const cfg = useConfig();
+  const { lang } = useLang();
   const [open, setOpen] = useState(false);
   const [seen, setSeen] = useState(() => readString(KEYS.noticeSeen, ""));
-  const notice = cfg.notice;
+  // The notice in the app's language when the portal sent one (2.1), else the English the owner typed.
+  const tr = cfg.notice?.translations?.[lang];
+  const notice = cfg.notice && tr
+    ? { ...cfg.notice, text: tr.text, ...(cfg.notice.action ? { action: { ...cfg.notice.action, label: tr.label || cfg.notice.action.label } } : {}) }
+    : cfg.notice;
   const unread = !!notice && notice.id !== seen;
   const show = () => {
     setOpen(true);
