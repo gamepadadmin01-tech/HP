@@ -34,6 +34,7 @@ try {
  await shot('settings-dark');
  if(await p.$eval('[role="switch"][aria-labelledby]',e=>e.getAttribute('aria-checked')!=='true'))await p.click('[role="switch"][aria-labelledby]');await settle();
  assert.ok(await p.$('input[type="range"]'));
+ await p.click('[data-testid="more-settings"]');await settle();   // Wheel mode lives under More settings (2.1)
  await p.evaluate(()=>{const b=[...document.querySelectorAll('[role="switch"]')].find(b=>document.getElementById(b.getAttribute('aria-labelledby')).textContent==='Wheel mode');b.click()});await settle();
  assert.ok(await p.$('[aria-label="Wheel range"]'));
  await click('720°');assert.equal(await p.evaluate(()=>localStorage.getItem('gyro_wheel_range')),'720');

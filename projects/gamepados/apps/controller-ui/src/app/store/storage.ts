@@ -31,6 +31,7 @@ export const KEYS = {
   connectionMode: "gp_connection_mode",
   selectedLayout: "gp_selected_layout",
   dashboardTab: "gp_dashboard_tab",
+  language: "gp_language",            // "auto" (follow the phone) or a code from i18n.ts LANGS (2.1)
 
   // Motion
   gyroOn: "gyro_on",

@@ -513,3 +513,18 @@
 
 /* ── 29. The ad rule in small text under the play-time card (2026-11-10) ─────────────────────────────────────── */
 .gp-shell .calm-ad-note { margin: 8px 2px 0; font-size: 12px; line-height: 1.45; color: var(--calm-muted); }
+
+/* ── 21. Settings: Language row and "More settings" (2.1, 2026-11-18) ───────────────────────────────────────────
+   The Language row is a full-width button (label left, current language right, a chevron that turns like the
+   help drop-downs); the list opens under it with the shared Collapse. "More settings" uses the help toggle. */
+.gp-shell .calm-lang-row { width: 100%; text-align: left; background: transparent; border: 0; color: inherit; cursor: pointer; }
+.gp-shell .calm-lang-en { color: var(--calm-muted); font-size: 14px; }
+.gp-shell .calm-lang-value { flex: 0 1 auto; min-width: 0; font-size: 14px; color: var(--calm-muted); text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gp-shell .calm-lang-row[aria-expanded='true'] .calm-help-chevron { transform: rotate(90deg); }
+.gp-shell .calm-lang-list { display: flex; flex-direction: column; padding: 2px 0 8px; }
+.gp-shell .calm-lang-list button { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 48px; padding: 0 12px; border: 0; border-radius: 12px; background: transparent; color: var(--calm-ink); font-size: 16px; font-weight: 400; text-align: left; }
+.gp-shell .calm-lang-list button:active { background: var(--calm-soft); }
+.gp-shell .calm-lang-list button[aria-checked='true'] { color: var(--calm-accent); }
+.gp-shell .calm-more { margin-top: 24px; }
+.gp-shell .calm-more > .calm-collapse .calm-settings-section:first-child { margin-top: 4px; }
+.gp-shell .calm-lang-icon { flex: 0 0 auto; color: var(--calm-accent); }
