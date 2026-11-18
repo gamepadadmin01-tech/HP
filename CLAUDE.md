@@ -43,6 +43,13 @@ Full detail: **`context/INVENTORY.md`** (the folder map) and **`context/README.m
    graphics, videos and test builds go to `projects/gamepados/releases/<version>/` (or `test-builds/`,
    `releases/admin-app/`), all git-ignored. The one exception is the *installed* PC server
    (`D:\Gamepad Server\`), which is a program install, not a project file.
+10. **Every real release is archived — never a test build.** (Owner, 2026-11-18.) As soon as a version is built
+    for Google Play, run `python projects/gamepados/tools/archive-release.py <version> <code> --status "…"`. It makes
+    `releases/<date>_GamepadOS-<version>_code<code>/` with only the AAB, the Play mapping file, the website and
+    Uptodown APKs, `RELEASE.md` (date, status, exact commits, signing key, how to rebuild) and `SHA256SUMS.txt`;
+    tags the exact code (`gamepados-v<v>-code<c>` in HP, `app-v<v>-code<c>` in website); and adds a row to
+    `projects/gamepados/RELEASES.md`. Update the status row when Play approves or rejects. Remind him to push WITH
+    tags, and to attach the folder's files to a GitHub Release on that tag (the folder itself is not backed up).
 
 ## Folder map
 
