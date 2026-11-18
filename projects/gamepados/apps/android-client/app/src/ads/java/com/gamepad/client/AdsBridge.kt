@@ -302,8 +302,11 @@ open class AdsBridge(activity: MainActivity) : UpdaterBridgeBase(activity) {
                             // account re-verification ("[16] Account reauth failed.", the phone's Google
                             // account wants to be verified again) as a cancellation. That is not the person
                             // backing out, so it must use the browser, not say "cancelled".
+                            // Match the word "reauth" only, never the code "[16]": 16 is Google's code for
+                            // EVERY cancel, so "Don't share" on the consent sheet ("[16] Cancelled by user")
+                            // was opening the browser (owner report, 2026-11-19).
                             val text = e.message.orEmpty()
-                            val reauth = text.contains("reauth", ignoreCase = true) || text.contains("[16]")
+                            val reauth = text.contains("reauth", ignoreCase = true)
                             reportGoogle(error = if (e is GetCredentialCancellationException && !reauth) "cancelled" else "unavailable",
                                 detail = e.javaClass.simpleName + " / " + e.type + " / " + e.message)
                         }
