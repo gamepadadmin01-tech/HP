@@ -51,8 +51,6 @@ Input kontroler kamu langsung dikirim dari HP ke PC lewat jaringan atau kabel mi
 • Emulator dan semua game PC yang mendukung kontroler.
 • Game balap, aksi, olahraga, fighting, dan platformer.
 
-Catatan: untuk saat ini aplikasinya masih berbahasa Inggris. Bahasa Indonesia akan hadir di pembaruan berikutnya.
-
 Butuh bantuan? Kunjungi gamepad.space/support atau pakai menu Kontak di aplikasi. Kami membalas setiap pesan.
 
 GamepadOS: ubah HP kamu jadi gamepad untuk PC.

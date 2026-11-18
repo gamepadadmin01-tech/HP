@@ -1,6 +1,6 @@
 # Google Play listing — Italian (it-IT) — GamepadOS 2.0
 
-Play Console → Store listings → language it-IT. The app is English until 2.1, so the listing says so.
+Play Console → Store listings → language it-IT. Since 2.1 the app speaks this language too (except Arabic), so the listing names its buttons as the app shows them.
 
 ## App name (30 max)
 
@@ -22,7 +22,7 @@ Trasforma il telefono in un controller per PC. GamepadOS rende il tuo telefono A
 ★ BASSA LATENZA, WI-FI O USB
 • Modalità USB per la latenza più bassa, appena pochi millisecondi.
 • Modalità Wi-Fi per giocare senza cavi. Il Wi-Fi a 5 GHz risponde meglio.
-• Connessione stabile e aiuto chiaro: se il PC non risponde, tocca "See why?" per vedere le cause più probabili, in ordine.
+• Connessione stabile e aiuto chiaro: se il PC non risponde, tocca "Perché?" per vedere le cause più probabili, in ordine.
 
 ★ UN VERO CONTROLLER NEL TELEFONO
 • Levette analogiche, grilletti, dorsali, croce direzionale e tasti azione, disposti come su un controller da console.
@@ -41,7 +41,7 @@ Trasforma il telefono in un controller per PC. GamepadOS rende il tuo telefono A
 Collega fino a quattro telefoni a un solo PC. Ogni telefono è un controller separato, dal Giocatore 1 al 4, per il multiplayer locale e la co-op sul divano.
 
 ★ GRATIS PER INIZIARE
-GamepadOS si scarica gratis e ogni giocatore parte con tempo di gioco gratuito, senza bisogno di account. Guarda una breve pubblicità per avere più tempo quando vuoi, oppure prendi "Lifetime" per giocare senza limiti, con un unico pagamento su Google Play. Le pubblicità compaiono solo quando tocchi per guardarne una.
+GamepadOS si scarica gratis e ogni giocatore parte con tempo di gioco gratuito, senza bisogno di account. Guarda una breve pubblicità per avere più tempo quando vuoi, oppure prendi "A vita" per giocare senza limiti, con un unico pagamento su Google Play. Le pubblicità compaiono solo quando tocchi per guardarne una.
 
 ★ PRIVACY PRIMA DI TUTTO
 I tuoi comandi vanno direttamente dal telefono al PC, tramite la tua rete o il tuo cavo. Non passano mai dai nostri server.
@@ -50,8 +50,6 @@ I tuoi comandi vanno direttamente dal telefono al PC, tramite la tua rete o il t
 • PC con Windows 10 e Windows 11 e il Gamepad Server gratuito.
 • Emulatori e qualsiasi gioco per PC che supporta un controller.
 • Giochi di corse, azione, sport, picchiaduro e platform.
-
-Nota: per ora l'app è in inglese. L'italiano arriverà con un prossimo aggiornamento.
 
 Serve aiuto? Visita gamepad.space/support o usa Contact nell'app. Rispondiamo a ogni messaggio.
 

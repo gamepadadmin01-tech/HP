@@ -1,6 +1,6 @@
 # Google Play listing — Korean (ko-KR) — GamepadOS 2.0
 
-Play Console → Store listings → language ko-KR. The app is English until 2.1, so the listing says so.
+Play Console → Store listings → language ko-KR. Since 2.1 the app speaks this language too (except Arabic), so the listing names its buttons as the app shows them.
 
 ## App name (30 max)
 
@@ -22,7 +22,7 @@ Gamepad: 폰을 PC 게임패드로
 ★ 짧은 지연 시간, Wi-Fi 또는 USB
 • USB 모드는 지연 시간이 가장 짧아 몇 밀리초 수준입니다.
 • Wi-Fi 모드로 선 없이 자유롭게 플레이하세요. 5GHz Wi-Fi에서 반응이 가장 좋습니다.
-• 안정적인 연결과 친절한 도움말: PC가 응답하지 않으면 "See why?"를 눌러 가능성이 높은 원인을 순서대로 확인하세요.
+• 안정적인 연결과 친절한 도움말: PC가 응답하지 않으면 "원인 보기"를 눌러 가능성이 높은 원인을 순서대로 확인하세요.
 
 ★ 휴대폰 속 진짜 컨트롤러
 • 아날로그 스틱, 트리거, 범퍼, 방향 패드, 액션 버튼을 콘솔 게임패드처럼 배치했습니다.
@@ -41,7 +41,7 @@ Gamepad: 폰을 PC 게임패드로
 PC 한 대에 휴대폰을 최대 4대까지 연결할 수 있습니다. 휴대폰마다 독립된 게임패드(플레이어 1~4)가 되어 로컬 멀티플레이와 협동 게임을 즐길 수 있습니다.
 
 ★ 무료로 시작
-GamepadOS는 무료로 다운로드할 수 있으며, 모든 플레이어가 계정 없이 무료 플레이 시간으로 시작합니다. 원할 때 짧은 광고를 보고 시간을 더 받거나, "Lifetime"을 구매해 Google Play에서 한 번 결제로 무제한 플레이하세요. 광고는 직접 눌러 볼 때만 나옵니다.
+GamepadOS는 무료로 다운로드할 수 있으며, 모든 플레이어가 계정 없이 무료 플레이 시간으로 시작합니다. 원할 때 짧은 광고를 보고 시간을 더 받거나, "평생 이용권"을 구매해 Google Play에서 한 번 결제로 무제한 플레이하세요. 광고는 직접 눌러 볼 때만 나옵니다.
 
 ★ 개인정보 보호
 컨트롤러 입력은 내 네트워크나 케이블을 통해 휴대폰에서 PC로 바로 전달됩니다. 저희 서버를 거치지 않습니다.
@@ -50,8 +50,6 @@ GamepadOS는 무료로 다운로드할 수 있으며, 모든 플레이어가 계
 • 무료 Gamepad Server를 설치한 Windows 10, Windows 11 PC.
 • 에뮬레이터 및 게임 컨트롤러를 지원하는 모든 PC 게임.
 • 레이싱, 액션, 스포츠, 격투, 플랫포머 게임.
-
-참고: 현재 앱은 영어로 제공됩니다. 한국어는 다음 업데이트에서 지원될 예정입니다.
 
 도움이 필요하신가요? gamepad.space/support를 방문하거나 앱의 Contact 메뉴를 이용하세요. 모든 메시지에 답장해 드립니다.
 

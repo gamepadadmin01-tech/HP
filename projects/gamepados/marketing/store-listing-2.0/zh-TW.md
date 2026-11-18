@@ -1,6 +1,6 @@
 # Google Play listing — Chinese (Traditional) (zh-TW) — GamepadOS 2.0
 
-Play Console → Store listings → language zh-TW. The app is English until 2.1, so the listing says so.
+Play Console → Store listings → language zh-TW. Since 2.1 the app speaks this language too (except Arabic), so the listing names its buttons as the app shows them.
 
 ## App name (30 max)
 
@@ -22,7 +22,7 @@ Gamepad：手機變電腦遊戲手把
 ★ 低延遲，Wi-Fi 或 USB
 • USB 模式延遲最低，只有幾毫秒。
 • Wi-Fi 模式擺脫線材束縛。5 GHz Wi-Fi 反應最好。
-• 連線穩定，說明清楚：如果電腦沒有回應，點「See why?」即可依序查看最可能的原因。
+• 連線穩定，說明清楚：如果電腦沒有回應，點「查看原因」即可依序查看最可能的原因。
 
 ★ 真正的手機手把
 • 類比搖桿、扳機鍵、肩鍵、十字鍵與動作按鍵，配置就像遊戲主機手把。
@@ -41,7 +41,7 @@ Gamepad：手機變電腦遊戲手把
 最多四支手機可連接同一台電腦。每支手機都是獨立的手把，玩家 1 到 4，適合本機多人與同樂合作遊戲。
 
 ★ 免費開始
-GamepadOS 可免費下載，每位玩家一開始就有免費遊玩時間，不需帳號。想要更多時間時，隨時觀看一則短廣告；或購買「Lifetime」無限暢玩，透過 Google Play 一次付清。只有在你點選觀看時才會出現廣告。
+GamepadOS 可免費下載，每位玩家一開始就有免費遊玩時間，不需帳號。想要更多時間時，隨時觀看一則短廣告；或購買「永久版」無限暢玩，透過 Google Play 一次付清。只有在你點選觀看時才會出現廣告。
 
 ★ 重視隱私
 你的手把操作會直接從手機傳到電腦，透過你自己的網路或傳輸線，絕不經過我們的伺服器。
@@ -50,8 +50,6 @@ GamepadOS 可免費下載，每位玩家一開始就有免費遊玩時間，不�
 • 安裝免費 Gamepad Server 的 Windows 10 與 Windows 11 電腦。
 • 模擬器，以及任何支援遊戲手把的電腦遊戲。
 • 賽車、動作、運動、格鬥與平台遊戲。
-
-注意：App 目前為英文介面，中文版將在後續更新中推出。
 
 需要協助嗎？請前往 gamepad.space/support，或使用 App 內的「Contact」。每則訊息我們都會回覆。
 

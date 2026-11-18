@@ -672,12 +672,39 @@ ORDER_OLD = [('zh-CN', 'Chinese (Simplified)'), ('ja-JP', 'Japanese'), ('pt-BR',
              ('es-419', 'Spanish (Latin America)'), ('id', 'Indonesian'), ('hi-IN', 'Hindi')]
 
 
-def with_note(full, note):
-    """Put the note just before the 'Need help?' paragraph (the second-to-last paragraph); only once."""
-    if note in full: return full
+import json
+
+# 2.1 (2026-11-18): the app itself now speaks every listing language except Arabic. The "app is in English for now"
+# note stays only where the app still is English (Arabic); everywhere else it is taken out, and buttons are named by
+# the words the app really shows ("See why?" -> the app's translation, "Lifetime" -> the app's translation).
+APP_TRANSLATED = True
+APP_LOCALES = os.path.join(HERE, '..', '..', 'apps', 'controller-ui', 'src', 'app', 'i18n', 'locales')
+OLD_SEE_WHY = {'ja-JP': '原因を見る', 'hi-IN': 'कारण देखें'}   # words the first listings guessed before the app had them
+
+
+def with_note(full, note, code=''):
+    """Put the note just before the 'Need help?' paragraph (the second-to-last paragraph); only once.
+    After 2.1 it is removed instead, except for languages the app does not speak (Arabic)."""
     paras = full.strip().split('\n\n')
+    if APP_TRANSLATED and code != 'ar':
+        return '\n\n'.join(p for p in paras if p != note)
+    if note in full: return full
     paras.insert(len(paras) - 2, note)
     return '\n\n'.join(paras)
+
+
+def app_words(code, full):
+    """Name buttons and plans by the words the app shows in that language."""
+    p = os.path.join(APP_LOCALES, f'{code}.json')
+    if not APP_TRANSLATED or not os.path.exists(p): return full
+    d = json.load(open(p, encoding='utf-8'))
+    see_why, lifetime = d.get('See why?'), d.get('Lifetime')
+    if see_why:
+        full = full.replace('See why?', see_why)
+        if code in OLD_SEE_WHY: full = full.replace(OLD_SEE_WHY[code], see_why)
+    if lifetime:
+        full = re.sub(r'(["“„«「])Lifetime(["”“»」])', lambda m: m.group(1) + lifetime + m.group(2), full)
+    return full
 
 
 def read_md(code):
@@ -690,7 +717,7 @@ def read_md(code):
 
 def write_md(code, name, app, short, full):
     s = (f'# Google Play listing — {name} ({code}) — GamepadOS 2.0\n\n'
-         f'Play Console → Store listings → language {code}. The app is English until 2.1, so the listing says so.\n\n'
+         f'Play Console → Store listings → language {code}. Since 2.1 the app speaks this language too (except Arabic), so the listing names its buttons as the app shows them.\n\n'
          f'## App name (30 max)\n\n{app}\n\n## Short description (80 max)\n\n{short}\n\n## Full description (4000 max)\n\n{full}\n')
     open(os.path.join(HERE, f'{code}.md'), 'w', encoding='utf-8', newline='\n').write(s)
 
@@ -698,13 +725,13 @@ def write_md(code, name, app, short, full):
 rows = []
 for code, name in ORDER_OLD:
     head, f = read_md(code)
-    full = with_note(f['Full description'], NOTES[code])
+    full = app_words(code, with_note(f['Full description'], NOTES[code], code))
     s = (head.rstrip() + '\n\n' + f"## App name (30 max)\n\n{f['App name']}\n\n## Short description (80 max)\n\n{f['Short description']}\n\n"
          f"## Full description (4000 max)\n\n{full}\n")
     open(os.path.join(HERE, f'{code}.md'), 'w', encoding='utf-8', newline='\n').write(s)
     rows.append((code, name, f['App name'], f['Short description'], full))
 for code, (name, app, short, full, note) in NEW.items():
-    full = with_note(full, note)
+    full = app_words(code, with_note(full, note, code))
     write_md(code, name, app, short, full)
     rows.append((code, name, app, short, full))
 
@@ -720,6 +747,7 @@ out = ['GamepadOS - Google Play store listing translations (written by the devel
 for code, name, app, short, full in rows:
     out += ['=' * 60, f'LANGUAGE: {name} - {code}', '=' * 60, '', 'App name:', app, '', 'Short description:', short, '',
             'Full description:', full, '', '']
-p = os.path.join(HERE, '..', '..', 'releases', '2.0.0', 'play-store-graphics', 'play-translations-20-languages.txt')
+os.makedirs(os.path.join(HERE, '..', '..', 'releases', '2.1.0'), exist_ok=True)
+p = os.path.join(HERE, '..', '..', 'releases', '2.1.0', 'play-translations-20-languages-2.1.txt')
 open(p, 'w', encoding='utf-8-sig', newline='\r\n').write('\n'.join(out))
 print(p, len(rows), 'languages')

@@ -1,6 +1,6 @@
 # Google Play listing — French (fr-FR) — GamepadOS 2.0
 
-Play Console → Store listings → language fr-FR. The app is English until 2.1, so the listing says so.
+Play Console → Store listings → language fr-FR. Since 2.1 the app speaks this language too (except Arabic), so the listing names its buttons as the app shows them.
 
 ## App name (30 max)
 
@@ -22,7 +22,7 @@ Transformez votre téléphone en manette pour PC. GamepadOS fait de votre télé
 ★ FAIBLE LATENCE, WI-FI OU USB
 • Mode USB pour la latence la plus faible, quelques millisecondes à peine.
 • Mode Wi-Fi pour jouer sans câble. Le Wi-Fi 5 GHz offre la meilleure réactivité.
-• Connexion stable et aide claire : si votre PC ne répond pas, appuyez sur « See why? » pour voir les causes les plus probables, dans l'ordre.
+• Connexion stable et aide claire : si votre PC ne répond pas, appuyez sur « Pourquoi ? » pour voir les causes les plus probables, dans l'ordre.
 
 ★ UNE VRAIE MANETTE DANS VOTRE TÉLÉPHONE
 • Sticks analogiques, gâchettes, boutons de tranche, croix directionnelle et boutons d'action, disposés comme sur une manette de console.
@@ -50,8 +50,6 @@ Vos commandes vont directement du téléphone au PC, par votre propre réseau ou
 • Les PC Windows 10 et Windows 11 équipés du Gamepad Server gratuit.
 • Les émulateurs et tous les jeux PC compatibles manette.
 • Jeux de course, d'action, de sport, de combat et de plateforme.
-
-Remarque : l'application est en anglais pour le moment. Le français arrivera dans une prochaine mise à jour.
 
 Besoin d'aide ? Rendez-vous sur gamepad.space/support ou utilisez Contact dans l'application. Nous répondons à chaque message.
 

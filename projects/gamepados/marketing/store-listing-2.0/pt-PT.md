@@ -1,6 +1,6 @@
 # Google Play listing — Portuguese (Portugal) (pt-PT) — GamepadOS 2.0
 
-Play Console → Store listings → language pt-PT. The app is English until 2.1, so the listing says so.
+Play Console → Store listings → language pt-PT. Since 2.1 the app speaks this language too (except Arabic), so the listing names its buttons as the app shows them.
 
 ## App name (30 max)
 
@@ -22,7 +22,7 @@ Transforme o seu telemóvel num comando para PC. O GamepadOS faz do seu telemóv
 ★ BAIXA LATÊNCIA, WI-FI OU USB
 • Modo USB para a latência mais baixa, de apenas alguns milissegundos.
 • Modo Wi-Fi para jogar sem cabos. O Wi-Fi de 5 GHz responde melhor.
-• Ligação estável e ajuda clara: se o PC não responder, toque em "See why?" para ver as causas mais prováveis, por ordem.
+• Ligação estável e ajuda clara: se o PC não responder, toque em "Ver por quê?" para ver as causas mais prováveis, por ordem.
 
 ★ UM COMANDO A SÉRIO NO TELEMÓVEL
 • Manípulos analógicos, gatilhos, botões de ombro, direcional e botões de ação, com a disposição de um comando de consola.
@@ -41,7 +41,7 @@ Transforme o seu telemóvel num comando para PC. O GamepadOS faz do seu telemóv
 Ligue até quatro telemóveis a um PC. Cada telemóvel é um comando independente, do Jogador 1 ao 4, para multijogador local e cooperativo no sofá.
 
 ★ GRÁTIS PARA COMEÇAR
-O GamepadOS é gratuito para transferir, e cada jogador começa com tempo de jogo grátis, sem precisar de conta. Veja um anúncio curto para ganhar mais tempo quando quiser, ou obtenha o "Lifetime" para jogar sem limites, com um único pagamento no Google Play. Os anúncios só aparecem quando toca para os ver.
+O GamepadOS é gratuito para transferir, e cada jogador começa com tempo de jogo grátis, sem precisar de conta. Veja um anúncio curto para ganhar mais tempo quando quiser, ou obtenha o "Vitalício" para jogar sem limites, com um único pagamento no Google Play. Os anúncios só aparecem quando toca para os ver.
 
 ★ PRIVACIDADE EM PRIMEIRO LUGAR
 Os comandos que faz vão diretamente do telemóvel para o PC, pela sua própria rede ou cabo. Nunca passam pelos nossos servidores.
@@ -50,8 +50,6 @@ Os comandos que faz vão diretamente do telemóvel para o PC, pela sua própria 
 • PCs com Windows 10 e Windows 11 com o Gamepad Server gratuito.
 • Emuladores e qualquer jogo de PC compatível com comando.
 • Jogos de corridas, ação, desporto, luta e plataformas.
-
-Nota: de momento a app está em inglês. O português chega numa próxima atualização.
 
 Precisa de ajuda? Visite gamepad.space/support ou use Contacto na app. Respondemos a todas as mensagens.
 

@@ -1,6 +1,6 @@
 # Google Play listing — Vietnamese (vi) — GamepadOS 2.0
 
-Play Console → Store listings → language vi. The app is English until 2.1, so the listing says so.
+Play Console → Store listings → language vi. Since 2.1 the app speaks this language too (except Arabic), so the listing names its buttons as the app shows them.
 
 ## App name (30 max)
 
@@ -22,7 +22,7 @@ Biến điện thoại thành tay cầm chơi game PC. GamepadOS biến điện 
 ★ ĐỘ TRỄ THẤP, WI-FI HOẶC USB
 • Chế độ USB cho độ trễ thấp nhất, chỉ vài mili giây.
 • Chế độ Wi-Fi để chơi không cần dây. Wi-Fi 5 GHz cho phản hồi tốt nhất.
-• Kết nối ổn định, hướng dẫn rõ ràng: nếu máy tính không phản hồi, chạm "See why?" để xem các nguyên nhân có khả năng nhất, theo thứ tự.
+• Kết nối ổn định, hướng dẫn rõ ràng: nếu máy tính không phản hồi, chạm "Xem lý do?" để xem các nguyên nhân có khả năng nhất, theo thứ tự.
 
 ★ TAY CẦM THẬT TRÊN ĐIỆN THOẠI
 • Cần analog, cò, nút vai, D-pad và các nút hành động, bố trí như tay cầm máy chơi game.
@@ -41,7 +41,7 @@ Biến điện thoại thành tay cầm chơi game PC. GamepadOS biến điện 
 Kết nối tối đa bốn điện thoại với một máy tính. Mỗi điện thoại là một tay cầm riêng, Người chơi 1 đến 4, cho game nhiều người chơi tại chỗ và co-op.
 
 ★ MIỄN PHÍ ĐỂ BẮT ĐẦU
-GamepadOS tải về miễn phí, và mỗi người chơi được thời gian chơi miễn phí ngay từ đầu, không cần tài khoản. Xem một quảng cáo ngắn để có thêm thời gian bất cứ lúc nào, hoặc mua "Lifetime" để chơi không giới hạn, thanh toán một lần qua Google Play. Quảng cáo chỉ xuất hiện khi bạn chạm để xem.
+GamepadOS tải về miễn phí, và mỗi người chơi được thời gian chơi miễn phí ngay từ đầu, không cần tài khoản. Xem một quảng cáo ngắn để có thêm thời gian bất cứ lúc nào, hoặc mua "Trọn đời" để chơi không giới hạn, thanh toán một lần qua Google Play. Quảng cáo chỉ xuất hiện khi bạn chạm để xem.
 
 ★ TÔN TRỌNG QUYỀN RIÊNG TƯ
 Thao tác của bạn đi thẳng từ điện thoại đến máy tính qua mạng hoặc cáp của chính bạn. Không bao giờ đi qua máy chủ của chúng tôi.
@@ -50,8 +50,6 @@ Thao tác của bạn đi thẳng từ điện thoại đến máy tính qua m�
 • Máy tính Windows 10 và Windows 11 có Gamepad Server miễn phí.
 • Trình giả lập và mọi game PC hỗ trợ tay cầm.
 • Game đua xe, hành động, thể thao, đối kháng và đi cảnh.
-
-Lưu ý: hiện tại ứng dụng đang dùng tiếng Anh. Tiếng Việt sẽ có trong một bản cập nhật sắp tới.
 
 Cần hỗ trợ? Truy cập gamepad.space/support hoặc dùng mục Contact trong ứng dụng. Chúng tôi trả lời mọi tin nhắn.
 

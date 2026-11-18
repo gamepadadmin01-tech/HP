@@ -1,6 +1,6 @@
 # Google Play listing — Polish (pl-PL) — GamepadOS 2.0
 
-Play Console → Store listings → language pl-PL. The app is English until 2.1, so the listing says so.
+Play Console → Store listings → language pl-PL. Since 2.1 the app speaks this language too (except Arabic), so the listing names its buttons as the app shows them.
 
 ## App name (30 max)
 
@@ -22,7 +22,7 @@ Zamień telefon w pada do PC. GamepadOS zmienia Twój telefon z Androidem w kont
 ★ NISKIE OPÓŹNIENIE, WI-FI LUB USB
 • Tryb USB – najniższe opóźnienie, zaledwie kilka milisekund.
 • Tryb Wi-Fi – granie bez kabli. Najlepiej reaguje Wi-Fi 5 GHz.
-• Stabilne połączenie i jasna pomoc: jeśli komputer nie odpowiada, dotknij „See why?”, aby zobaczyć najbardziej prawdopodobne przyczyny po kolei.
+• Stabilne połączenie i jasna pomoc: jeśli komputer nie odpowiada, dotknij „Dlaczego?”, aby zobaczyć najbardziej prawdopodobne przyczyny po kolei.
 
 ★ PRAWDZIWY PAD W TELEFONIE
 • Gałki analogowe, spusty, bumpery, krzyżak i przyciski akcji w układzie pada konsolowego.
@@ -41,7 +41,7 @@ Zamień telefon w pada do PC. GamepadOS zmienia Twój telefon z Androidem w kont
 Podłącz do czterech telefonów do jednego komputera. Każdy telefon to osobny pad, Gracz 1–4, do lokalnego multiplayera i kooperacji na kanapie.
 
 ★ ZACZNIJ ZA DARMO
-GamepadOS można pobrać za darmo, a każdy gracz zaczyna z darmowym czasem gry, bez zakładania konta. Obejrzyj krótką reklamę, aby dostać więcej czasu, kiedy chcesz, albo kup „Lifetime”, aby grać bez limitu – jedna płatność przez Google Play. Reklamy pojawiają się tylko wtedy, gdy sam dotkniesz, aby je obejrzeć.
+GamepadOS można pobrać za darmo, a każdy gracz zaczyna z darmowym czasem gry, bez zakładania konta. Obejrzyj krótką reklamę, aby dostać więcej czasu, kiedy chcesz, albo kup „Dożywotni”, aby grać bez limitu – jedna płatność przez Google Play. Reklamy pojawiają się tylko wtedy, gdy sam dotkniesz, aby je obejrzeć.
 
 ★ PRYWATNOŚĆ PRZEDE WSZYSTKIM
 Twoje sterowanie trafia prosto z telefonu do komputera przez Twoją sieć lub kabel. Nigdy nie przechodzi przez nasze serwery.
@@ -50,8 +50,6 @@ Twoje sterowanie trafia prosto z telefonu do komputera przez Twoją sieć lub ka
 • Komputerami z Windows 10 i Windows 11 z darmowym Gamepad Server.
 • Emulatorami i każdą grą na PC obsługującą kontroler.
 • Wyścigami, grami akcji, sportowymi, bijatykami i platformówkami.
-
-Uwaga: aplikacja jest na razie po angielsku. Język polski pojawi się w jednej z kolejnych aktualizacji.
 
 Potrzebujesz pomocy? Odwiedź gamepad.space/support lub użyj opcji Contact w aplikacji. Odpowiadamy na każdą wiadomość.
 

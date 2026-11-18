@@ -1,6 +1,6 @@
 # Google Play listing — Arabic (ar) — GamepadOS 2.0
 
-Play Console → Store listings → language ar. The app is English until 2.1, so the listing says so.
+Play Console → Store listings → language ar. Since 2.1 the app speaks this language too (except Arabic), so the listing names its buttons as the app shows them.
 
 ## App name (30 max)
 

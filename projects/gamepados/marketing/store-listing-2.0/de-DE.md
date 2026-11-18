@@ -1,6 +1,6 @@
 # Google Play listing — German (de-DE) — GamepadOS 2.0
 
-Play Console → Store listings → language de-DE. The app is English until 2.1, so the listing says so.
+Play Console → Store listings → language de-DE. Since 2.1 the app speaks this language too (except Arabic), so the listing names its buttons as the app shows them.
 
 ## App name (30 max)
 
@@ -22,7 +22,7 @@ Mach dein Handy zum PC-Gamepad. GamepadOS verwandelt dein Android-Handy in einen
 ★ GERINGE LATENZ, WLAN ODER USB
 • USB-Modus für die geringste Latenz, nur wenige Millisekunden.
 • WLAN-Modus für Freiheit ohne Kabel. 5-GHz-WLAN reagiert am besten.
-• Stabile Verbindung und klare Hilfe: Antwortet dein PC nicht, tippe auf „See why?“ und sieh die wahrscheinlichsten Ursachen der Reihe nach.
+• Stabile Verbindung und klare Hilfe: Antwortet dein PC nicht, tippe auf „Warum?“ und sieh die wahrscheinlichsten Ursachen der Reihe nach.
 
 ★ EIN ECHTER CONTROLLER AUF DEM HANDY
 • Analogsticks, Trigger, Schultertasten, Steuerkreuz und Aktionstasten, angeordnet wie bei einem Konsolen-Gamepad.
@@ -50,8 +50,6 @@ Deine Eingaben gehen direkt vom Handy zum PC, über dein eigenes Netzwerk oder K
 • PCs mit Windows 10 und Windows 11 und dem kostenlosen Gamepad Server.
 • Emulatoren und jedem PC-Spiel, das einen Game-Controller unterstützt.
 • Renn-, Action-, Sport-, Kampf- und Jump-’n’-Run-Spielen.
-
-Hinweis: Die App ist vorerst auf Englisch. Deutsch kommt mit einem der nächsten Updates.
 
 Brauchst du Hilfe? Besuche gamepad.space/support oder nutze Contact in der App. Wir beantworten jede Nachricht.
 

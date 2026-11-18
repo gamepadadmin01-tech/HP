@@ -51,8 +51,6 @@ Os comandos do controle vão direto do celular para o PC, pela sua própria rede
 • Emuladores e qualquer jogo de PC que aceite controle.
 • Jogos de corrida, ação, esporte, luta e plataforma.
 
-Observação: por enquanto o app está em inglês. O português chega em uma próxima atualização.
-
 Precisa de ajuda? Acesse gamepad.space/support ou use Contato no app. Respondemos todas as mensagens.
 
 GamepadOS: transforme seu celular em um controle para PC.

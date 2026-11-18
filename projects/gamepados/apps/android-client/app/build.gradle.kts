@@ -289,8 +289,14 @@ android {
         //      of 1.4.17 plus: the Google Play build asks for a rating with Google's own in-app card (stars go
         //      straight to the Play listing) instead of our popup; same rare, after-a-real-session timing. Outside
         //      India, the website/Uptodown builds show "Lifetime on Google Play" (server-driven, already in 1.4.17).
-        versionCode = 72
-        versionName = "2.0.0"
+        //      72 was REJECTED on Google Play (2026-11-18, Families ad rules; fixed by setting the audience to 13+),
+        //      so that number is spent.
+        // 73 = 2.1.0 (2026-11-18): the whole app in 19 languages (Settings → Language, Automatic follows the phone;
+        //      no Arabic), Settings reorganised (most-used on top, the rest under More settings, Tilt throttle
+        //      removed), Settings backed up to the account, Game rumble remembered, portal notifications in the
+        //      player's language, the app language sent to the PC server in the NAME frame.
+        versionCode = 73
+        versionName = "2.1.0"
 
         // AdMob test IDs by default; the release build type swaps in the live ones (see top of file).
         buildConfigField("String", "ADMOB_REWARDED_ID", "\"$admobTestRewardedId\"")
