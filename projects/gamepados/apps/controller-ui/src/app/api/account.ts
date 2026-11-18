@@ -47,12 +47,17 @@ function deadline(ms: number) {
   return { signal: c.signal, clear: () => clearTimeout(t) };
 }
 
-async function request<T>(path: string, body?: unknown, token?: string): Promise<T> {
+export type ApiRequest = { method?: "GET" | "POST"; body?: unknown; token?: string };
+
+/** The one way the app calls the GamepadOS server (accounts here, billing in api/billing.ts).
+ *  Every failure becomes an ApiError with a message safe to show; a failed reply also rides along
+ *  as `payload`, because billing reads fields such as resetsAt and deviceLabel from it. */
+export async function apiFetch<T>(url: string, { method, body, token }: ApiRequest = {}): Promise<T> {
   let res: Response;
   const d = deadline(REQUEST_TIMEOUT_MS);
   try {
-    res = await fetch(`${BASE}${path}`, {
-      method: body === undefined ? "GET" : "POST",
+    res = await fetch(url, {
+      method: method || (body === undefined ? "GET" : "POST"),
       headers: {
         ...(body === undefined ? {} : { "Content-Type": "application/json" }),
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -62,7 +67,8 @@ async function request<T>(path: string, body?: unknown, token?: string): Promise
       signal: d.signal,
     });
   } catch (e) {
-    // Offline, DNS, TLS, or a server that never answered — never a silent failure.
+    // Offline, DNS, TLS, or a server that never answered: never a silent failure. The timeout is named
+    // separately, because "check your connection" is wrong advice when the server simply never answered.
     throw new ApiError(
       (e as { name?: string } | null)?.name === "AbortError"
         ? "GamepadOS took too long to respond. Try again in a moment."
@@ -81,12 +87,20 @@ async function request<T>(path: string, body?: unknown, token?: string): Promise
   }
 
   if (!res.ok || !payload?.success) {
-    throw new ApiError(
+    // Quota exhaustion and "already playing elsewhere" are ordinary states, not faults, so their code
+    // travels intact for the caller to branch on.
+    const err = new ApiError(
       payload?.error || `Something went wrong (${res.status}).`,
       payload?.code || String(res.status),
     );
+    (err as ApiError & { payload?: unknown }).payload = payload;
+    throw err;
   }
   return payload as T;
+}
+
+function request<T>(path: string, body?: unknown, token?: string): Promise<T> {
+  return apiFetch<T>(`${BASE}${path}`, { body, token });
 }
 
 export function register(email: string, password: string, displayName: string) {

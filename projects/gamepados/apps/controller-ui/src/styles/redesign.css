@@ -217,15 +217,12 @@
 .gp-shell .calm-lay-step { padding: 24px 20px; }
 .gp-shell .calm-lay-head { margin-bottom: 12px; }
 .gp-shell .calm-lay-title { font: 500 22px var(--calm-body); letter-spacing: 0; }
-.gp-shell .calm-lay-sub { margin-top: 4px; font-size: 14px; }
 .gp-shell .calm-lay-iconbtn { width: 44px; height: 44px; background: transparent; border: 0; color: var(--calm-ink); }
 .gp-shell .calm-lay-list { gap: 0; }
 .gp-shell .calm-lay-option { padding: 14px 4px; gap: 16px; border: 0; border-radius: 12px; background: transparent; }
 .gp-shell .calm-lay-option:active { background: var(--calm-soft); border-color: transparent; }
-.gp-shell .calm-lay-option-icon { width: 24px; height: 24px; background: transparent; color: var(--calm-accent); }
 .gp-shell .calm-lay-option strong { font-size: 16px; font-weight: 500; }
 .gp-shell .calm-lay-option small { margin-top: 4px; font-size: 14px; line-height: 1.45; }
-.gp-shell .calm-lay-label { font-size: 14px; font-weight: 500; color: var(--calm-ink); }
 .gp-shell .calm-lay-input { min-height: 56px; padding: 0 16px; border-radius: 8px; border: 1px solid var(--calm-line); background: transparent; font-weight: 400; }
 .gp-shell .calm-lay-code { letter-spacing: .2em; }
 .gp-shell .calm-lay-primary { display: block; width: auto; min-width: 60%; margin: 24px auto 0; padding: 0 28px; border-radius: 999px; color: var(--calm-on-accent); font: 500 15px var(--calm-body); letter-spacing: 0; }
@@ -420,15 +417,12 @@
 .gp-shell :is(.calm-primary, .calm-secondary, .calm-text-button, .calm-create-layout, .calm-notice-bell, .calm-account-shortcut) { transition: background-color .2s ease, border-color .2s ease, color .2s ease; }
 
 /* ── 19. Create-a-layout pop-up, compact list (2026-11-08) ──────────────────────────────────────────────────────
-   Names only (no descriptions), 52 dp rows, a chevron on the right; the card's height eases between steps
-   (.calm-lay-viewport, animated in LayoutDialog.tsx) and steps slide over each other while it does. */
-.gp-shell .calm-lay-viewport { overflow: hidden; }
+   Names only (no descriptions), 52 dp rows. */
 .gp-shell .calm-lay-step { padding: 20px 16px 18px; }
 .gp-shell .calm-lay-head { margin-bottom: 8px; min-height: 44px; }
 .gp-shell .calm-lay-title { font: 500 20px var(--calm-body); }
 .gp-shell .calm-lay-option { min-height: 52px; padding: 6px 8px; gap: 14px; border-radius: 14px; }
 .gp-shell .calm-lay-option strong { flex: 1 1 auto; font-size: 16px; font-weight: 400; }
-.gp-shell .calm-lay-chevron { flex: 0 0 auto; color: var(--calm-muted); }
 .gp-shell .calm-lay-option:active { background: var(--calm-soft); transform: none; }
 
 /* ── 20. One kind of motion per kind of action (2026-11-08) ─────────────────────────────────────────────────────
@@ -449,8 +443,6 @@
 .gp-shell .calm-lay-import .calm-lay-error { margin: 8px 0 0; }
 .gp-shell .calm-lay-input:focus-visible { outline: none; }   /* the orange border already shows focus (no double ring) */
 .gp-shell .calm-lay-code::placeholder { font-family: var(--calm-body); font-size: 15px; letter-spacing: normal; }
-.gp-shell .calm-lay-option[aria-expanded='true'] .calm-lay-chevron { transform: rotate(90deg); color: var(--calm-accent); }
-.gp-shell .calm-lay-chevron { transition: transform .26s cubic-bezier(.16, 1, .3, 1), color .2s ease; }
 /* Layout editor: rename sits in the toolbar between back and + (the name used to float over the pad's buttons). */
 .console-editor-name input { display: flex; align-items: center; gap: 6px; height: 36px; min-height: 0; min-width: 0; max-width: 150px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--calm-line, #3f2e28); background: var(--calm-soft, #36261f); color: var(--calm-ink, #f6ede9); font-size: 14px; font-weight: 400; white-space: nowrap; outline: none; }
 .console-editor-name input { width: 172px; max-width: 172px; }
@@ -459,7 +451,7 @@
 .console-editor-toolbar .console-editor-name input:focus-visible { outline: none; }
 .console-editor-name input::selection, .gp-shell .calm-lay-input::selection { background: rgba(255, 85, 0, .45); color: #fff; }
 @media (prefers-reduced-motion: reduce) {
-  .gp-shell :is(.calm-collapse, .calm-collapse[data-open='1'], .calm-seg-pill-ready, .calm-help-chevron, .calm-lay-chevron) { transition: none; }
+  .gp-shell :is(.calm-collapse, .calm-collapse[data-open='1'], .calm-seg-pill-ready, .calm-help-chevron) { transition: none; }
   .gp-shell .calm-swap-in { animation: none; }
 }
 

@@ -12,7 +12,7 @@ import { onDashboardTabRequest, onSignInRequest, requestDashboardTab } from "./s
 import { KillScreen, NoticeBell } from "./components/AppControl";
 import type { NoticeAction } from "./store/appConfig";
 import { CalmConnect } from "./components/CalmConnect";
-import { CalmSettings as TabSystem } from "./components/CalmSettings";
+import { CalmSettings as TabSystem, type CalmSettingsProps } from "./components/CalmSettings";
 import { useOverlayFocus, closeTopOverlay } from "./components/useOverlayFocus";
 import { LayoutDialog, openLayoutDialog, closeLayoutDialog, isLayoutDialogOpen, PAD_COLORS } from "./components/LayoutDialog";
 import { ConnectionSummary, DashboardAllowance } from "./components/CalmShell";
@@ -2923,34 +2923,15 @@ const TABS: { id: DashTab; label: string; Icon: React.ComponentType<{ size?: num
 // ─── Dashboard Screen ─────────────────────────────────────────────────────────
 function DashboardScreen({
   onLaunch, onBack, onLaunchEditor, realTelemetry, selectedPresetId, onSelectPreset, customPads, onSaveCustomPad, onDeleteCustomPad, onDuplicateCustomPad, presetOverrides,
-  gyroOn, setGyroOn,
-  gyroMaxAngle, setGyroMaxAngle,
-  gyroWheel, setGyroWheel,
-  gyroWheelRange, setGyroWheelRange,
-  gyroMode, setGyroMode,
-  gyroDeadzone, setGyroDeadzone,
-  gyroHaptic, setGyroHaptic,
-  gyroThrottle, setGyroThrottle,
-  gyroIdleDetect, setGyroIdleDetect,
-  rumbleOn, setRumbleOn,
+  ...settings   // the gyro + vibration settings, handed whole to the Settings tab (same list as CalmSettingsProps)
 }: {
-  onLaunch: () => void; onBack: () => void; onLaunchEditor?: (pad: CustomPad) => void; pendingEditPad?: CustomPad | null; onClearPendingEditPad?: () => void; realTelemetry: any;
+  onLaunch: () => void; onBack: () => void; onLaunchEditor?: (pad: CustomPad) => void; realTelemetry: any;
   selectedPresetId: string; onSelectPreset: (id: string) => void;
   customPads: CustomPad[]; onSaveCustomPad: (p: CustomPad) => void;
   onDeleteCustomPad: (id: string) => void;
   onDuplicateCustomPad: (pad: CustomPad) => void;
   presetOverrides: Record<string, Partial<Record<BtnId, string>>>;
-  gyroOn: boolean; setGyroOn: (v: boolean) => void;
-  gyroMaxAngle: number; setGyroMaxAngle: (v: number) => void;
-  gyroWheel: boolean; setGyroWheel: (v: boolean) => void;
-  gyroWheelRange: number; setGyroWheelRange: (v: number) => void;
-  gyroMode: string; setGyroMode: (v: string) => void;
-  gyroDeadzone: number; setGyroDeadzone: (v: number) => void;
-  gyroHaptic: boolean; setGyroHaptic: (v: boolean) => void;
-  gyroThrottle: boolean; setGyroThrottle: (v: boolean) => void;
-  gyroIdleDetect: boolean; setGyroIdleDetect: (v: boolean) => void;
-  rumbleOn: boolean; setRumbleOn: (v: boolean) => void;
-}) {
+} & Omit<CalmSettingsProps, "children">) {
   const [tab, setTab] = useState<DashTab>("home");
   const tabHistory = useRef<DashTab[]>([]);
   useEffect(() => { rememberTab(tab); }, [tab]);
@@ -3111,11 +3092,11 @@ function DashboardScreen({
               onNewLayout={openLayoutDialog}
               pendingEditPad={pendingEditPad}
               onClearPendingEditPad={() => setPendingEditPad(null)} />}
-            {tab === "system" && <TabSystem gyroOn={gyroOn} setGyroOn={setGyroOn} gyroMaxAngle={gyroMaxAngle} setGyroMaxAngle={setGyroMaxAngle} gyroWheel={gyroWheel} setGyroWheel={setGyroWheel} gyroWheelRange={gyroWheelRange} setGyroWheelRange={setGyroWheelRange} gyroMode={gyroMode} setGyroMode={setGyroMode} gyroDeadzone={gyroDeadzone} setGyroDeadzone={setGyroDeadzone} gyroHaptic={gyroHaptic} setGyroHaptic={setGyroHaptic} gyroThrottle={gyroThrottle} setGyroThrottle={setGyroThrottle} gyroIdleDetect={gyroIdleDetect} setGyroIdleDetect={setGyroIdleDetect} rumbleOn={rumbleOn} setRumbleOn={setRumbleOn} />}
+            {tab === "system" && <TabSystem {...settings} />}
             {tab === "account" && (
               <TabAccount
                 customPadsCount={customPads.length}
-                rumbleOn={rumbleOn}
+                rumbleOn={settings.rumbleOn}
                 onSignIn={openProfile}
                 support={<AppSupport privacyUrl={PRIVACY_URL} feedback={<FeedbackCard />} />}
               />

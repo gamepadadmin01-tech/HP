@@ -95,43 +95,6 @@ button:disabled {
   }
 }
 
-.dark {
-  --background: #0B0E14;
-  --foreground: #E2E8F0;
-  --card: #151A23;
-  --card-foreground: #E2E8F0;
-  --popover: #151A23;
-  --popover-foreground: #E2E8F0;
-  --primary: #ff6826;   /* the app's orange (was blue #5D90CB until 2026-11-08) */
-  --primary-foreground: #0B0E14;
-  --secondary: #1B2230;
-  --secondary-foreground: #93A2BB;
-  --muted: #1B2230;
-  --muted-foreground: #7C8AA0;
-  --accent: #64748B;
-  --accent-foreground: #ffffff;
-  --destructive: #E2645D;
-  --destructive-foreground: #ffffff;
-  --border: rgba(255,104,38, 0.12);
-  --input: rgba(255,104,38, 0.06);
-  --ring: rgba(255,104,38, 0.4);
-  --font-weight-medium: 500;
-  --font-weight-normal: 400;
-  --chart-1: #ff6826;
-  --chart-2: #64748B;
-  --chart-3: #34A98A;
-  --chart-4: #E0A44A;
-  --chart-5: #E2645D;
-  --sidebar: #10141C;
-  --sidebar-foreground: #E2E8F0;
-  --sidebar-primary: #ff6826;
-  --sidebar-primary-foreground: #0B0E14;
-  --sidebar-accent: #1B2230;
-  --sidebar-accent-foreground: #E2E8F0;
-  --sidebar-border: rgba(255,104,38, 0.08);
-  --sidebar-ring: rgba(255,104,38, 0.4);
-}
-
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -247,13 +210,4 @@ button:disabled {
   }
 }
 
-/* Opening-splash logo glow — a slow, subtle breathe so the launch feels alive
-   without any flashiness. Used by the splash overlay in App.tsx. */
-@keyframes splashGlow {
-  0%, 100% { opacity: 0.55; transform: scale(0.94); }
-  50%      { opacity: 1;    transform: scale(1.06); }
-}
-.splash-glow {
-  animation: splashGlow 2.2s ease-in-out infinite;
-}
 

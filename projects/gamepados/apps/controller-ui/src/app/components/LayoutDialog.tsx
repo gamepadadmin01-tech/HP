@@ -16,7 +16,7 @@
 // "Import from code" unfolds a code box under its row (the shared Collapse); a valid code adds the layout to
 // the list on Home and says "Added" here, and the pop-up stays open.
 
-import React, { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { X, Check } from "lucide-react";

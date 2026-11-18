@@ -38,10 +38,6 @@ export const EASE = [0.16, 1, 0.3, 1] as [number, number, number, number];
 /** Backdrops and cross-fades. */
 export const FADE = { duration: 0.18, ease: EASE };
 
-/** Step-to-step changes inside a dialog. Short, because the container is
- *  already on screen and only its contents are swapping. */
-export const STEP = { duration: 0.16, ease: EASE };
-
 /** Leaving. Always quicker than arriving and accelerating (ease-in), so a dismissed pop-up gets
  *  out of the way instead of lingering: arriving is a decision the eye follows, leaving is not.
  *  This is the only exit curve; every overlay's exit goes through it. */
