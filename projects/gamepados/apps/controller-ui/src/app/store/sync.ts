@@ -66,6 +66,7 @@ import { getSession } from "./account";
 import { API_ORIGIN } from "../api/account";
 import { KEYS, readString, writeString, remove } from "./storage";
 import { autoSyncEnabled } from "./prefs";
+import { syncSettings } from "./settingsSync";
 import {
   loadPads, replacePads, loadTombstones, pruneTombstones,
 } from "./pads";
@@ -310,6 +311,7 @@ export function onSignedInSync(): void {
       discardLocalPadState();
     }
     void syncNow(true);
+    void syncSettings();   // and the Settings page (2.1, settingsSync.ts)
   } else {
     clearTimer();
     failures = 0;

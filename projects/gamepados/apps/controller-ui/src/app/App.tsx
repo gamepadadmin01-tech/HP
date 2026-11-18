@@ -38,8 +38,9 @@ import {
   loadPresetOverrides,
 } from "./store/pads";
 import { scheduleSync, onSignedInSync } from "./store/sync";
+import { noteSettingsChanged, onSettingsRestored } from "./store/settingsSync";
 import {
-  loadGyroPrefs, saveGyroPrefs, getWiredPref,
+  loadGyroPrefs, saveGyroPrefs, getWiredPref, loadRumbleOn, saveRumbleOn,
   nativeInputEnabled, setNativeInputEnabled, clampWheelRange,
 } from "./store/prefs";
 import { TabAccount, AppSupport } from "./components/TabAccount";
@@ -3133,7 +3134,9 @@ export default function App() {
   const [rated, setRated] = useState(() => introRated());
   // #4: if a prior session queued a rating while offline, sync it now / on reconnect.
   useEffect(() => { initFeedbackSync(); }, []);
-  const [rumbleOn, setRumbleOn] = useState(true);
+  // Game rumble is saved since 2.1 (it reset to ON at every launch before) and backed up with the other settings.
+  const [rumbleOn, setRumbleOn] = useState(() => loadRumbleOn());
+  useEffect(() => { saveRumbleOn(rumbleOn); noteSettingsChanged(); }, [rumbleOn]);
   // Paused while the controller is open (2026-10-01): each 500 ms poll set new
   // state here, re-rendering the whole app -- the pad included -- twice a second
   // during play. Only the dashboard shows these numbers.
@@ -3405,7 +3408,16 @@ export default function App() {
       deadzone: gyroDeadzone, haptic: gyroHaptic, throttle: gyroThrottle,
       idleDetect: gyroIdleDetect, wheel: gyroWheel, wheelRange: gyroWheelRange,
     });
+    noteSettingsChanged();   // backs the Settings page up to the account (2.1); does nothing if nothing changed
   }, [gyroOn, gyroMaxAngle, gyroDeadzone, gyroHaptic, gyroMode, gyroThrottle, gyroIdleDetect, gyroWheel, gyroWheelRange]);
+
+  // Settings brought down from the account (signing in on a new phone): show them at once.
+  useEffect(() => onSettingsRestored(() => {
+    const g = loadGyroPrefs();
+    setGyroOn(g.on); setGyroMaxAngle(g.maxAngle); setGyroWheel(g.wheel); setGyroWheelRange(g.wheelRange);
+    setGyroMode(g.mode); setGyroDeadzone(g.deadzone); setGyroHaptic(g.haptic); setGyroIdleDetect(g.idleDetect);
+    setRumbleOn(loadRumbleOn());
+  }), []);
 
   // Tell the native layer whether wheel mode is on. This pushes a FLAG ONLY — it must
   // never change the screen orientation, because this effect runs on mount and on every

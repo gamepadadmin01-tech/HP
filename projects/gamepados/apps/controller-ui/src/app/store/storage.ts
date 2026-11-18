@@ -43,6 +43,13 @@ export const KEYS = {
   gyroIdleDetect: "gyro_idle_detect",
   gyroWheel: "gyro_wheel",
   gyroWheelRange: "gyro_wheel_range",
+  rumbleOn: "gp_rumble_on",           // Game rumble (2.1: was never saved, reset to ON every launch)
+  rightGain: "gp_right_gain",         // right stick sensitivity; written by stickFeel.ts under this same name
+
+  // Settings backup (2.1, settingsSync.ts)
+  settingsUpdatedAt: "gp_settings_updated_at",   // ISO time the player last changed a setting on this phone
+  settingsSeen: "gp_settings_seen",               // fingerprint of the settings as last seen / synced
+  settingsOwner: "gp_settings_owner",             // which account the backed-up settings belong to
 
   // Transport
   nativeInput: "gp_native_input",

@@ -92,6 +92,15 @@ export function saveGyroPrefs(p: GyroPrefs): void {
   writeNumber(KEYS.gyroWheelRange, clampWheelRange(p.wheelRange));
 }
 
+/** Game rumble (Settings → Feel). Saved since 2.1; before that it reset to ON at every launch. */
+export function loadRumbleOn(): boolean {
+  return readBool(KEYS.rumbleOn, true);
+}
+
+export function saveRumbleOn(on: boolean): void {
+  writeBool(KEYS.rumbleOn, on);
+}
+
 // ─── Transport ────────────────────────────────────────────────────────────────
 
 export type WiredPref = "auto" | "tether" | "usbdebug";

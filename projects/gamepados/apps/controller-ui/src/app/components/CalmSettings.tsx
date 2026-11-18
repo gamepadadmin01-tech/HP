@@ -5,6 +5,7 @@ import { Gauge, Vibrate, Cpu, Crosshair, Globe, ChevronRight, Check } from "luci
 import { stickFeel, setRightGain, RIGHT_GAIN_MIN, RIGHT_GAIN_MAX } from "../stickFeel";
 import { Collapse } from "./Motion";
 import { LANGS, setLangChoice, t, useLang, type LangChoice } from "../i18n";
+import { noteSettingsChanged, onSettingsRestored } from "../store/settingsSync";
 
 // Settings (2.1, owner 2026-11-18): the settings most players use are always on the page; the extra, rarely used
 // ones sit under "More settings" (closed by default). Every label is written in English here and shown through
@@ -47,7 +48,8 @@ function Range({label, detail, min, max, value, onChange, step = 1, unit = "°"}
  *  page's packet builder and the phone's touch engine both pick the new value up (see stickFeel.ts). */
 function RightStickSensitivity() {
   const [pct, setPct] = useState(() => Math.round(stickFeel.rightGain * 100));
-  const set = (v: number) => { setPct(v); setRightGain(v / 100); };
+  const set = (v: number) => { setPct(v); setRightGain(v / 100); noteSettingsChanged(); };
+  useEffect(() => onSettingsRestored(() => setPct(Math.round(stickFeel.rightGain * 100))), []);
   return <>
     <Range label="Right stick sensitivity" min={Math.round(RIGHT_GAIN_MIN * 100)} max={Math.round(RIGHT_GAIN_MAX * 100)} step={5} unit="%" value={pct} onChange={set}
       />
@@ -75,7 +77,7 @@ function LanguageRow() {
     <Collapse open={open} id={id}>
       <div role="radiogroup" aria-label={t("Language")} className="calm-lang-list">
         {options.map((o) => <button key={o.code} type="button" role="radio" aria-checked={choice === o.code} lang={o.code === "auto" ? undefined : o.code}
-          data-testid={`lang-${o.code}`} onClick={() => { setLangChoice(o.code); setOpen(false); }}>
+          data-testid={`lang-${o.code}`} onClick={() => { setLangChoice(o.code); setOpen(false); noteSettingsChanged(); }}>
           <span>{o.name}</span>{choice === o.code && <Check size={18} aria-hidden="true" />}
         </button>)}
       </div>
