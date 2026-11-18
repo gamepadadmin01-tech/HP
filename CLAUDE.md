@@ -23,7 +23,10 @@ Full detail: **`context/INVENTORY.md`** (the folder map) and **`context/README.m
 
 ## Standing rules — these have all been asked for explicitly
 
-1. **Never run `git push`.** Prepare the commit; he pushes.
+1. **Push the HP repo yourself; never push the website repo.** (Owner, 2026-11-18: "always you manage the HP repo,
+   don't ask me to push, I will only handle the website repo".) HP: commit, then `git push origin redesign-flat:main
+   redesign-flat --follow-tags` (main on GitHub = the latest released code). Website repo
+   (`projects/gamepados/website`, Railway deploys from it): prepare the commit, he pushes. Never force-push.
 2. **Never add `Co-Authored-By: Claude`** trailers. Commits show only Akhil.
 3. **Commit as `gamepadadmin01@gmail.com`** — never override the author. Vercel Hobby rejects
    builds from non-owner authors.
@@ -122,7 +125,7 @@ account system lives in the main tree. Its 3 unpushed commits are preserved as p
 
 | Path | Remote | Risk |
 |---|---|---|
-| `D:\AKHIL\HP` (this repo: `CLAUDE.md`, `context/`, `projects/gamepados/`) | `gamepadadmin01-tech/HP` | fine — pushed, 0 commits behind. **Uncommitted working-tree changes are still unprotected**, so commit before big edits |
+| `D:\AKHIL\HP` (this repo: `CLAUDE.md`, `context/`, `projects/gamepados/`) | `gamepadadmin01-tech/HP` | Claude pushes it (rule 1). Until 2026-11-18 GitHub only had 1.4.12 — 112 commits had never been pushed. **Uncommitted changes are unprotected**: commit and push after each piece of work |
 | ~~`projects/gamepados-account`~~ | `gamepadadmin01-tech/app-with-login` | **deleted 2026-08-14**; 3 unpushed commits saved as patches in `context/archive/` |
 | `projects/flexsquares` | `gamepadadmin01-tech/flexspace` | fine |
 | `projects/gamepados/website` | `gamepadadmin01-tech/gamepad` | fine |
