@@ -16,6 +16,9 @@
     <uses-feature android:name="android.hardware.sensor.gyroscope" android:required="false" />
     <!-- AOA direct-USB transport (optional — Wi-Fi/tether still work without it). -->
     <uses-feature android:name="android.hardware.usb.accessory" android:required="false" />
+    <!-- The two Wi-Fi permissions above make Android assume Wi-Fi is REQUIRED; Play then hides the app from devices
+         without Wi-Fi (Play warning on 2.1.0). USB modes work without Wi-Fi, so it is optional. -->
+    <uses-feature android:name="android.hardware.wifi" android:required="false" />
 
     <application
         android:name=".GamepadApplication"
