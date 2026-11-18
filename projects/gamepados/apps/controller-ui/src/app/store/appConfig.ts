@@ -174,7 +174,10 @@ export async function refreshAppConfig(): Promise<void> {
       // A Play build that can switch networks: the server answers with the network the portal chose for it.
       + (canSwitchAdNetwork() ? "&switchable=1" : "")
       // The app's random install id, so the portal can count active players (stored scrambled, once a day).
-      + `&installId=${encodeURIComponent(getInstallId())}`;
+      + `&installId=${encodeURIComponent(getInstallId())}`
+      // The phone's offset from UTC in minutes (India = 330), so scheduled notifications start at the
+      // player's own local time (website/backend/noticeSchedule.js). Without it the server uses India time.
+      + `&tz=${-new Date().getTimezoneOffset()}`;
     const res = await fetch(`${API_ORIGIN}/api/app-config${q}`, { cache: "no-store", signal: ctrl?.signal });
     if (!res.ok) return;                                   // keep what we had
     const json = await res.json();
