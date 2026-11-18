@@ -97,6 +97,10 @@ function apply() {
 apply();
 
 export function currentLang(): LangCode { return lang; }
+/** The translations of one language (undefined for English). Used by the live screen translation (dom.ts). */
+export function dictFor(code: LangCode): Dict | undefined { return code === "en" ? undefined : DICTS[code]; }
+/** Called after every language change. */
+export function onLangChange(cb: () => void): () => void { listeners.add(cb); return () => { listeners.delete(cb); }; }
 export function langChoice(): LangChoice { return choice; }
 
 export function setLangChoice(next: LangChoice) {
@@ -104,6 +108,8 @@ export function setLangChoice(next: LangChoice) {
   writeString(KEYS.language, next);
   apply();
 }
+// Development builds only: lets the screen-walking checks (i18n-crawl.mjs) switch language mid-run.
+if ((import.meta as any).env?.DEV) (globalThis as any).__gpSetLang = setLangChoice;
 
 /** The translation of an English sentence in the current language (English if there is none). `{name}` in the
  *  sentence is replaced from `vars`. */

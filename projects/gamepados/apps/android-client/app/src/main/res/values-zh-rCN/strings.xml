@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="camera_permission_denied">未获得相机权限。</string>
+    <string name="layout_name">布局名称</string>
+    <string name="done">完成</string>
+    <string name="cancel">取消</string>
+    <string name="camera_failed" formatted="true">无法启动相机:%1$s</string>
+</resources>

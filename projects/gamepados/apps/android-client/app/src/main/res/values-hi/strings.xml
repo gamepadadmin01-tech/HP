@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="camera_permission_denied">कैमरे की अनुमति नहीं मिली।</string>
+    <string name="layout_name">लेआउट का नाम</string>
+    <string name="done">हो गया</string>
+    <string name="cancel">रद्द करें</string>
+    <string name="camera_failed" formatted="true">कैमरा शुरू नहीं हो सका: %1$s</string>
+</resources>

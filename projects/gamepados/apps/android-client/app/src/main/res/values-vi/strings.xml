@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="camera_permission_denied">Chưa được cấp quyền camera.</string>
+    <string name="layout_name">Tên bố cục</string>
+    <string name="done">Xong</string>
+    <string name="cancel">Hủy</string>
+    <string name="camera_failed" formatted="true">Không khởi động được camera: %1$s</string>
+</resources>

@@ -1,3 +1,5 @@
+import { currentLang } from "../i18n";
+
 // ─── Native bridge façade ─────────────────────────────────────────────────────
 //
 // Every call into Android goes through this file. Nothing else in the UI may
@@ -381,8 +383,11 @@ export function sendPlaytimeTicket(base64Ticket: string): boolean {
  *  It rides the same raw send as the playtime ticket: the bridge decodes base64 and sends the bytes unchanged on
  *  the input socket (MainActivity.sendPlaytimeTicket -> nativeGrxSendRaw), so no app-shell change is needed. A PC
  *  server older than 2.1.5 ignores the frame (unknown length). Returns false when there is no bridge. */
-export function sendPlayerName(name: string): boolean {
-  const LEN = 48, MAX = LEN - 5;
+export function sendPlayerName(name: string, lang: string = currentLang()): boolean {
+  // 2.1: the app's language rides in the last 8 bytes ("L", length, an ASCII code such as "ja-JP" or "es-419"), so the
+  // PC server can show its window in the player's language. The name therefore stops at byte 40. An older server
+  // reads only the name (it ignores everything after its length), so nothing breaks there.
+  const LEN = 48, MAX = 40 - 5, LANG_AT = 40;
   const enc = new TextEncoder();
   let text = (name || "").replace(/[\u0000-\u001f\u007f]/g, "").trim().slice(0, 24) || "Guest";
   let bytes = enc.encode(text);
@@ -390,6 +395,9 @@ export function sendPlayerName(name: string): boolean {
   const frame = new Uint8Array(LEN);
   frame.set([0x47, 0x50, 0x4e, 1, bytes.length]);   // "GPN", version 1, length
   frame.set(bytes, 5);
+  const code = /^[A-Za-z0-9-]{2,6}$/.test(lang) ? lang : "en";
+  frame.set([0x4c, code.length], LANG_AT);          // "L", length
+  frame.set(enc.encode(code), LANG_AT + 2);
   let bin = "";
   frame.forEach((v) => { bin += String.fromCharCode(v); });
   return sendPlaytimeTicket(btoa(bin));

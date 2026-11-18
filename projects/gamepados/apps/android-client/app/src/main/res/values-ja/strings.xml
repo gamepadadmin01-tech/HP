@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="camera_permission_denied">カメラの権限が許可されていません。</string>
+    <string name="layout_name">レイアウト名</string>
+    <string name="done">完了</string>
+    <string name="cancel">キャンセル</string>
+    <string name="camera_failed" formatted="true">カメラを起動できませんでした: %1$s</string>
+</resources>

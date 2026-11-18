@@ -1,6 +1,7 @@
 // Run: node player-name.test.mjs   (vite on 127.0.0.1:5187)
 // "Connected players" (owner, 2026-11-13): while the controller is open the app tells the PC server who is playing,
-// with the 48-byte NAME frame of pc-server-rs/src/player.rs ("GPN", version 1, length, UTF-8 name, zero padding),
+// with the 48-byte NAME frame of pc-server-rs/src/player.rs ("GPN", version 1, length, UTF-8 name, zero padding,
+// and since 2.1 the app language in the last 8 bytes),
 // sent through the same raw bridge send as the playtime ticket. Checks: signed in -> the display name, signed out ->
 // "Guest"; sent at once when the controller opens and repeated about every 5 s; nothing once it is closed; the
 // frame is byte-exact.
@@ -9,13 +10,19 @@ import assert from "node:assert/strict";
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
 const browser = await puppeteer.launch({ executablePath: "C:/Program Files/Google/Chrome/Application/chrome.exe", headless: true });
 
+let lastLang = "";
 function parse(b64) {
   const f = Buffer.from(b64, "base64");
   if (f.length !== 48 || f.subarray(0, 3).toString("latin1") !== "GPN") return null;
   assert.equal(f[3], 1, "version 1");
   const n = f[4];
-  assert.ok(n >= 1 && n <= 43, "length in range");
-  assert.ok(f.subarray(5 + n).every((b) => b === 0), "zero padding after the name");
+  assert.ok(n >= 1 && n <= 35, "length in range (the name stops before byte 40)");
+  assert.ok(f.subarray(5 + n, 40).every((b) => b === 0), "zero padding after the name");
+  // 2.1: the app language in the last 8 bytes: "L", length, ASCII code, zeros
+  assert.equal(f[40], 0x4c, "language marker");
+  const l = f[41]; assert.ok(l >= 2 && l <= 6, "language code length");
+  assert.ok(f.subarray(42 + l).every((b) => b === 0), "zero padding after the language");
+  lastLang = f.subarray(42, 42 + l).toString("latin1");
   return f.subarray(5, 5 + n).toString("utf8");
 }
 
@@ -46,6 +53,7 @@ async function run(signedInName) {
   const want = signedInName || "Guest";
   assert.ok(first.length >= 1, "a NAME frame is sent as soon as the controller opens");
   assert.equal(first[0][1], want, `it carries ${want}`);
+  assert.equal(lastLang, "en", "and the app language (English on this English browser)");
   await pause(5600);
   const later = await names();
   assert.ok(later.length >= 2, `it is repeated about every 5 s (${later.length} sent)`);

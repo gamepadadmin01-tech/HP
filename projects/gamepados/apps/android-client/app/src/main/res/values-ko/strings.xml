@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="camera_permission_denied">카메라 권한이 허용되지 않았습니다.</string>
+    <string name="layout_name">레이아웃 이름</string>
+    <string name="done">완료</string>
+    <string name="cancel">취소</string>
+    <string name="camera_failed" formatted="true">카메라를 시작할 수 없습니다: %1$s</string>
+</resources>

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="camera_permission_denied">Немає дозволу на камеру.</string>
+    <string name="layout_name">Назва розкладки</string>
+    <string name="done">Готово</string>
+    <string name="cancel">Скасувати</string>
+    <string name="camera_failed" formatted="true">Не вдалося запустити камеру: %1$s</string>
+</resources>

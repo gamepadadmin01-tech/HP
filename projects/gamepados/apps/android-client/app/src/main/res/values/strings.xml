@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 2.1 languages: the few texts Android itself shows (the app screens are translated in controller-ui/src/app/i18n). -->
+<resources>
+    <string name="camera_permission_denied">Camera permission was not given.</string>
+    <string name="layout_name">Layout name</string>
+    <string name="done">Done</string>
+    <string name="cancel">Cancel</string>
+    <string name="camera_failed" formatted="true">Couldn\'t start the camera: %1$s</string>
+</resources>

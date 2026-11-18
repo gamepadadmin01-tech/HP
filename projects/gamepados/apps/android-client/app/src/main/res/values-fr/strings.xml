@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="camera_permission_denied">L\'autorisation de la caméra n\'a pas été accordée.</string>
+    <string name="layout_name">Nom de la disposition</string>
+    <string name="done">Terminé</string>
+    <string name="cancel">Annuler</string>
+    <string name="camera_failed" formatted="true">Impossible de démarrer la caméra : %1$s</string>
+</resources>

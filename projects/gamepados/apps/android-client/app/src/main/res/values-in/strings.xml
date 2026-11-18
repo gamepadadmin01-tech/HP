@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="camera_permission_denied">Izin kamera tidak diberikan.</string>
+    <string name="layout_name">Nama tata letak</string>
+    <string name="done">Selesai</string>
+    <string name="cancel">Batal</string>
+    <string name="camera_failed" formatted="true">Kamera tidak bisa dimulai: %1$s</string>
+</resources>

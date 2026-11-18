@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="camera_permission_denied">Nie przyznano uprawnienia do aparatu.</string>
+    <string name="layout_name">Nazwa układu</string>
+    <string name="done">Gotowe</string>
+    <string name="cancel">Anuluj</string>
+    <string name="camera_failed" formatted="true">Nie udało się uruchomić aparatu: %1$s</string>
+</resources>

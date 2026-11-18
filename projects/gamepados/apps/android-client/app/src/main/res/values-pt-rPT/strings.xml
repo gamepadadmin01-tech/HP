@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="camera_permission_denied">A permissão da câmara não foi concedida.</string>
+    <string name="layout_name">Nome do esquema</string>
+    <string name="done">Concluído</string>
+    <string name="cancel">Cancelar</string>
+    <string name="camera_failed" formatted="true">Não foi possível iniciar a câmara: %1$s</string>
+</resources>

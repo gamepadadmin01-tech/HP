@@ -488,7 +488,7 @@ class MainActivity : AppCompatActivity(), android.hardware.SensorEventListener {
                 cameraBehindPage(true)
                 startCameraXScanner()
             } else {
-                Toast.makeText(this, "Permissions not granted by the user.", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, getString(R.string.camera_permission_denied), Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -1419,9 +1419,9 @@ class MainActivity : AppCompatActivity(), android.hardware.SensorEventListener {
                             addView(editText)
                         }
                         android.app.AlertDialog.Builder(this@MainActivity)
-                            .setTitle("Layout Name")
+                            .setTitle(getString(R.string.layout_name))
                             .setView(container)
-                            .setPositiveButton("Done") { _, _ ->
+                            .setPositiveButton(getString(R.string.done)) { _, _ ->
                                 val result = editText.text.toString().trim()
                                 val escaped = result
                                     .replace("\\", "\\\\")
@@ -1431,7 +1431,7 @@ class MainActivity : AppCompatActivity(), android.hardware.SensorEventListener {
                                     null
                                 )
                             }
-                            .setNegativeButton("Cancel", null)
+                            .setNegativeButton(getString(R.string.cancel), null)
                             .show()
                         // Auto-show keyboard for the native EditText
                         editText.postDelayed({
@@ -1776,7 +1776,7 @@ class MainActivity : AppCompatActivity(), android.hardware.SensorEventListener {
                 cameraProvider.bindToLifecycle(this, CameraSelector.DEFAULT_BACK_CAMERA, preview, imageAnalysis)
             } catch (e: Exception) {
                 e.printStackTrace()
-                Toast.makeText(this, "Failed to initialize camera: ${e.message}", Toast.LENGTH_LONG).show()
+                Toast.makeText(this, getString(R.string.camera_failed, e.message ?: ""), Toast.LENGTH_LONG).show()
             }
         }, ContextCompat.getMainExecutor(this))
     }

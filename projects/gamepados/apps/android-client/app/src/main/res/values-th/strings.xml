@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="camera_permission_denied">ไม่ได้รับสิทธิ์ใช้กล้อง</string>
+    <string name="layout_name">ชื่อเลย์เอาต์</string>
+    <string name="done">เสร็จ</string>
+    <string name="cancel">ยกเลิก</string>
+    <string name="camera_failed" formatted="true">เปิดกล้องไม่ได้: %1$s</string>
+</resources>

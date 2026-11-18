@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="camera_permission_denied">No se concedió el permiso de la cámara.</string>
+    <string name="layout_name">Nombre del diseño</string>
+    <string name="done">Listo</string>
+    <string name="cancel">Cancelar</string>
+    <string name="camera_failed" formatted="true">No se pudo iniciar la cámara: %1$s</string>
+</resources>
