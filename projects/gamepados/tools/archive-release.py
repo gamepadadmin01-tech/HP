@@ -94,6 +94,15 @@ def main():
         if v.encode() not in z.read('base/manifest/AndroidManifest.xml'): sys.exit('the AAB is not this version')
     sig = signer_sha1(aab)
 
+    # the website serves its download from backend/downloads (force-added: downloads/*.apk is git-ignored there).
+    # Committing it does not publish it: the portal's Releases panel decides which version the site offers.
+    site_apk = os.path.join(WEB, 'backend', 'downloads', f'GamepadOS-{v}.apk')
+    if not os.path.exists(site_apk):
+        shutil.copy2(os.path.join(dest, f'{base}-website.apk'), site_apk)
+        run(['git', 'add', '-f', os.path.relpath(site_apk, WEB)], cwd=WEB)
+        run(['git', 'commit', '-q', '-m', f'Builds for release: GamepadOS {v} ({c}, website APK)'], cwd=WEB)
+        print(f'  website: backend/downloads/GamepadOS-{v}.apk committed (the owner pushes the website repo)')
+
     hp_commit = run(['git', 'rev-parse', 'HEAD'], cwd=HP)
     web_commit = run(['git', 'rev-parse', 'HEAD'], cwd=WEB)
     dirty = run(['git', 'status', '--porcelain', '--', 'projects/gamepados/apps'], cwd=HP)
