@@ -1,0 +1,100 @@
+GamepadOS portal notification - translations (written by hand, no Google key needed).
+English: Buying the Lifetime Plan now is definitely the best choice! The next version, dropping at the end of this month, is going to be absolutely wild. Trust us, you won't regret it! 🔥
+Button (Go to Plans): plans
+
+How to use: Portal -> Notifications -> keep the English text above -> "Upload translations file" -> choose this file -> check -> Save notification.
+
+<zh-CN>
+现在购买永久版绝对是最好的选择！下一个版本将在本月底推出，绝对会让你大吃一惊。相信我们，你不会后悔的！🔥
+Button: 方案
+</zh-CN>
+
+<zh-TW>
+現在購買永久版絕對是最好的選擇！下一個版本將在本月底推出，絕對會讓你大吃一驚。相信我們，你不會後悔的！🔥
+Button: 方案
+</zh-TW>
+
+<ja-JP>
+今ライフタイムプランを買うのが間違いなくベストな選択です！今月末に登場する次のバージョンは、とんでもなくすごいものになります。後悔はさせません！🔥
+Button: プラン
+</ja-JP>
+
+<ko-KR>
+지금 평생 이용권을 구매하는 것이 확실히 최고의 선택입니다! 이번 달 말에 나오는 다음 버전은 정말 엄청날 거예요. 믿어 주세요, 절대 후회하지 않을 겁니다! 🔥
+Button: 요금제
+</ko-KR>
+
+<hi-IN>
+अभी लाइफ़टाइम प्लान खरीदना सबसे अच्छा फ़ैसला है! इस महीने के आख़िर में आने वाला अगला वर्ज़न कमाल का होने वाला है। हम पर भरोसा कीजिए, आपको पछतावा नहीं होगा! 🔥
+Button: प्लान
+</hi-IN>
+
+<id>
+Membeli paket Selamanya sekarang jelas pilihan terbaik! Versi berikutnya, yang rilis akhir bulan ini, bakal luar biasa seru. Percayalah, kamu tidak akan menyesal! 🔥
+Button: Paket
+</id>
+
+<vi>
+Mua gói Trọn đời ngay bây giờ chắc chắn là lựa chọn tốt nhất! Phiên bản tiếp theo, ra mắt vào cuối tháng này, sẽ cực kỳ bùng nổ. Hãy tin chúng tôi, bạn sẽ không hối tiếc! 🔥
+Button: Gói
+</vi>
+
+<th>
+ซื้อแพ็กเกจตลอดชีพตอนนี้คือทางเลือกที่ดีที่สุดแน่นอน! เวอร์ชันถัดไปที่จะออกปลายเดือนนี้จะสุดยอดมาก เชื่อเราเถอะ คุณจะไม่เสียใจแน่นอน! 🔥
+Button: แพ็กเกจ
+</th>
+
+<ru-RU>
+Купить тариф «Навсегда» сейчас — однозначно лучший выбор! Следующая версия выйдет в конце этого месяца, и это будет нечто невероятное. Поверьте, вы не пожалеете! 🔥
+Button: Тарифы
+</ru-RU>
+
+<uk>
+Купити тариф «Назавжди» зараз — безперечно найкращий вибір! Наступна версія вийде наприкінці цього місяця, і це буде щось неймовірне. Повірте, ви не пошкодуєте! 🔥
+Button: Тарифи
+</uk>
+
+<tr-TR>
+Ömür Boyu planını şimdi almak kesinlikle en iyi seçim! Bu ayın sonunda çıkacak yeni sürüm tek kelimeyle muhteşem olacak. Bize güven, pişman olmayacaksın! 🔥
+Button: Planlar
+</tr-TR>
+
+<de-DE>
+Den Lifetime-Plan jetzt zu kaufen ist definitiv die beste Wahl! Die nächste Version erscheint Ende dieses Monats und wird der absolute Wahnsinn. Vertrau uns, du wirst es nicht bereuen! 🔥
+Button: Pläne
+</de-DE>
+
+<fr-FR>
+Acheter l'offre À vie maintenant, c'est clairement le meilleur choix ! La prochaine version, qui arrive à la fin du mois, va être complètement folle. Faites-nous confiance, vous ne le regretterez pas ! 🔥
+Button: Offres
+</fr-FR>
+
+<it-IT>
+Comprare ora il piano A vita è sicuramente la scelta migliore! La prossima versione, in arrivo a fine mese, sarà davvero pazzesca. Fidati, non te ne pentirai! 🔥
+Button: Piani
+</it-IT>
+
+<pl-PL>
+Kupno planu „Dożywotni” teraz to zdecydowanie najlepszy wybór! Następna wersja, która pojawi się pod koniec tego miesiąca, będzie absolutnie szalona. Zaufaj nam, nie pożałujesz! 🔥
+Button: Plany
+</pl-PL>
+
+<es-ES>
+¡Comprar el plan Vitalicio ahora es, sin duda, la mejor opción! La próxima versión, que llega a finales de este mes, va a ser una pasada. Confía en nosotros, ¡no te arrepentirás! 🔥
+Button: Planes
+</es-ES>
+
+<es-419>
+¡Comprar el plan Vitalicio ahora es, sin duda, la mejor opción! La próxima versión, que llega a fin de este mes, va a ser una locura. Confía en nosotros, ¡no te vas a arrepentir! 🔥
+Button: Planes
+</es-419>
+
+<pt-BR>
+Comprar o plano Vitalício agora é, sem dúvida, a melhor escolha! A próxima versão, que chega no fim deste mês, vai ser incrível demais. Confie na gente, você não vai se arrepender! 🔥
+Button: Planos
+</pt-BR>
+
+<pt-PT>
+Comprar o plano Vitalício agora é, sem dúvida, a melhor escolha! A próxima versão, que chega no final deste mês, vai ser absolutamente incrível. Confie em nós, não se vai arrepender! 🔥
+Button: Planos
+</pt-PT>
