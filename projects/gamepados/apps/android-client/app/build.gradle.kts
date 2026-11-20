@@ -31,6 +31,9 @@ val admobLiveRewardedId = "ca-app-pub-5878015482565093/2095058092"   // ca-app-p
 // builds are built WITHOUT this flag and still carry the live ids.
 val admobTestAds = (findProperty("testAds") ?: "false").toString() == "true"
 val admobLive = admobLiveAppId.isNotBlank() && admobLiveRewardedId.isNotBlank() && !admobTestAds
+// Ad-network test builds (owner, 2026-11-21): `-PadNetwork=admob` (or unity) forces that network in every flavour and
+// LOCKS it, so the portal's Play switch cannot move it. Normal builds pass nothing and are unchanged.
+val forcedAdNetwork = (findProperty("adNetwork") ?: "").toString().takeIf { it == "admob" || it == "unity" }
 
 android {
     namespace = "com.gamepad.client"
@@ -310,7 +313,8 @@ android {
         // Which ad network plays the rewarded ad: "admob" (playstore) or "unity" (direct, uptodown —
         // set in the flavours below, 2026-10-30). The Unity ids are public identifiers, not secrets.
         // UNITY_TEST_MODE shows Unity's test ads only; a live release build turns it off with the AdMob IDs.
-        buildConfigField("String", "AD_NETWORK", "\"admob\"")
+        buildConfigField("String", "AD_NETWORK", "\"${forcedAdNetwork ?: "admob"}\"")
+        buildConfigField("Boolean", "AD_NETWORK_LOCKED", if (forcedAdNetwork != null) "true" else "false")
         buildConfigField("String", "UNITY_GAME_ID", "\"800418226\"")
         buildConfigField("String", "UNITY_REWARDED_PLACEMENT", "\"BP_Rewarded_Android\"")
         buildConfigField("boolean", "UNITY_TEST_MODE", "true")
@@ -348,7 +352,7 @@ android {
             dimension = "distribution"
             buildConfigField("Boolean", "SELF_UPDATE_ENABLED", "true")
             buildConfigField("String", "DISTRIBUTION_CHANNEL", "\"direct\"")
-            buildConfigField("String", "AD_NETWORK", "\"unity\"")
+            buildConfigField("String", "AD_NETWORK", "\"${forcedAdNetwork ?: "unity"}\"")
         }
         create("playstore") {
             dimension = "distribution"
@@ -357,7 +361,7 @@ android {
             // Unity ads on Play too since 2026-11-01 (owner's call, after AdMob limited our ad serving).
             // Google Play allows any ad network that follows its Ads policy. The AdMob SDK stays in the
             // build for Google's consent form and a one-line way back: set this to "admob".
-            buildConfigField("String", "AD_NETWORK", "\"unity\"")
+            buildConfigField("String", "AD_NETWORK", "\"${forcedAdNetwork ?: "unity"}\"")
         }
         create("aptoide") {
             dimension = "distribution"
@@ -368,7 +372,7 @@ android {
             dimension = "distribution"
             buildConfigField("Boolean", "SELF_UPDATE_ENABLED", "false")
             buildConfigField("String", "DISTRIBUTION_CHANNEL", "\"uptodown\"")
-            buildConfigField("String", "AD_NETWORK", "\"unity\"")
+            buildConfigField("String", "AD_NETWORK", "\"${forcedAdNetwork ?: "unity"}\"")
         }
         create("amazonstore") {
             dimension = "distribution"

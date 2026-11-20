@@ -76,7 +76,8 @@ open class AdsBridge(activity: MainActivity) : UpdaterBridgeBase(activity) {
      *  BuildConfig.AD_NETWORK, but since 2026-11-09 the admin portal can SWITCH it between AdMob and Unity
      *  (owner: "if AdMob fails again we can switch it to Unity"), via setAdNetwork from the page. The choice is
      *  remembered, so an offline launch keeps the last one. */
-    private val canSwitch = BuildConfig.DISTRIBUTION_CHANNEL == "playstore"
+    // A build made with -PadNetwork=… (ad-network test builds) is locked to that network: no portal switch.
+    private val canSwitch = BuildConfig.DISTRIBUTION_CHANNEL == "playstore" && !BuildConfig.AD_NETWORK_LOCKED
     private val prefs by lazy { activity.getSharedPreferences("gamepad_prefs", android.content.Context.MODE_PRIVATE) }
     @Volatile private var network: String =
         if (canSwitch) (prefs.getString("playAdNetwork", null)?.takeIf { it == "admob" || it == "unity" } ?: BuildConfig.AD_NETWORK)
