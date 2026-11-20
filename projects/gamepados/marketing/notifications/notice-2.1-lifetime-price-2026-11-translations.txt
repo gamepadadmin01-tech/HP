@@ -1,0 +1,122 @@
+GamepadOS portal notification - translations (written by hand, no Google key needed).
+English (paste this into the notification box exactly):
+GamepadOS 2.1 is here! 🎉 The app now speaks your language, Settings are simpler, and your settings are saved to your account.
+Lifetime stays at today's price until 30 November. From December the price goes up, so get Lifetime now! 🔥
+Button: Go to Plans, text: Plans
+
+How to use: Portal -> App control -> Notification in the app -> paste the English above -> button "Go to Plans", text "Plans"
+-> "Upload translations file" -> choose this file -> check -> Save (or Schedule with Remove at 30 Nov 23:59).
+
+<zh-CN>
+GamepadOS 2.1 来了！🎉 应用现在支持你的语言，设置更简洁，你的设置也会保存到账号。
+永久版在 11 月 30 日前保持现价。12 月起将会涨价，快来购买永久版吧！🔥
+Button: 方案
+</zh-CN>
+
+<zh-TW>
+GamepadOS 2.1 來了！🎉 應用程式現在支援你的語言，設定更簡潔，你的設定也會儲存到帳號。
+永久版在 11 月 30 日前維持現價。12 月起將會漲價，快來購買永久版吧！🔥
+Button: 方案
+</zh-TW>
+
+<ja-JP>
+GamepadOS 2.1 が登場！🎉 アプリがあなたの言語に対応し、設定がすっきりして、設定がアカウントに保存されるようになりました。
+ライフタイムは 11 月 30 日まで今の価格のままです。12 月から値上げするので、ライフタイムは今のうちにどうぞ！🔥
+Button: プラン
+</ja-JP>
+
+<ko-KR>
+GamepadOS 2.1 출시! 🎉 이제 앱이 사용자의 언어를 지원하고, 설정이 더 간단해졌으며, 설정이 계정에 저장됩니다.
+평생 이용권은 11월 30일까지 지금 가격 그대로입니다. 12월부터 가격이 오르니 지금 바로 평생 이용권을 구매하세요! 🔥
+Button: 요금제
+</ko-KR>
+
+<hi-IN>
+GamepadOS 2.1 आ गया! 🎉 ऐप अब आपकी भाषा में है, सेटिंग्स आसान हो गई हैं, और आपकी सेटिंग्स आपके अकाउंट में सेव होती हैं।
+लाइफ़टाइम की कीमत 30 नवंबर तक यही रहेगी। दिसंबर से कीमत बढ़ जाएगी, इसलिए अभी लाइफ़टाइम ले लीजिए! 🔥
+Button: प्लान
+</hi-IN>
+
+<id>
+GamepadOS 2.1 sudah hadir! 🎉 Aplikasi kini tersedia dalam bahasamu, Pengaturan lebih sederhana, dan pengaturanmu disimpan ke akun.
+Harga Selamanya tetap sama sampai 30 November. Mulai Desember harganya naik, jadi ambil paket Selamanya sekarang! 🔥
+Button: Paket
+</id>
+
+<vi>
+GamepadOS 2.1 đã ra mắt! 🎉 Ứng dụng giờ có ngôn ngữ của bạn, Cài đặt đơn giản hơn và cài đặt của bạn được lưu vào tài khoản.
+Gói Trọn đời giữ nguyên giá hiện tại đến hết ngày 30/11. Từ tháng 12 giá sẽ tăng, hãy mua gói Trọn đời ngay! 🔥
+Button: Gói
+</vi>
+
+<th>
+GamepadOS 2.1 มาแล้ว! 🎉 ตอนนี้แอปใช้ภาษาของคุณได้ การตั้งค่าเรียบง่ายขึ้น และการตั้งค่าของคุณจะถูกบันทึกไว้ในบัญชี
+แพ็กเกจตลอดชีพยังคงราคาเดิมถึง 30 พฤศจิกายน ตั้งแต่ธันวาคมราคาจะขึ้น รีบซื้อแพ็กเกจตลอดชีพตอนนี้เลย! 🔥
+Button: แพ็กเกจ
+</th>
+
+<ru-RU>
+GamepadOS 2.1 уже здесь! 🎉 Приложение теперь на вашем языке, настройки стали проще, а ваши настройки сохраняются в аккаунте.
+Тариф «Навсегда» доступен по текущей цене до 30 ноября. С декабря цена вырастет, так что успейте купить «Навсегда»! 🔥
+Button: Тарифы
+</ru-RU>
+
+<uk>
+GamepadOS 2.1 вже тут! 🎉 Застосунок тепер вашою мовою, налаштування стали простішими, а ваші налаштування зберігаються в акаунті.
+Тариф «Назавжди» доступний за поточною ціною до 30 листопада. З грудня ціна зросте, тож встигніть придбати «Назавжди»! 🔥
+Button: Тарифи
+</uk>
+
+<tr-TR>
+GamepadOS 2.1 çıktı! 🎉 Uygulama artık senin dilinde, Ayarlar daha sade ve ayarların hesabına kaydediliyor.
+Ömür Boyu planı 30 Kasım'a kadar bugünkü fiyatında. Aralık'tan itibaren fiyat artacak, Ömür Boyu'nu hemen al! 🔥
+Button: Planlar
+</tr-TR>
+
+<de-DE>
+GamepadOS 2.1 ist da! 🎉 Die App spricht jetzt deine Sprache, die Einstellungen sind einfacher und deine Einstellungen werden in deinem Konto gespeichert.
+Lifetime bleibt bis zum 30. November beim heutigen Preis. Ab Dezember wird es teurer, also hol dir Lifetime jetzt! 🔥
+Button: Pläne
+</de-DE>
+
+<fr-FR>
+GamepadOS 2.1 est là ! 🎉 L'appli parle maintenant votre langue, les Réglages sont plus simples et vos réglages sont enregistrés sur votre compte.
+L'offre À vie garde son prix actuel jusqu'au 30 novembre. À partir de décembre, le prix augmente : prenez l'offre À vie dès maintenant ! 🔥
+Button: Offres
+</fr-FR>
+
+<it-IT>
+GamepadOS 2.1 è qui! 🎉 L'app ora parla la tua lingua, le Impostazioni sono più semplici e le tue impostazioni vengono salvate nel tuo account.
+Il piano A vita resta al prezzo di oggi fino al 30 novembre. Da dicembre il prezzo aumenta, quindi prendi A vita adesso! 🔥
+Button: Piani
+</it-IT>
+
+<pl-PL>
+GamepadOS 2.1 już jest! 🎉 Aplikacja mówi teraz w Twoim języku, ustawienia są prostsze, a Twoje ustawienia zapisują się na koncie.
+Plan „Dożywotni” kosztuje tyle co dziś do 30 listopada. Od grudnia cena wzrośnie, więc kup „Dożywotni” już teraz! 🔥
+Button: Plany
+</pl-PL>
+
+<es-ES>
+¡Ya está aquí GamepadOS 2.1! 🎉 La app ahora habla tu idioma, los Ajustes son más sencillos y tus ajustes se guardan en tu cuenta.
+El plan Vitalicio mantiene su precio actual hasta el 30 de noviembre. A partir de diciembre sube de precio, ¡hazte con el Vitalicio ya! 🔥
+Button: Planes
+</es-ES>
+
+<es-419>
+¡Ya llegó GamepadOS 2.1! 🎉 La app ahora habla tu idioma, la Configuración es más sencilla y tu configuración se guarda en tu cuenta.
+El plan Vitalicio mantiene su precio actual hasta el 30 de noviembre. Desde diciembre sube de precio, ¡compra el Vitalicio ya! 🔥
+Button: Planes
+</es-419>
+
+<pt-BR>
+O GamepadOS 2.1 chegou! 🎉 O app agora fala o seu idioma, as Configurações ficaram mais simples e suas configurações são salvas na sua conta.
+O plano Vitalício continua com o preço atual até 30 de novembro. A partir de dezembro o preço sobe, então garanta o Vitalício agora! 🔥
+Button: Planos
+</pt-BR>
+
+<pt-PT>
+O GamepadOS 2.1 chegou! 🎉 A app agora fala a sua língua, as Definições estão mais simples e as suas definições ficam guardadas na sua conta.
+O plano Vitalício mantém o preço atual até 30 de novembro. A partir de dezembro o preço sobe, por isso garanta já o Vitalício! 🔥
+Button: Planos
+</pt-PT>
