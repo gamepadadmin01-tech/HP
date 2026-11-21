@@ -13,7 +13,7 @@ use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
-use super::{CAMERA_PORT, decode::H264Decoder, proto, vcam};
+use super::{CAMERA_PORT, decode::H264Decoder, preview, proto, vcam};
 
 /// What the server window shows on the "Phone camera" card.
 #[derive(Clone, Debug, Default)]
@@ -73,6 +73,7 @@ pub fn start(key: String) -> Result<(), String> {
                         s.live = false;
                         s.fps = 0.0;
                     }
+                    preview::clear();
                     BUSY.store(false, Ordering::SeqCst);
                 });
             }
@@ -138,6 +139,7 @@ fn serve(c: &mut TcpStream, key: &str) -> Result<(), String> {
         c.read_exact(&mut payload).map_err(|e| format!("frame: {e}"))?;
         let mut on_frame = |fw: u32, fh2: u32, nv12: Vec<u8>| {
             frames += 1;
+            preview::offer(fw, fh2, &nv12);
             vcam::publish(fw, fh2, nv12);
         };
         if let Err(e) = dec.decode(&payload, fh.pts_us, w, h, &mut on_frame) {

@@ -363,68 +363,55 @@ function statusLine(pc: PC | null, st: PcStatus): { text: string; tone: "ok" | "
 
 function TabCamera(p: DashProps & { openSettings: () => void }) {
   const line = statusLine(p.pc, p.pcStatus);
-  const q = p.s.quality === 1080 && !p.hdAllowed ? 720 : p.s.quality;
-  const fps = p.lens.fps.includes(p.s.fps) ? p.s.fps : 30;
-  const summary = `${q}p · ${fps} fps · ${p.s.bitrate ? `${p.s.bitrate / 1000} Mbit/s` : "Auto bitrate"} · ${lensShort(p.lens)} camera`;
   const left = minutesLeft(p.hdUntil);
 
-  return <div className="calm-home">
+  // Owner, 2026-11-22: big button in the middle, status under it, fewer words, steps first, then the HD offer.
+  return <div className="calm-home camos-home">
     <h1 className="sr-only">Camera</h1>
-    <div className="console-connect-entry" data-link-state={line.tone === "warn" ? "no-reply" : line.tone === "ok" ? "paired" : "none"}>
+    <div className="camos-start" data-tone={line.tone}>
       {p.pc
-        ? <button className="console-connect-button" data-testid="camos-start" onClick={p.onStart}><Video size={20} aria-hidden="true" /><span>Start camera</span><ArrowRight size={18} aria-hidden="true" /></button>
-        : <button className="console-connect-button" data-testid="camos-connect" onClick={p.onConnect}><Monitor size={20} aria-hidden="true" /><span>Connect to PC</span><ArrowRight size={18} aria-hidden="true" /></button>}
-      <div className="console-connect-status camos-status" data-tone={line.tone}>
-        <SwapIn swapKey={line.text}><span>{line.text}</span></SwapIn>
-        {p.pc && <span className="camos-status-actions">
-          {line.tone !== "warn" && p.pcStatus.status !== "checking" && <button className="calm-why-link" onClick={p.onCheck}>Check again</button>}
-          <button className="calm-why-link" onClick={p.onConnect}>{p.pcStatus.status === "badkey" ? "Scan again" : "Change PC"}</button>
-        </span>}
-      </div>
+        ? <button className="console-connect-button" data-testid="camos-start" onClick={p.onStart}><Video size={20} aria-hidden="true" /><span>Start camera</span></button>
+        : <button className="console-connect-button" data-testid="camos-connect" onClick={p.onConnect}><Monitor size={20} aria-hidden="true" /><span>Connect to PC</span></button>}
+      <p className="camos-status" data-tone={line.tone}><span className="camos-status-dot" aria-hidden="true" />
+        <SwapIn swapKey={line.text}><span>{line.text}</span></SwapIn></p>
+      {p.pc && <p className="camos-status-actions">
+        {p.pcStatus.status !== "checking" && <button className="camos-link" onClick={p.onCheck}>Check again</button>}
+        <button className="camos-link" onClick={p.onConnect}>{p.pcStatus.status === "badkey" ? "Scan again" : "Change PC"}</button>
+      </p>}
     </div>
     <Collapse open={line.tone === "warn"}>
       <div className="camos-notice" role="status">
         <p>{p.pcStatus.message}</p>
-        <div className="camos-notice-actions">
-          <button className="calm-text-button" onClick={p.onCheck}><RefreshCw size={15} aria-hidden="true" />Check again</button>
-          {(p.pcStatus.status === "old" || p.pcStatus.status === "unreachable") && <button className="calm-text-button" onClick={() => window.open("https://gamepad.space/#download", "_blank")}><Download size={15} aria-hidden="true" />Get the PC server</button>}
-        </div>
+        {(p.pcStatus.status === "old" || p.pcStatus.status === "unreachable") &&
+          <button className="calm-text-button" onClick={() => window.open("https://gamepad.space/#download", "_blank")}><Download size={15} aria-hidden="true" />Get the PC server</button>}
       </div>
     </Collapse>
 
-    {/* HD for 45 minutes from one ad (owner: on the home page). Premium users already have HD. */}
-    <div className="calm-section-heading"><h2>HD quality</h2></div>
+    <div className="calm-section-heading"><h2>On your PC</h2></div>
+    <ol className="calm-steps">
+      <li className="calm-step"><span className="calm-step-number" aria-hidden="true">1</span><div><h2>Open Gamepad Server</h2><p>Same Wi-Fi as this phone.</p></div></li>
+      <li className="calm-step"><span className="calm-step-number" aria-hidden="true">2</span><div><h2>Pick “CamOS Camera”</h2><p>In Zoom, Meet, Teams or any app.</p></div></li>
+    </ol>
+
+    {/* HD for 45 minutes from one ad. Premium users already have HD. */}
+    <div className="calm-section-heading camos-gap"><h2>HD</h2></div>
     <SwapIn swapKey={p.premium ? "premium" : p.adHd ? "active" : "offer"}>
       {p.premium
         ? <div className="console-plan-card camos-hd-card" data-plan="LIFETIME"><div className="camos-hd-row"><Crown size={18} aria-hidden="true" />
-            <div><p className="text-sm font-bold calm-ink">Premium · 1080p HD always</p><p className="text-xs calm-muted">No watermark, all filters, no ads.</p></div></div></div>
+            <p className="text-sm font-bold calm-ink">Premium · HD always</p></div></div>
         : p.adHd
         ? <div className="console-plan-card camos-hd-card" data-plan="AD"><div className="camos-hd-row"><Timer size={18} aria-hidden="true" />
-            <div className="calm-grow"><p className="text-sm font-bold calm-ink">HD unlocked · {left} min left</p><p className="text-xs calm-muted">1080p is available until the timer runs out.</p></div></div>
+            <p className="text-sm font-bold calm-ink calm-grow">HD on · {left} min left</p></div>
             <div className="camos-hd-meter"><span style={{ transform: `scaleX(${Math.min(1, left / HD_MINUTES)})` }} /></div></div>
         : <div className="console-plan-card camos-hd-card" data-plan="AD">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0"><p className="text-sm font-bold calm-ink">Unlock HD for {HD_MINUTES} minutes</p>
-                <ul className="mt-1.5 space-y-0.5"><li className="text-xs calm-muted"><Check size={12} aria-hidden="true" />1080p streaming</li><li className="text-xs calm-muted"><Check size={12} aria-hidden="true" />Watch one short ad</li></ul></div>
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-sm font-bold calm-ink">1080p HD for {HD_MINUTES} min</p>
               <p className="console-plan-price text-xl font-bold shrink-0">Free</p>
             </div>
             <button className="console-plan-buy mt-3 w-full py-3 rounded-xl text-sm font-semibold transition-colors" data-testid="camos-watch-ad" onClick={p.onWatchAd}><Play size={14} aria-hidden="true" /> Watch an ad</button>
-            <button className="calm-text-button camos-premium-link" onClick={p.goPremium}><Crown size={14} aria-hidden="true" />Or get Premium: HD always, no watermark</button>
+            <button className="camos-link camos-premium-link" onClick={p.goPremium}><Crown size={14} aria-hidden="true" />Or go Premium</button>
           </div>}
     </SwapIn>
-
-    <div className="calm-section-heading camos-gap"><h2>Your picture</h2></div>
-    <div className="calm-settings-panel camos-quick">
-      <div className="calm-setting-row"><div className="calm-grow"><span className="calm-setting-label">{summary}</span>
-        <p>{SHAPE_HELP[p.s.shape].split(".")[0]}.{!p.premium && " Free streams carry a small CamOS mark."}</p></div>
-        <button className="calm-text-button" onClick={p.openSettings}><SlidersHorizontal size={16} aria-hidden="true" />Change</button></div>
-    </div>
-
-    <div className="calm-section-heading camos-gap"><h2>Use it on your PC</h2></div>
-    <ol className="calm-steps">
-      <li className="calm-step"><span className="calm-step-number" aria-hidden="true">1</span><div><h2>Keep Gamepad Server open</h2><p>Windows 11, same Wi-Fi as this phone.</p></div></li>
-      <li className="calm-step"><span className="calm-step-number" aria-hidden="true">2</span><div><h2>Pick “CamOS Camera”</h2><p>In Zoom, Google Meet, Teams, Discord, OBS or the Camera app.</p></div></li>
-    </ol>
   </div>;
 }
 

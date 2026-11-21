@@ -42,18 +42,26 @@
 
 /* ── 2026-11-21 round 2: two tabs, HD-from-an-ad card, Premium, every camera setting, live adjust panel ── */
 
-/* Home status line, in GamepadOS's spot left of the big button: short words + small links; details in a note below. */
-.gp-shell .camos-status { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
+/* Home: the big button in the middle, the PC status and two plain links under it (owner, 2026-11-22). */
+.gp-shell .camos-start { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 18px 0 24px; text-align: center; }
+.gp-shell .camos-start .console-connect-button { width: min(100%, 320px); justify-content: center; }
+.gp-shell .camos-status { display: inline-flex; align-items: center; gap: 8px; font: 500 15px/1.35 var(--calm-body); color: var(--calm-muted); }
+.gp-shell .camos-status-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; background: var(--calm-muted); transition: background-color var(--dur-ui) var(--ease-out); }
 .gp-shell .camos-status[data-tone='ok'] { color: var(--calm-ink); }
-.gp-shell .camos-status[data-tone='wait'] > div:first-child { animation: camos-breathe 1.6s ease-in-out infinite; }
-.gp-shell .camos-status-actions { display: flex; flex-wrap: wrap; gap: 2px 12px; font-size: 13px; }
-.gp-shell .camos-status-actions .calm-why-link { margin: 0; }
-@keyframes camos-breathe { 0%, 100% { opacity: .55; } 50% { opacity: 1; } }
-@media (prefers-reduced-motion: reduce) { .gp-shell .camos-status[data-tone='wait'] > div:first-child { animation: none; } }
-.gp-shell .camos-notice { margin: 0 0 24px; padding: 12px 14px; border-radius: 12px; background: var(--calm-warning-bg, var(--calm-surface)); border: 1px solid var(--calm-line);
-  color: var(--calm-ink); font-size: 14px; line-height: 1.45; }
-.gp-shell .camos-notice-actions { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 6px; }
-.gp-shell .camos-notice-actions .calm-text-button { display: inline-flex; align-items: center; gap: 6px; }
+.gp-shell .camos-status[data-tone='ok'] .camos-status-dot { background: var(--calm-accent); }
+.gp-shell .camos-status[data-tone='warn'] { color: var(--calm-warning); }
+.gp-shell .camos-status[data-tone='warn'] .camos-status-dot { background: var(--calm-warning); }
+.gp-shell .camos-status[data-tone='wait'] .camos-status-dot { animation: camos-breathe 1.6s ease-in-out infinite; }
+@keyframes camos-breathe { 0%, 100% { opacity: .35; } 50% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .gp-shell .camos-status[data-tone='wait'] .camos-status-dot { animation: none; } }
+.gp-shell .camos-status-actions { display: flex; justify-content: center; gap: 4px; margin: -4px 0 0; }
+/* Plain links: accent colour, no underline, a comfortable tap area. */
+.gp-shell .camos-link { display: inline-flex; align-items: center; gap: 6px; padding: 8px 10px; border: 0; background: none; border-radius: 8px;
+  font: 600 14px var(--calm-body); color: var(--calm-accent); text-decoration: none; transition: background-color var(--dur-ui) var(--ease-out); }
+.gp-shell .camos-link:active { background: var(--calm-tint); }
+.gp-shell .camos-notice { margin: 0 0 22px; padding: 12px 14px; border-radius: 12px; background: var(--calm-warning-bg, var(--calm-surface)); border: 1px solid var(--calm-line);
+  color: var(--calm-ink); font-size: 14px; line-height: 1.45; text-align: center; }
+.gp-shell .camos-notice .calm-text-button { display: inline-flex; align-items: center; gap: 6px; margin-top: 6px; text-decoration: none; }
 
 /* HD card */
 .gp-shell .camos-hd-card { margin-bottom: 18px; }
@@ -62,7 +70,7 @@
 .gp-shell .camos-hd-meter { margin-top: 12px; height: 4px; border-radius: 999px; background: var(--calm-line); overflow: hidden; }
 .gp-shell .camos-hd-meter > span { display: block; height: 100%; background: var(--calm-accent); transform-origin: left center; transition: transform var(--dur-ui) var(--ease-out); }
 .gp-shell .console-plan-buy svg { display: inline; vertical-align: -2px; margin-right: 4px; }
-.gp-shell .camos-premium-link { display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%; margin-top: 8px; }
+.gp-shell .camos-premium-link { display: flex; justify-content: center; width: 100%; margin-top: 6px; }
 
 /* Premium marks */
 .gp-shell .calm-account-shortcut[data-premium='true'] { color: var(--calm-accent); }

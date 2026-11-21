@@ -242,7 +242,7 @@ class CamStreamer(
                 input.readFully(ack)
                 when (ack[4].toInt()) {
                     0 -> done("ready", "")
-                    1 -> done("badkey", "The pairing key changed. Scan the QR code on your PC again.")
+                    1 -> done("badkey", "Pairing changed. Scan the QR code again.")
                     2 -> done("busy", "Another phone is streaming to this PC right now.")
                     else -> done("error", "Gamepad Server refused the check.")
                 }
@@ -354,8 +354,8 @@ class CamStreamer(
         }
     }
 
-    private val OLD_SERVER = "Your PC is on, but its Gamepad Server has no camera support yet. Install the latest Gamepad Server."
-    private val NO_ANSWER = "No answer from your PC. Check that Gamepad Server is open and is the latest version (older ones have no camera part), and that the phone and PC are on the same Wi-Fi."
+    private val OLD_SERVER = "Your Gamepad Server is too old for CamOS. Install the latest one."
+    private val NO_ANSWER = "No answer. Open the latest Gamepad Server, use the same Wi-Fi, and turn off any VPN on the PC."
 
     private fun fail(message: String) {
         if (!running.getAndSet(false)) return

@@ -152,6 +152,12 @@ pub struct App {
     pairing_key: String,
     lan_ip: String,
 
+    /// CamOS: the phone's live picture, shown where the QR is while a phone streams.
+    preview_tex: Option<egui::TextureHandle>,
+    preview_seq: u64,
+    /// The user tapped "Show QR" while a phone camera is live.
+    show_qr: bool,
+
     tx: Sender<Msg>,
     rx: Receiver<Msg>,
 
@@ -184,6 +190,9 @@ impl App {
             qr_payload,
             pairing_key,
             lan_ip,
+            preview_tex: None,
+            preview_seq: 0,
+            show_qr: false,
             tx,
             rx,
             update_state: UpdateState::Idle,
@@ -372,22 +381,57 @@ impl eframe::App for App {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
         self.drain_messages();
-        ctx.request_repaint_after(REPAINT_EVERY);
+        // One server for both apps: the phone camera's picture replaces the QR while a CamOS phone streams.
+        let preview = crate::camera::preview::latest();
+        if preview.is_none() {
+            self.show_qr = false;
+            self.preview_tex = None;
+        }
+        ctx.request_repaint_after(if preview.is_some() { Duration::from_millis(66) } else { REPAINT_EVERY });
 
         // Scrolling keeps QR, recovery and support reachable at smaller windows
         // and larger Windows display scales, including long failure messages.
         egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
             ui.add_space(10.0);
             ui.vertical_centered(|ui| {
-                ui.heading("Ready when you are.");
+                let live_cam = preview.is_some() && !self.show_qr;
+                ui.heading(if live_cam { "Phone camera live." } else { "Ready when you are." });
                 ui.label(
-                    egui::RichText::new("Scan with GamepadOS to connect.")
+                    egui::RichText::new(if live_cam { "Apps see it as \u{201c}CamOS Camera\u{201d}." } else { "Scan with GamepadOS or CamOS." })
                         .size(13.0)
                         .weak(),
                 );
             });
             ui.add_space(8.0);
 
+            // ── Phone camera preview (CamOS) ─────────────────────────────────
+            if let Some(pv) = preview.as_ref().filter(|_| !self.show_qr) {
+                if self.preview_tex.is_none() || self.preview_seq != pv.seq {
+                    let img = egui::ColorImage::from_rgba_unmultiplied([pv.width as usize, pv.height as usize], &pv.rgba);
+                    match &mut self.preview_tex {
+                        Some(t) => t.set(img, egui::TextureOptions::LINEAR),
+                        None => self.preview_tex = Some(ctx.load_texture("camos-preview", img, egui::TextureOptions::LINEAR)),
+                    }
+                    self.preview_seq = pv.seq;
+                }
+                ui.vertical_centered(|ui| {
+                    if let Some(tex) = &self.preview_tex {
+                        // Same footprint as the QR card, so the window keeps its layout. Fitted, never cropped.
+                        const BOX_W: f32 = 300.0;
+                        const BOX_H: f32 = 180.0;
+                        let k = (BOX_W / pv.width as f32).min(BOX_H / pv.height as f32);
+                        let size = egui::vec2(pv.width as f32 * k, pv.height as f32 * k);
+                        ui.allocate_ui(egui::vec2(BOX_W, BOX_H + 4.0), |ui| {
+                            ui.vertical_centered(|ui| {
+                                ui.add(egui::Image::new(tex).fit_to_exact_size(size).corner_radius(10.0));
+                            });
+                        });
+                    }
+                    if ui.small_button("Show QR").clicked() {
+                        self.show_qr = true;
+                    }
+                });
+            } else {
             // ── QR ───────────────────────────────────────────────────────────
             ui.vertical_centered(|ui| {
                 if let Some(tex) = &self.qr_texture {
@@ -422,7 +466,11 @@ impl eframe::App for App {
                         "Pairing QR unavailable — Wi-Fi pairing will not work.",
                     );
                 }
+                if preview.is_some() && ui.small_button("Show phone camera").clicked() {
+                    self.show_qr = false;
+                }
             });
+            }
 
             ui.add_space(4.0);
 
