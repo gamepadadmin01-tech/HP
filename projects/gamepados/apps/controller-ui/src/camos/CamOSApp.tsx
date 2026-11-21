@@ -2,7 +2,7 @@ import React, { useEffect, useId, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import {
   ArrowLeft, ArrowRight, Camera, Check, ChevronRight, Crown, Download, Flashlight, FlashlightOff, Info, Lock, Monitor, Moon,
-  MonitorSmartphone, Palette, Play, QrCode, RefreshCw, ScanLine, Settings as SettingsIcon, SlidersHorizontal, Smartphone, Sparkles,
+  MonitorSmartphone, Palette, Play, QrCode, RefreshCw, ScanLine, Settings as SettingsIcon, SlidersHorizontal, Smartphone, Sparkles, RectangleHorizontal, RectangleVertical,
   Square, Sun, SwitchCamera, Timer, Usb, Video, Wifi, X,
 } from "lucide-react";
 import { ChoiceBar, Collapse, SwapIn } from "../app/components/Motion";
@@ -34,7 +34,7 @@ const bridge = (): Bridge | undefined => (window as any).CamOSBridge;
 type PC = { ip: string; key: string };
 type Route = "dashboard" | "connect" | "live";
 type Tab = "home" | "system";
-type LiveState = { state: "connecting" | "live"; message: string; fps: number; kbps: number };
+type LiveState = { state: "connecting" | "live"; message: string; fps: number; kbps: number; portrait?: boolean };
 type PcStatus = { status: "unknown" | "checking" | "ready" | "old" | "unreachable" | "badkey" | "busy" | "error"; message: string };
 type Lens = { id: string; front: boolean; label: string; zoomMin: number; zoomMax: number; evMin: number; evMax: number; evStep: number;
   flash: boolean; manualFocus: boolean; stabilize: boolean; fps: number[] };
@@ -132,7 +132,7 @@ export default function CamOSApp() {
   const nativeSettings = (st: Settings = s) => JSON.stringify({
     ...st,
     quality: st.quality === 1080 && !hdAllowed ? 720 : st.quality,
-    fps: lens.fps.includes(st.fps) ? st.fps : 30,
+    fps: st.fps <= 30 ? st.fps : lens.fps.includes(60) ? 60 : 30,
     cameraId: lens.id,
     front: lens.front,
     watermark: !premium,
@@ -215,7 +215,7 @@ export default function CamOSApp() {
         setRoute("dashboard"); return;
       }
       if (st.state === "error") { setScanning(false); setRoute((r) => (r === "live" ? "dashboard" : r)); showToast(st.message); return; }
-      setLive({ state: st.state, message: st.message, fps: st.fps, kbps: st.kbps });
+      setLive({ state: st.state, message: st.message, fps: st.fps, kbps: st.kbps, portrait: st.portrait });
     };
     (window as any).camosOnPermission = (ok: boolean) => { if (!ok) showToast("CamOS needs the camera permission to work as a webcam."); };
     // Android back button: the native side asks us first (true = handled here).
@@ -246,7 +246,14 @@ export default function CamOSApp() {
         onManual={(found) => { setPc(found); setRoute("dashboard"); }} />
     </ShellScreenTransition>}
     {route === "live" && <ShellScreenTransition key="live" direction={1} className="absolute inset-0">
-      <LiveScreen live={live} s={s} set={set} lens={lens} lenses={lenses} premium={premium} hdAllowed={hdAllowed} goPremium={() => { bridge()?.stop(); goPremium(); }} showToast={showToast} />
+      <LiveScreen live={live} s={s} set={set} lens={lens} lenses={lenses} premium={premium} hdAllowed={hdAllowed} goPremium={() => { bridge()?.stop(); goPremium(); }} showToast={showToast}
+        onReshape={(shape) => {
+          // A new picture shape needs a new stream: stop, then start again in the new shape (screen turns with it).
+          set({ shape });
+          restartAfterStop.current = true;
+          setLive((l) => ({ ...l, state: "connecting", message: shape === "landscape" ? "Switching to wide…" : "Switching to tall…" }));
+          bridge()?.stop();
+        }} />
     </ShellScreenTransition>}
   </AnimatePresence>
   <AnimatePresence>
@@ -436,7 +443,9 @@ export type SettingsPage = "menu" | "premium" | "video" | "camera" | "light" | "
 function TabSettings(p: DashProps) {
   const { s, set, lens } = p;
   const version = (() => { try { return bridge()?.version() ?? "browser preview"; } catch { return ""; } })();
-  const fpsChoices = ([15, 24, 30, 60] as const).filter((f) => lens.fps.includes(f));
+  const fpsChoices = [15, 24, 30, 60] as const;
+  const can60 = lens.fps.includes(60);
+  const fpsNow = s.fps === 60 && !can60 ? 30 : s.fps;
   const lockedTap = (what: string) => { p.showToast(`${what} is part of Premium.`); p.goPremium(); };
   const chooseQuality = (v: string) => {
     const q = Number(v) as Settings["quality"];
@@ -465,7 +474,7 @@ function TabSettings(p: DashProps) {
         {p.testBuild && <div className="calm-settings-panel"><CalmSwitch label="Test build: pretend Premium" detail="Only in test builds, so every Premium screen and filter can be tried." on={p.premium} onChange={p.setPremium} /></div>}
       </div>
       </div> },
-    { id: "video", title: "Video quality", Icon: Video, tone: "blue", summary: `${q}p · ${fpsChoices.includes(s.fps) ? s.fps : 30} fps · ${s.bitrate ? `${(s.bitrate / 1000).toFixed(1)} Mbit/s` : "Auto bitrate"} · ${{ auto: "Auto shape", landscape: "Wide", portrait: "Tall" }[s.shape]}`,
+    { id: "video", title: "Video quality", Icon: Video, tone: "blue", summary: `${q}p · ${fpsNow} fps · ${s.bitrate ? `${(s.bitrate / 1000).toFixed(1)} Mbit/s` : "Auto bitrate"} · ${{ auto: "Auto shape", landscape: "Wide", portrait: "Tall" }[s.shape]}`,
       body: () => panel(<>
       <div className="calm-setting-detail camos-first"><h3>Quality</h3>
         <ChoiceBar label="Picture quality" value={String(s.quality)} onChoose={chooseQuality}
@@ -474,9 +483,10 @@ function TabSettings(p: DashProps) {
         <SwapIn swapKey={String(s.quality)}><p>{QUALITY_HELP[s.quality]}</p></SwapIn>
       </div>
       <div className="calm-setting-detail"><h3>Frame rate</h3>
-        <ChoiceBar label="Frame rate" value={String(fpsChoices.includes(s.fps) ? s.fps : 30)} onChoose={(v) => set({ fps: Number(v) as Settings["fps"] })}
+        <ChoiceBar label="Frame rate" value={String(s.fps)} onChoose={(v) => set({ fps: Number(v) as Settings["fps"] })}
           choices={fpsChoices.map((f) => ({ value: String(f), label: `${f} fps`, testId: `s-fps-${f}` }))} />
-        <p>{s.fps >= 60 ? "Smoothest motion. Uses more Wi-Fi and battery." : s.fps <= 15 ? "Saves Wi-Fi and battery. Motion looks choppy." : "30 fps is what most webcams use."}</p>
+        <SwapIn swapKey={`${s.fps}-${can60}`}><p>{s.fps >= 60 ? (can60 ? "Smoothest motion. Uses more Wi-Fi and battery." : "This lens can't film 60 fps, so CamOS uses 30. Try another lens.")
+          : s.fps <= 15 ? "Saves Wi-Fi and battery. Motion looks choppy." : "30 fps is what most webcams use."}</p></SwapIn>
       </div>
       <CalmSwitch label="Automatic bitrate" detail="CamOS picks how much detail to send for your quality and frame rate." on={s.bitrate === 0} onChange={(v) => set({ bitrate: v ? 0 : 6000 })} />
       <Collapse open={s.bitrate !== 0}>
@@ -701,10 +711,11 @@ function Scanner({ onClose }: { onClose: () => void }) {
 }
 
 // ─── Live: the picture fills the screen; the camera controls float over it ─────────────────────────────────────
-function LiveScreen({ live, s, set, lens, lenses, premium, hdAllowed, goPremium, showToast }: {
+function LiveScreen({ live, s, set, lens, lenses, premium, hdAllowed, goPremium, showToast, onReshape }: {
   live: LiveState; s: Settings; set: (p: Partial<Settings>) => void; lens: Lens; lenses: Lens[]; premium: boolean; hdAllowed: boolean;
-  goPremium: () => void; showToast: (m: string) => void;
+  goPremium: () => void; showToast: (m: string) => void; onReshape: (shape: "landscape" | "portrait") => void;
 }) {
+  const portraitNow = live.portrait ?? s.shape === "portrait";
   const [panel, setPanel] = useState(false);
   const isLive = live.state === "live";
   const q = s.quality === 1080 && !hdAllowed ? 720 : s.quality;
@@ -744,6 +755,8 @@ function LiveScreen({ live, s, set, lens, lenses, premium, hdAllowed, goPremium,
     <motion.nav className="camos-bar" aria-label="Camera controls" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ ...SPRING, delay: .05 }}>
       {other && <button className="calm-icon-button" onClick={() => set({ front: other.front, cameraId: other.id, zoom: 1, torch: false })} aria-label="Switch camera"><SwitchCamera size={20} /></button>}
       {lens.flash && <button className="calm-icon-button" data-on={s.torch} onClick={() => set({ torch: !s.torch })} aria-label={s.torch ? "Flashlight off" : "Flashlight on"}>{s.torch ? <FlashlightOff size={20} /> : <Flashlight size={20} />}</button>}
+      <button className="calm-icon-button" data-testid="live-reshape" disabled={!isLive} onClick={() => onReshape(portraitNow ? "landscape" : "portrait")}
+        aria-label={portraitNow ? "Switch to a wide picture" : "Switch to a tall picture"}>{portraitNow ? <RectangleHorizontal size={20} /> : <RectangleVertical size={20} />}</button>
       <button className="calm-icon-button" data-on={panel} onClick={() => setPanel((v) => !v)} aria-label="Adjust picture" aria-expanded={panel}><SlidersHorizontal size={20} /></button>
       <button className="calm-icon-button" onClick={() => bridge()?.dim(true)} aria-label="Dim screen (keeps streaming)"><Moon size={20} /></button>
       <button className="calm-primary camos-stop" onClick={() => bridge()?.stop()}><Square size={14} aria-hidden="true" />Stop</button>

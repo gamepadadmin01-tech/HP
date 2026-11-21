@@ -5,6 +5,7 @@ import android.content.Context
 import android.graphics.Rect
 import android.graphics.SurfaceTexture
 import android.hardware.camera2.CameraCaptureSession
+import android.hardware.camera2.CameraConstrainedHighSpeedCaptureSession
 import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraDevice
 import android.hardware.camera2.CameraManager
@@ -154,6 +155,9 @@ class CamStreamer(
     @Volatile private var waitForKey = true
 
     @Volatile var settings = CamSettings(); private set
+    /** 60 fps on phones that only film that fast in Android's "high-speed video" camera mode. */
+    @Volatile private var highSpeed = false
+    private var hsRange: Range<Int>? = null
     @Volatile var portrait = false; private set
     private var out = Size(1280, 720)
     private var cap = Size(1280, 720)
@@ -375,7 +379,7 @@ class CamStreamer(
                 val mgr = context.getSystemService(Context.CAMERA_SERVICE) as CameraManager
                 val id = pickCameraId(mgr)
                 val ch = mgr.getCameraCharacteristics(id)
-                cap = pickCaptureSize(ch)
+                cap = planCapture(ch)
                 startEncoder()
                 val pipe = GlPipeline(displayRotation) { fail(it) }
                 gl = pipe
@@ -416,6 +420,45 @@ class CamStreamer(
         return mgr.cameraIdList.firstOrNull { mgr.getCameraCharacteristics(it).get(CameraCharacteristics.LENS_FACING) == wanted }
             ?: mgr.cameraIdList.first()
     }
+
+    /**
+     * Decide how this camera will run, and at what picture size. Normally that is the regular video mode. For 60 fps
+     * on a camera whose regular mode stops at 30, Android's "constrained high-speed" mode is used instead: it only
+     * offers a few fixed sizes, so the picture size comes from that list.
+     */
+    private fun planCapture(ch: CameraCharacteristics): Size {
+        highSpeed = false
+        hsRange = null
+        if (settings.fps >= 60) {
+            val regular = ch.get(CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES) ?: emptyArray()
+            if (regular.none { it.upper >= 60 && it.lower <= 60 }) {
+                highSpeedPlan(ch, max(out.width, out.height), minOf(out.width, out.height))?.let { (range, size) ->
+                    highSpeed = true
+                    hsRange = range
+                    return size
+                }
+            }
+        }
+        return pickCaptureSize(ch)
+    }
+
+    private fun highSpeedPlan(ch: CameraCharacteristics, long: Int, short: Int): Pair<Range<Int>, Size>? = try {
+        val map = ch.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
+        val caps = ch.get(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES) ?: intArrayOf()
+        if (map == null || !caps.contains(CameraMetadata.REQUEST_AVAILABLE_CAPABILITIES_CONSTRAINED_HIGH_SPEED_VIDEO)) null
+        else {
+            val want = long.toFloat() / short
+            // A steady 60 is best; otherwise a range that reaches 60.
+            val ranges = map.highSpeedVideoFpsRanges.filter { it.upper == 60 }.sortedByDescending { it.lower }
+            ranges.firstNotNullOfOrNull { r ->
+                val sizes = map.getHighSpeedVideoSizesFor(r).toList()
+                val same = sizes.filter { abs(it.width.toFloat() / it.height - want) < 0.02f }
+                val pick = same.filter { it.width >= long }.minByOrNull { it.width } ?: same.maxByOrNull { it.width }
+                    ?: sizes.maxByOrNull { it.width * it.height }
+                pick?.let { r to it }
+            }
+        }
+    } catch (_: Exception) { null }
 
     /** Camera picture size (in the camera's own sideways frame): same shape as the output, at least as big. */
     private fun pickCaptureSize(ch: CameraCharacteristics): Size {
@@ -496,8 +539,8 @@ class CamStreamer(
         val id = pickCameraId(mgr)
         val ch = mgr.getCameraCharacteristics(id)
         chars = ch
-        // A different lens may not offer the same picture size; ask for one it does.
-        val size = pickCaptureSize(ch)
+        // A different lens may not offer the same picture size (or 60 fps the same way); ask for what it does.
+        val size = planCapture(ch)
         if (size != cap) { cap = size; gl?.setCaptureSize(size.width, size.height) }
         gl?.sensorOrientation = ch.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 90
         gl?.front = ch.get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_FRONT
@@ -523,17 +566,28 @@ class CamStreamer(
 
     private fun createSession(device: CameraDevice) {
         val target = camSurface ?: return
-        @Suppress("DEPRECATION")
-        device.createCaptureSession(listOf(target), object : CameraCaptureSession.StateCallback() {
+        val cb = object : CameraCaptureSession.StateCallback() {
             override fun onConfigured(s: CameraCaptureSession) {
                 session = s
                 repeat()
                 requestKeyFrame()
             }
             override fun onConfigureFailed(s: CameraCaptureSession) {
+                if (highSpeed) {
+                    // This phone said it could film 60 fps in high-speed mode but refused: carry on at 30.
+                    Log.w(TAG, "high-speed session refused; falling back to regular video")
+                    highSpeed = false
+                    hsRange = null
+                    chars?.let { ch -> val size = pickCaptureSize(ch); if (size != cap) { cap = size; gl?.setCaptureSize(size.width, size.height) } }
+                    createSession(device)
+                    return
+                }
                 fail("This camera can't stream at this size. Try a lower quality or another lens.")
             }
-        }, camHandler)
+        }
+        @Suppress("DEPRECATION")
+        if (highSpeed) device.createConstrainedHighSpeedCaptureSession(listOf(target), cb, camHandler)
+        else device.createCaptureSession(listOf(target), cb, camHandler)
     }
 
     /** Apply every camera setting to the running camera. Called on the camera thread. */
@@ -553,7 +607,7 @@ class CamStreamer(
                 ?: ranges.firstOrNull { it.lower == want && it.upper == want }
                 ?: ranges.filter { it.upper >= want }.minByOrNull { abs(it.upper - want) * 10 + abs(it.lower - want) }
                 ?: ranges.maxByOrNull { it.upper }
-            range?.let { b.set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, it) }
+            (if (highSpeed) hsRange else range)?.let { b.set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, it) }
 
             // Zoom.
             if (Build.VERSION.SDK_INT >= 30 && ch.get(CameraCharacteristics.CONTROL_ZOOM_RATIO_RANGE) != null) {
@@ -625,7 +679,10 @@ class CamStreamer(
             val hasFlash = ch.get(CameraCharacteristics.FLASH_INFO_AVAILABLE) == true
             b.set(CaptureRequest.FLASH_MODE, if (st.torch && hasFlash) CaptureRequest.FLASH_MODE_TORCH else CaptureRequest.FLASH_MODE_OFF)
 
-            s.setRepeatingRequest(b.build(), null, camHandler)
+            // High-speed mode takes the same request as a small burst (Android's rule for that mode); it ignores
+            // the controls it doesn't support (noise reduction etc.) instead of failing.
+            if (s is CameraConstrainedHighSpeedCaptureSession) s.setRepeatingBurst(s.createHighSpeedRequestList(b.build()), null, camHandler)
+            else s.setRepeatingRequest(b.build(), null, camHandler)
         } catch (e: Exception) {
             Log.w(TAG, "repeat failed", e)
         }
@@ -692,7 +749,14 @@ object CameraCatalog {
             val evStep = ch.get(CameraCharacteristics.CONTROL_AE_COMPENSATION_STEP)?.toFloat() ?: 0f
             val fpsRanges = ch.get(CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES) ?: emptyArray()
             val fpsList = JSONArray()
-            for (f in listOf(15, 24, 30, 60)) if (fpsRanges.any { it.upper >= f && it.lower <= f }) fpsList.put(f)
+            val hs60 = try {
+                val caps = ch.get(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES) ?: intArrayOf()
+                val map = ch.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
+                map != null && caps.contains(CameraMetadata.REQUEST_AVAILABLE_CAPABILITIES_CONSTRAINED_HIGH_SPEED_VIDEO) &&
+                    map.highSpeedVideoFpsRanges.any { r -> r.upper == 60 && map.getHighSpeedVideoSizesFor(r).any { it.width >= 1280 } }
+            } catch (_: Exception) { false }
+            for (f in listOf(15, 24, 30, 60))
+                if (fpsRanges.any { it.upper >= f && it.lower <= f } || (f == 60 && hs60)) fpsList.put(f)
             val vs = ch.get(CameraCharacteristics.CONTROL_AVAILABLE_VIDEO_STABILIZATION_MODES) ?: intArrayOf()
             val ois = ch.get(CameraCharacteristics.LENS_INFO_AVAILABLE_OPTICAL_STABILIZATION) ?: intArrayOf()
             list.put(JSONObject()

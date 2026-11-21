@@ -113,3 +113,10 @@
 .gp-shell .camos-page-head { display: flex; align-items: center; gap: 10px; margin: 0 0 14px -6px; }
 .gp-shell .camos-page-head h1 { display: flex; align-items: center; gap: 9px; font: 600 20px var(--calm-display); letter-spacing: -.3px; color: var(--calm-ink); }
 .gp-shell .camos-page-head h1 > svg { color: var(--calm-accent); }
+
+/* Six controls must fit a narrow phone held upright. */
+@media (max-width: 420px) {
+  .gp-shell .camos-bar { gap: 6px; padding: 6px; max-width: calc(100% - 20px); }
+  .gp-shell .camos-bar .camos-stop { padding: 0 14px; }
+}
+.gp-shell .camos-bar .calm-icon-button:disabled { opacity: .45; }
