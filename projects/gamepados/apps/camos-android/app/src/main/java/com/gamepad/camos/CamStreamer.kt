@@ -190,6 +190,12 @@ class CamStreamer(
 
     fun isRunning() = running.get()
 
+    /** The app is visible again: if Android took the camera away while it was hidden, open it again. */
+    fun resumeCamera() {
+        if (!running.get()) return
+        camHandler?.post { if (camera == null && camSurface != null) openCamera() }
+    }
+
     /** The phone screen preview (may arrive before or after the stream starts). */
     fun setPreview(st: SurfaceTexture?, w: Int, h: Int) {
         preview = st; previewW = w; previewH = h
@@ -241,11 +247,12 @@ class CamStreamer(
                     else -> done("error", "Gamepad Server refused the check.")
                 }
             } catch (e: Exception) {
-                // Port 7780 did not answer. Windows' firewall usually drops such knocks silently, so "no answer" alone
-                // can't tell "old Gamepad Server" from "PC not on this Wi-Fi". Knock on Gamepad Server's own port.
-                if (gamepadServerAnswers(ip)) done("old", OLD_SERVER)
-                else if (e is java.net.SocketTimeoutException) done("unreachable", "Your PC did not answer. Keep Gamepad Server open and both on the same Wi-Fi.")
-                else done("unreachable", "Can't reach your PC. Keep Gamepad Server open and both on the same Wi-Fi.")
+                // Port 7780 did not answer. A "refused" means the PC is there but nothing listens: an older Gamepad
+                // Server. Usually, though, Windows' firewall drops the knock silently, and then "old server" and
+                // "PC not on this Wi-Fi" look exactly the same from the phone, so say both. (An older server's own
+                // ports only answer packets carrying the pairing key, which would create a virtual pad: not an option.)
+                if (e is java.net.ConnectException && (e.message ?: "").contains("refused", true)) done("old", OLD_SERVER)
+                else done("unreachable", NO_ANSWER)
             } finally {
                 try { s?.close() } catch (_: Exception) {}
             }
@@ -254,8 +261,33 @@ class CamStreamer(
 
     // ───────────────────────── network ─────────────────────────
 
+    private class BusyException : Exception("Another phone is already streaming to this PC.")
+
     private fun networkMain(ip: String, key: String) {
         try {
+            try { connectAndStream(ip, key) }
+            catch (e: BusyException) {
+                // Usually our own "is my PC ready?" check, still closing on the PC. One quiet retry.
+                Thread.sleep(700)
+                if (running.get()) connectAndStream(ip, key)
+            }
+        } catch (e: Exception) {
+            if (running.get()) {
+                val network = e is java.net.SocketTimeoutException || e is java.net.ConnectException || e is java.net.NoRouteToHostException
+                val msg = when {
+                    e is java.net.SocketException && !network && socket?.isConnected == true ->
+                        "The connection to your PC dropped. Check the Wi-Fi and press Start camera again."
+                    e is java.net.ConnectException && (e.message ?: "").contains("refused", true) -> OLD_SERVER
+                    network -> NO_ANSWER
+                    else -> e.message ?: "Connection lost."
+                }
+                fail(msg)
+            }
+        }
+    }
+
+    private fun connectAndStream(ip: String, key: String) {
+        run {
             val s = Socket()
             s.tcpNoDelay = true
             s.sendBufferSize = 512 * 1024
@@ -269,7 +301,8 @@ class CamStreamer(
             input.readFully(hello, 0, 4)
             // A PC that is already busy answers straight away with "CAMA" + status, without a challenge.
             if (String(hello, 0, 4, Charsets.US_ASCII) == "CAMA") {
-                throw Exception(if (input.read() == 2) "Another phone is already streaming to this PC." else "Gamepad Server refused the connection.")
+                if (input.read() == 2) { s.close(); throw BusyException() }
+                throw Exception("Gamepad Server refused the connection.")
             }
             input.readFully(hello, 4, 17)
             if (String(hello, 0, 4, Charsets.US_ASCII) != "CAMS") throw Exception("This is not Gamepad Server")
@@ -281,7 +314,7 @@ class CamStreamer(
             when (ack[4].toInt()) {
                 0 -> {}
                 1 -> throw Exception("Wrong pairing key. Scan the QR code on your PC again.")
-                2 -> throw Exception("Another phone is already streaming to this PC.")
+                2 -> { s.close(); throw BusyException() }
                 else -> throw Exception("Gamepad Server refused the connection.")
             }
             s.soTimeout = 0
@@ -318,27 +351,11 @@ class CamStreamer(
                     sentFrames = 0; sentBytes = 0; window = now
                 }
             }
-        } catch (e: Exception) {
-            if (running.get()) {
-                val network = e is java.net.SocketTimeoutException || e is java.net.ConnectException || e is java.net.NoRouteToHostException
-                val msg = when {
-                    network && socket?.isConnected != true && gamepadServerAnswers(ip) -> OLD_SERVER
-                    network -> "Could not reach your PC. Open Gamepad Server and keep both on the same Wi-Fi."
-                    else -> e.message ?: "Connection lost."
-                }
-                fail(msg)
-            }
         }
     }
 
     private val OLD_SERVER = "Your PC is on, but its Gamepad Server has no camera support yet. Install the latest Gamepad Server."
-
-    /** Gamepad Server (any version) listens on TCP 7777 too. If that answers while 7780 doesn't, the PC is there but
-     *  its server is older than CamOS. */
-    private fun gamepadServerAnswers(ip: String): Boolean = try {
-        Socket().use { it.connect(InetSocketAddress(ip, 7777), 1500) }
-        true
-    } catch (_: Exception) { false }
+    private val NO_ANSWER = "No answer from your PC. Check that Gamepad Server is open and is the latest version (older ones have no camera part), and that the phone and PC are on the same Wi-Fi."
 
     private fun fail(message: String) {
         if (!running.getAndSet(false)) return
@@ -490,7 +507,12 @@ class CamStreamer(
                 camera = device
                 createSession(device)
             }
-            override fun onDisconnected(device: CameraDevice) { device.close(); if (camera == device) camera = null }
+            override fun onDisconnected(device: CameraDevice) {
+                // Android takes the camera away when CamOS goes to the background (no foreground service yet).
+                // The stream keeps its connection; resumeCamera() opens the camera again when the app is back.
+                device.close()
+                if (camera == device) { camera = null; session = null }
+            }
             override fun onError(device: CameraDevice, error: Int) {
                 device.close()
                 fail(if (error == ERROR_CAMERA_IN_USE || error == ERROR_MAX_CAMERAS_IN_USE)

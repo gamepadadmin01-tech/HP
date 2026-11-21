@@ -24,6 +24,7 @@ import java.nio.ByteOrder
 import java.nio.FloatBuffer
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.max
 import kotlin.math.min
@@ -40,18 +41,20 @@ import kotlin.math.sin
  * New word: **OpenGL** is the phone's graphics chip. It does the turning, cropping and filters for almost no battery,
  * because the picture never leaves the graphics memory. Every phone that runs CamOS has it (OpenGL ES 2.0).
  *
- * Turning the picture upright: a phone camera always sees the world sideways relative to the phone's natural
- * (upright) screen. Android tells us by how much (`sensorOrientation`), and the screen tells us how the phone is
- * held (`displayRotation`). Same formulas as Android's own camera guide:
- *   back camera:  turn clockwise by (sensor − display)
- *   front camera: turn clockwise by (sensor + display)   — the PC always gets the true, un-mirrored picture
+ * Turning the picture upright: Android's camera service already turns each camera frame to the phone's natural
+ * (upright) screen and mirrors the front camera, and hands us that as the SurfaceTexture's transform matrix (the
+ * same thing that makes a TextureView preview look right). So we:
+ *   1. apply that matrix (picture is now upright for a phone held in its natural way),
+ *   2. undo the mirror if the matrix has one (the PC always gets the true, un-mirrored picture),
+ *   3. turn the picture back by the screen's rotation (displayRotation), so it is upright however the phone is held.
+ * We read the turn and the mirror from the matrix itself instead of assuming them, so odd phones still come out right.
  */
 class GlPipeline(private val displayRotation: () -> Int, private val onError: (String) -> Unit) {
 
     companion object { private const val TAG = "CamOS-GL" }
 
     // ── what the UI can change at any time (read on the GL thread every frame) ──
-    @Volatile var sensorOrientation = 90
+    @Volatile var sensorOrientation = 90   // only for the log; the matrix is what counts
     @Volatile var front = false
     @Volatile var look = 0          // 0 none, 1 warm, 2 cool, 3 vivid, 4 black & white, 5 film
     @Volatile var smooth = 0f       // 0 = off … 1 = strongest face smoothing
@@ -225,19 +228,27 @@ class GlPipeline(private val displayRotation: () -> Int, private val onError: (S
 
     private fun drawCamera() {
         GLES20.glUseProgram(camProg)
+        // What Android's matrix already did: a quarter turn swaps the picture's width and height, and a mirror shows
+        // up as a positive determinant (a plain SurfaceTexture matrix has a vertical flip, so its determinant is −1).
+        val m = stMatrix
+        val quarterTurned = abs(m[0]) < 0.5f
+        val mirrored = m[0] * m[5] - m[1] * m[4] > 0f
+        val natW = if (quarterTurned) capH else capW
+        val natH = if (quarterTurned) capW else capH
+        // Turn back by the screen rotation: counter-clockwise on screen (as Android's own Camera2 sample does).
         val disp = displayRotation()
-        val rot = if (front) (sensorOrientation + disp) % 360 else (sensorOrientation - disp + 360) % 360
-        val r = Math.toRadians(rot.toDouble())
+        val r = Math.toRadians(disp.toDouble())
         val c = cos(r).toFloat(); val s = sin(r).toFloat()
-        // Rotated picture's width/height in camera pixels, then scale so it fills the output without stretching.
-        val sideways = rot == 90 || rot == 270
-        val rx = if (sideways) capH else capW
-        val ry = if (sideways) capW else capH
+        val sideways = disp == 90 || disp == 270
+        val rx = if (sideways) natH else natW
+        val ry = if (sideways) natW else natH
+        // Scale so the picture fills the output without stretching (the overflow is cropped).
         val k = max(outW.toFloat() / rx, outH.toFloat() / ry)
         val sx = rx * k / outW
         val sy = ry * k / outH
-        GLES20.glUniformMatrix2fv(GLES20.glGetUniformLocation(camProg, "uRot"), 1, false, floatArrayOf(c, -s, s, c), 0)
+        GLES20.glUniformMatrix2fv(GLES20.glGetUniformLocation(camProg, "uRot"), 1, false, floatArrayOf(c, s, -s, c), 0)
         GLES20.glUniform2f(GLES20.glGetUniformLocation(camProg, "uScale"), sx, sy)
+        GLES20.glUniform1f(GLES20.glGetUniformLocation(camProg, "uFlipX"), if (mirrored) -1f else 1f)
         GLES20.glUniformMatrix4fv(GLES20.glGetUniformLocation(camProg, "uSt"), 1, false, stMatrix, 0)
         GLES20.glUniform1i(GLES20.glGetUniformLocation(camProg, "uLook"), look)
         GLES20.glUniform1f(GLES20.glGetUniformLocation(camProg, "uSmooth"), smooth)
@@ -388,9 +399,10 @@ attribute vec2 aTex;
 uniform mat4 uSt;
 uniform mat2 uRot;
 uniform vec2 uScale;
+uniform float uFlipX;
 varying vec2 vTex;
 void main() {
-    vec2 p = (uRot * aPos) * uScale;
+    vec2 p = (uRot * vec2(aPos.x * uFlipX, aPos.y)) * uScale;
     gl_Position = vec4(p, 0.0, 1.0);
     vTex = (uSt * vec4(aTex, 0.0, 1.0)).xy;
 }

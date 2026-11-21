@@ -172,6 +172,11 @@ class MainActivity : AppCompatActivity() {
         js("window.camosOnPermission && window.camosOnPermission(${ok})")
     }
 
+    override fun onResume() {
+        super.onResume()
+        streamer.resumeCamera()
+    }
+
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
         if (hasFocus) hideSystemBars()

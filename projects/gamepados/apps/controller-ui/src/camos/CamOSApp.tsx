@@ -201,12 +201,11 @@ export default function CamOSApp() {
       const found = parseQR(text);
       if (!found) { showToast("That QR code is not from Gamepad Server. Scan the code in the Gamepad Server window."); return; }
       setPc(found);
-      setRoute("dashboard");
-      checkPc(found);
+      setRoute("dashboard");   // the home screen checks the PC as it opens
     };
     (window as any).camosOnCheck = (json: string) => {
       const r = JSON.parse(json);
-      if (pc && r.ip !== pc.ip) return;
+      if (!pc || r.ip !== pc.ip) return;   // a late answer for a PC this phone no longer uses
       setPcStatus({ status: r.status, message: r.message });
     };
     (window as any).camosOnState = (json: string) => {
@@ -244,7 +243,7 @@ export default function CamOSApp() {
     </ShellScreenTransition>}
     {route === "connect" && <ShellScreenTransition key="connect" direction={-1} className="absolute inset-0">
       <ConnectScreen scanning={scanning} setScanning={setScanning} onBack={() => setRoute("dashboard")}
-        onManual={(found) => { setPc(found); setRoute("dashboard"); checkPc(found); }} />
+        onManual={(found) => { setPc(found); setRoute("dashboard"); }} />
     </ShellScreenTransition>}
     {route === "live" && <ShellScreenTransition key="live" direction={1} className="absolute inset-0">
       <LiveScreen live={live} s={s} set={set} lens={lens} lenses={lenses} premium={premium} hdAllowed={hdAllowed} goPremium={() => { bridge()?.stop(); goPremium(); }} showToast={showToast} />
@@ -357,7 +356,7 @@ function statusLine(pc: PC | null, st: PcStatus): { text: string; tone: "ok" | "
     case "old": return { text: "Update Gamepad Server", tone: "warn" };
     case "badkey": return { text: "Pairing key changed", tone: "warn" };
     case "busy": return { text: "PC busy with another phone", tone: "warn" };
-    case "unreachable": return { text: "Can't reach your PC", tone: "warn" };
+    case "unreachable": return { text: "PC not answering", tone: "warn" };
     default: return { text: "Your PC said no", tone: "warn" };
   }
 }
@@ -388,7 +387,7 @@ function TabCamera(p: DashProps & { openSettings: () => void }) {
         <p>{p.pcStatus.message}</p>
         <div className="camos-notice-actions">
           <button className="calm-text-button" onClick={p.onCheck}><RefreshCw size={15} aria-hidden="true" />Check again</button>
-          {p.pcStatus.status === "old" && <button className="calm-text-button" onClick={() => window.open("https://gamepad.space/#download", "_blank")}><Download size={15} aria-hidden="true" />Get the PC server</button>}
+          {(p.pcStatus.status === "old" || p.pcStatus.status === "unreachable") && <button className="calm-text-button" onClick={() => window.open("https://gamepad.space/#download", "_blank")}><Download size={15} aria-hidden="true" />Get the PC server</button>}
         </div>
       </div>
     </Collapse>
