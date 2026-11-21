@@ -3,11 +3,14 @@ package com.gamepad.camos
 import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Context
+import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
+import android.content.res.Configuration
 import android.graphics.Color
 import android.graphics.SurfaceTexture
 import android.os.Build
 import android.os.Bundle
+import android.view.Surface
 import android.view.TextureView
 import android.view.View
 import android.view.WindowManager
@@ -45,7 +48,7 @@ import java.util.concurrent.Executors
  * calls for the things only Android can do: the camera, the QR scanner, the network.
  *
  * Layers, bottom to top:
- *   1. cameraView   — TextureView showing what the phone streams (visible only while live)
+ *   1. cameraView   — TextureView showing exactly what the PC gets (drawn by GlPipeline; visible only while live)
  *   2. qrView       — CameraX preview for the QR scanner (visible only while scanning)
  *   3. webView      — the UI. GamepadOS's brown, and see-through ONLY while a camera layer is showing
  *                     (the GamepadOS launch-glitch lesson: never a surface under a transparent page otherwise).
@@ -73,7 +76,6 @@ class MainActivity : AppCompatActivity() {
     @Volatile private var scanning = false
 
     private val page = Color.parseColor("#1A1210")
-    @Volatile private var mirrorPreview = true
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -82,7 +84,16 @@ class MainActivity : AppCompatActivity() {
         hideSystemBars()
 
         root = FrameLayout(this).apply { setBackgroundColor(page) }
-        cameraView = TextureView(this).apply { visibility = View.INVISIBLE }
+        cameraView = TextureView(this).apply {
+            visibility = View.INVISIBLE
+            // The picture engine draws the preview here itself, so the preview is always exactly what the PC gets.
+            surfaceTextureListener = object : TextureView.SurfaceTextureListener {
+                override fun onSurfaceTextureAvailable(s: SurfaceTexture, w: Int, h: Int) { streamer.setPreview(s, w, h) }
+                override fun onSurfaceTextureSizeChanged(s: SurfaceTexture, w: Int, h: Int) { streamer.previewResized(w, h) }
+                override fun onSurfaceTextureDestroyed(s: SurfaceTexture): Boolean { streamer.setPreview(null, 0, 0); return true }
+                override fun onSurfaceTextureUpdated(s: SurfaceTexture) {}
+            }
+        }
         qrView = PreviewView(this).apply {
             implementationMode = PreviewView.ImplementationMode.COMPATIBLE   // TextureView inside, no window hole
             visibility = View.INVISIBLE
@@ -93,7 +104,7 @@ class MainActivity : AppCompatActivity() {
             setOnClickListener { setDim(false) }
         }
 
-        streamer = CamStreamer(this) { state, message, fps, kbps -> runOnUiThread { onStreamState(state, message, fps, kbps) } }
+        streamer = CamStreamer(this, ::displayRotationDegrees) { state, message, fps, kbps -> runOnUiThread { onStreamState(state, message, fps, kbps) } }
 
         if (BuildConfig.DEBUG) WebView.setWebContentsDebuggingEnabled(true)
         val assets = WebViewAssetLoader.Builder().addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(this)).build()
@@ -149,6 +160,12 @@ class MainActivity : AppCompatActivity() {
         } catch (_: Exception) {}
     }
 
+    /** How the screen is turned right now: 0, 90, 180 or 270 (Android's own Surface.ROTATION_* in degrees). */
+    private fun displayRotationDegrees(): Int {
+        val r = try { if (Build.VERSION.SDK_INT >= 30) display?.rotation ?: 0 else @Suppress("DEPRECATION") windowManager.defaultDisplay.rotation } catch (_: Exception) { 0 }
+        return when (r) { Surface.ROTATION_90 -> 90; Surface.ROTATION_180 -> 180; Surface.ROTATION_270 -> 270; else -> 0 }
+    }
+
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         val ok = grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED
@@ -185,6 +202,8 @@ class MainActivity : AppCompatActivity() {
     private fun onStreamState(state: String, message: String, fps: Int, kbps: Int) {
         if (state == "error" || state == "stopped") {
             cameraView.visibility = View.INVISIBLE
+            // Free rotation again once the camera is off (owner: the app turns normally before Start).
+            requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_FULL_USER
             webView.setBackgroundColor(page)
             window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
             setDim(false)
@@ -195,31 +214,27 @@ class MainActivity : AppCompatActivity() {
         js("window.camosOnState && window.camosOnState(${JSONObject.quote(json.toString())})")
     }
 
-    /** The TextureView's surface exists only once it has been laid out; wait for it before opening the camera. */
-    private fun withPreview(block: (SurfaceTexture?) -> Unit) {
-        val st = cameraView.surfaceTexture
-        if (st != null) { block(st); return }
-        cameraView.surfaceTextureListener = object : TextureView.SurfaceTextureListener {
-            override fun onSurfaceTextureAvailable(s: SurfaceTexture, w: Int, h: Int) { block(s) }
-            override fun onSurfaceTextureSizeChanged(s: SurfaceTexture, w: Int, h: Int) {}
-            override fun onSurfaceTextureDestroyed(s: SurfaceTexture) = true
-            override fun onSurfaceTextureUpdated(s: SurfaceTexture) {}
-        }
-    }
-
-    private fun startStream(ip: String, key: String, height: Int, front: Boolean) {
+    private fun startStream(ip: String, key: String, json: String) {
         if (!hasCamera()) {
             ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.CAMERA), 1)
             onStreamState("error", "CamOS needs the camera permission to work as a webcam.", 0, 0)
             return
         }
         stopQr()
+        val s = CamSettings.from(json)
+        // Picture shape, and the screen holds still while streaming so the preview matches what the PC gets.
+        val heldUpright = resources.configuration.orientation == Configuration.ORIENTATION_PORTRAIT
+        val portrait = when (s.shape) { "portrait" -> true; "landscape" -> false; else -> heldUpright }
+        requestedOrientation = when (s.shape) {
+            "portrait" -> ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
+            "landscape" -> ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+            else -> ActivityInfo.SCREEN_ORIENTATION_LOCKED
+        }
         cameraView.visibility = View.VISIBLE
-        cameraView.scaleX = if (front && mirrorPreview) -1f else 1f     // mirror the preview only; the PC gets the true picture
         webView.setBackgroundColor(Color.TRANSPARENT)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         acquireWifiLock()
-        withPreview { st -> streamer.start(ip, key, height, front, st) }
+        streamer.start(ip, key, s, portrait)
     }
 
     private fun setDim(on: Boolean) {
@@ -310,16 +325,22 @@ class MainActivity : AppCompatActivity() {
     inner class Bridge {
         @JavascriptInterface fun startScan() = runOnUiThread { startQr() }
         @JavascriptInterface fun stopScan() = runOnUiThread { stopQr() }
-        @JavascriptInterface fun start(ip: String, key: String, height: Int, front: Boolean) = runOnUiThread { startStream(ip, key, height, front) }
+        /** Start streaming with every setting as JSON (see CamSettings). */
+        @JavascriptInterface fun start(ip: String, key: String, settings: String) = runOnUiThread { startStream(ip, key, settings) }
+        /** Change settings while live: camera, lens, flashlight, filters apply at once. */
+        @JavascriptInterface fun update(settings: String) = streamer.update(CamSettings.from(settings))
         @JavascriptInterface fun stop() = runOnUiThread { streamer.stop() }
-        @JavascriptInterface fun flip() = runOnUiThread {
-            withPreview { st -> streamer.flip(st) }
-            cameraView.scaleX = if (streamer.facingFront && mirrorPreview) -1f else 1f
+        /** "Is my PC ready?" — answers through window.camosOnCheck({ip, status, message}). */
+        @JavascriptInterface fun check(ip: String, key: String) = streamer.check(ip, key) { status, message ->
+            val json = JSONObject().put("ip", ip).put("status", status).put("message", message)
+            js("window.camosOnCheck && window.camosOnCheck(${JSONObject.quote(json.toString())})")
         }
-        @JavascriptInterface fun torch(on: Boolean) = streamer.setTorch(on)
+        /** Every lens and what it can do, for the Settings screen. */
+        @JavascriptInterface fun cameras(): String = try { CameraCatalog.describe(this@MainActivity) } catch (_: Exception) { "[]" }
         @JavascriptInterface fun dim(on: Boolean) = runOnUiThread { setDim(on) }
-        @JavascriptInterface fun mirror(on: Boolean) = runOnUiThread { mirrorPreview = on; cameraView.scaleX = if (streamer.facingFront && on) -1f else 1f }
-        @JavascriptInterface fun deviceName(): String = (Build.MANUFACTURER.replaceFirstChar { it.uppercase() } + " " + Build.MODEL).trim()
+        @JavascriptInterface fun deviceName(): String = CamStreamer.deviceName()
         @JavascriptInterface fun version(): String = BuildConfig.VERSION_NAME
+        /** Test builds can pretend to be Premium or pretend an ad was watched, so every screen can be tried. */
+        @JavascriptInterface fun isTestBuild(): Boolean = BuildConfig.DEBUG
     }
 }

@@ -2,7 +2,9 @@
 //!
 //! ```text
 //! server → phone   "CAMS" ver:u8 nonce:[16]                                 (21 bytes)
-//! phone  → server  "CAMC" ver:u8 w:u16 h:u16 fps:u8 name_len:u8 tag:[16] name (28 + name_len)
+//! phone  → server  "CAMC" ver:u8 w:u16 h:u16 fps:u8 flags:u8 name_len:u8 tag:[16] name (28 + name_len)
+//!                  flags bit 0 = "check only": prove the key, get the answer, stream nothing (the phone's
+//!                  "is my PC ready?" check right after pairing)
 //! server → phone   "CAMA" status:u8                                         (5 bytes)
 //! phone  → server  repeated: len:u32 pts_us:u64 flags:u8 payload[len]       (H.264 Annex-B)
 //! server → phone   'K' at any time = "please send a key frame"
@@ -54,6 +56,8 @@ pub struct ClientHello {
     pub height: u16,
     pub fps: u8,
     pub name: String,
+    /// The phone only wants to know whether this PC is ready (flags bit 0); no video follows.
+    pub check: bool,
 }
 
 /// The fingerprint the phone must send. `fixed` is the 28-byte header with the
@@ -95,7 +99,7 @@ pub fn verify_client_hello(
         return Err(STATUS_BAD_REQUEST);
     }
     let name: String = String::from_utf8_lossy(name).chars().filter(|c| !c.is_control()).take(40).collect();
-    Ok(ClientHello { width, height, fps, name })
+    Ok(ClientHello { width, height, fps, name, check: fixed[10] & 1 != 0 })
 }
 
 #[derive(Debug, PartialEq)]
@@ -123,7 +127,7 @@ pub fn build_client_hello(key: &str, nonce: &[u8; 16], h: &ClientHello) -> Vec<u
     fixed[5..7].copy_from_slice(&h.width.to_be_bytes());
     fixed[7..9].copy_from_slice(&h.height.to_be_bytes());
     fixed[9] = h.fps;
-    fixed[10] = 0;
+    fixed[10] = h.check as u8;
     fixed[11] = name.len() as u8;
     let t = tag(key, nonce, &fixed, name);
     fixed[12..28].copy_from_slice(&t);
@@ -137,7 +141,7 @@ mod tests {
     use super::*;
 
     fn hello() -> ClientHello {
-        ClientHello { width: 1280, height: 720, fps: 30, name: "Redmi Note 12".into() }
+        ClientHello { width: 1280, height: 720, fps: 30, name: "Redmi Note 12".into(), check: false }
     }
 
     fn split(v: &[u8]) -> ([u8; CLIENT_HELLO_FIXED], Vec<u8>) {
@@ -151,6 +155,18 @@ mod tests {
         let nonce = [7u8; 16];
         let (f, n) = split(&build_client_hello("777a51b3", &nonce, &hello()));
         assert_eq!(verify_client_hello("777a51b3", &nonce, &f, &n), Ok(hello()));
+    }
+
+    #[test]
+    fn check_only_flag_round_trips_and_is_signed() {
+        let nonce = [7u8; 16];
+        let mut h = hello();
+        h.check = true;
+        let (mut f, n) = split(&build_client_hello("777a51b3", &nonce, &h));
+        assert_eq!(verify_client_hello("777a51b3", &nonce, &f, &n).map(|x| x.check), Ok(true));
+        // Flipping the flag without the key breaks the fingerprint.
+        f[10] = 0;
+        assert_eq!(verify_client_hello("777a51b3", &nonce, &f, &n), Err(STATUS_BAD_KEY));
     }
 
     #[test]

@@ -39,3 +39,54 @@
 .gp-shell .camos-bar .calm-icon-button { background: rgba(255, 255, 255, .07); border-color: transparent; transition: background-color var(--dur-ui) var(--ease-out), color var(--dur-ui) var(--ease-out); }
 .gp-shell .camos-bar .calm-icon-button[data-on='true'] { background: var(--calm-accent); color: var(--calm-on-accent); }
 .gp-shell .camos-bar .camos-stop { width: auto; min-height: 44px; padding: 0 20px; }
+
+/* ── 2026-11-21 round 2: two tabs, HD-from-an-ad card, Premium, every camera setting, live adjust panel ── */
+
+/* Home status line, in GamepadOS's spot left of the big button: short words + small links; details in a note below. */
+.gp-shell .camos-status { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
+.gp-shell .camos-status[data-tone='ok'] { color: var(--calm-ink); }
+.gp-shell .camos-status[data-tone='wait'] > div:first-child { animation: camos-breathe 1.6s ease-in-out infinite; }
+.gp-shell .camos-status-actions { display: flex; flex-wrap: wrap; gap: 2px 12px; font-size: 13px; }
+.gp-shell .camos-status-actions .calm-why-link { margin: 0; }
+@keyframes camos-breathe { 0%, 100% { opacity: .55; } 50% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .gp-shell .camos-status[data-tone='wait'] > div:first-child { animation: none; } }
+.gp-shell .camos-notice { margin: 0 0 24px; padding: 12px 14px; border-radius: 12px; background: var(--calm-warning-bg, var(--calm-surface)); border: 1px solid var(--calm-line);
+  color: var(--calm-ink); font-size: 14px; line-height: 1.45; }
+.gp-shell .camos-notice-actions { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 6px; }
+.gp-shell .camos-notice-actions .calm-text-button { display: inline-flex; align-items: center; gap: 6px; }
+
+/* HD card */
+.gp-shell .camos-hd-card { margin-bottom: 18px; }
+.gp-shell .camos-hd-row { display: flex; align-items: center; gap: 12px; }
+.gp-shell .camos-hd-row > svg { color: var(--calm-accent); flex-shrink: 0; }
+.gp-shell .camos-hd-meter { margin-top: 12px; height: 4px; border-radius: 999px; background: var(--calm-line); overflow: hidden; }
+.gp-shell .camos-hd-meter > span { display: block; height: 100%; background: var(--calm-accent); transform-origin: left center; transition: transform var(--dur-ui) var(--ease-out); }
+.gp-shell .console-plan-buy svg { display: inline; vertical-align: -2px; margin-right: 4px; }
+.gp-shell .camos-premium-link { display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%; margin-top: 8px; }
+
+/* Premium marks */
+.gp-shell .calm-account-shortcut[data-premium='true'] { color: var(--calm-accent); }
+.gp-shell .camos-badge { display: inline-flex; align-items: center; gap: 3px; margin-left: 8px; padding: 2px 7px; border-radius: 999px; font-size: 10px; font-weight: 700;
+  letter-spacing: .3px; text-transform: none; background: var(--calm-tint); color: var(--calm-accent); vertical-align: 1px; }
+.gp-shell .camos-locked .calm-segment, .gp-shell .camos-locked .calm-range input, .gp-shell .camos-locked .calm-switch { opacity: .55; }
+.gp-shell .camos-soon { opacity: .6; }
+.gp-shell .camos-soon > svg { color: var(--calm-muted); flex-shrink: 0; }
+.gp-shell .calm-setting-detail h3 > svg { display: inline; vertical-align: -1px; }
+
+/* Test ad (test builds only) */
+.camos-ad { position: fixed; inset: 0; z-index: 150; display: grid; place-items: center; padding: 24px; background: rgba(0, 0, 0, .78); }
+.camos-ad-card { position: relative; width: min(360px, 100%); padding: 28px 22px 16px; border-radius: 16px; text-align: center; background: var(--calm-surface);
+  border: 1px solid var(--calm-line); color: var(--calm-ink); display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.camos-ad-card > svg { color: var(--calm-accent); }
+.camos-ad-tag { position: absolute; top: 10px; left: 12px; font-size: 10px; font-weight: 700; letter-spacing: .6px; color: var(--calm-muted); }
+.camos-ad-title { font-size: 15px; font-weight: 600; }
+.camos-ad-count { font-size: 13px; color: var(--calm-muted); }
+.camos-ad-bar { width: 100%; height: 4px; border-radius: 999px; background: var(--calm-line); overflow: hidden; margin: 6px 0 4px; }
+.camos-ad-bar > span { display: block; height: 100%; background: var(--calm-accent); transform-origin: left center; }
+
+/* Live adjust panel: same smoked surface as the bar, floats just above it. */
+.gp-shell .camos-panel { position: absolute; left: 0; right: 0; margin: 0 auto; width: min(460px, calc(100% - 32px));
+  bottom: calc(var(--android-safe-bottom, env(safe-area-inset-bottom, 0px)) + 84px); max-height: calc(100% - 150px); overflow-y: auto;
+  padding: 6px 16px 12px; border-radius: 16px; background: rgba(9, 6, 5, .82); border: 1px solid rgba(255, 255, 255, .08); }
+.gp-shell .camos-panel .calm-range, .gp-shell .camos-panel .calm-setting-detail { padding: 8px 0; }
+.gp-shell .camos-panel .calm-segment button { min-height: 34px; padding: 0 13px; font-size: 13px; }

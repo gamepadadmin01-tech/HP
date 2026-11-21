@@ -54,12 +54,10 @@ pub const CLSID_CAMOS_SOURCE: GUID = GUID::from_u128(0x6f3c2a71_4b8e_4d2a_9c15_8
 
 const PIPE_NAME: PCWSTR = w!(r"\\.\pipe\CamOSFrames");
 
-/// Sizes offered to apps, default first. The server can send any size; this DLL
-/// scales it to whatever the app picked.
-const SIZES: [(u32, u32); 3] = [(1280, 720), (1920, 1080), (640, 480)];
-const FPS: u32 = 30;
-/// One frame at 30 fps, in MF's 100-nanosecond units.
-const FRAME_100NS: i64 = 10_000_000 / FPS as i64;
+/// Picture modes offered to apps (width, height, frames per second), default first. The server can send any
+/// size; this DLL fits it into whatever the app picked. 60 fps modes are for phones streaming at 60.
+const MODES: [(u32, u32, u32); 5] = [(1280, 720, 30), (1920, 1080, 30), (640, 480, 30), (1280, 720, 60), (1920, 1080, 60)];
+const DEFAULT_FPS: u32 = 30;
 
 /// A picture older than this is treated as "phone gone" and the placeholder shows.
 const STALE_AFTER: Duration = Duration::from_millis(1500);
@@ -177,32 +175,50 @@ fn fill_frame(dst: &mut [u8], dw: u32, dh: u32, tick: u64) {
     placeholder(dst, dw, dh, tick);
 }
 
-/// Nearest-neighbour NV12 scale. Plain and fast enough at 30 fps; same-size is a copy.
+/// Nearest-neighbour NV12 scale that keeps the picture's shape. Same size is a plain copy. When the phone's shape
+/// differs from what the app asked for (a phone held upright sends a tall picture, apps ask for a wide one), the
+/// picture is fitted inside with black bars instead of being squashed.
 fn scale_nv12(src: &[u8], sw: u32, sh: u32, dst: &mut [u8], dw: u32, dh: u32) {
     let (sw, sh, dw, dh) = (sw as usize, sh as usize, dw as usize, dh as usize);
+    if sw == 0 || sh == 0 || dw == 0 || dh == 0 || src.len() < sw * sh * 3 / 2 || dst.len() < dw * dh * 3 / 2 {
+        return;
+    }
     if sw == dw && sh == dh {
         let n = dst.len().min(src.len());
         dst[..n].copy_from_slice(&src[..n]);
         return;
     }
-    let xmap: Vec<usize> = (0..dw).map(|x| x * sw / dw).collect();
-    for y in 0..dh {
-        let sy = y * sh / dh;
+    // Fitted rectangle, even-aligned so the half-size chroma plane lines up.
+    let (mut rw, mut rh) = if sw * dh > dw * sh { (dw, dw * sh / sw) } else { (dh * sw / sh, dh) };
+    rw = (rw.min(dw)) & !1;
+    rh = (rh.min(dh)) & !1;
+    let rx = ((dw - rw) / 2) & !1;
+    let ry = ((dh - rh) / 2) & !1;
+    if rw != dw || rh != dh {
+        dst[..dw * dh].fill(16);
+        dst[dw * dh..dw * dh * 3 / 2].fill(128);
+    }
+    if rw == 0 || rh == 0 {
+        return;
+    }
+    let xmap: Vec<usize> = (0..rw).map(|x| x * sw / rw).collect();
+    for y in 0..rh {
+        let sy = y * sh / rh;
         let s = &src[sy * sw..sy * sw + sw];
-        let d = &mut dst[y * dw..y * dw + dw];
+        let d = &mut dst[(ry + y) * dw + rx..(ry + y) * dw + rx + rw];
         for (dx, &sx) in d.iter_mut().zip(xmap.iter()) {
             *dx = s[sx];
         }
     }
     // Chroma plane: interleaved U,V pairs at half resolution.
     let (suv, duv) = (sw * sh, dw * dh);
-    let (scw, sch, dcw, dch) = (sw / 2, sh / 2, dw / 2, dh / 2);
-    for y in 0..dch {
-        let sy = y * sch / dch.max(1);
+    let (scw, sch, rcw, rch) = (sw / 2, sh / 2, rw / 2, rh / 2);
+    for y in 0..rch {
+        let sy = y * sch / rch.max(1);
         let srow = suv + sy * sw;
-        let drow = duv + y * dw;
-        for x in 0..dcw {
-            let sx = x * scw / dcw.max(1);
+        let drow = duv + (ry / 2 + y) * dw + rx;
+        for x in 0..rcw {
+            let sx = x * scw / rcw.max(1);
             dst[drow + 2 * x] = src[srow + 2 * sx];
             dst[drow + 2 * x + 1] = src[srow + 2 * sx + 1];
         }
@@ -237,20 +253,26 @@ fn hr_win32(code: u32) -> HRESULT {
     HRESULT::from_win32(code)
 }
 
-fn video_type(w: u32, h: u32) -> Result<IMFMediaType> {
+fn video_type(w: u32, h: u32, fps: u32) -> Result<IMFMediaType> {
     unsafe {
         let t = MFCreateMediaType()?;
         t.SetGUID(&MF_MT_MAJOR_TYPE, &MFMediaType_Video)?;
         t.SetGUID(&MF_MT_SUBTYPE, &MFVideoFormat_NV12)?;
         t.SetUINT64(&MF_MT_FRAME_SIZE, ((w as u64) << 32) | h as u64)?;
-        t.SetUINT64(&MF_MT_FRAME_RATE, ((FPS as u64) << 32) | 1)?;
+        t.SetUINT64(&MF_MT_FRAME_RATE, ((fps as u64) << 32) | 1)?;
         t.SetUINT64(&MF_MT_PIXEL_ASPECT_RATIO, (1u64 << 32) | 1)?;
         t.SetUINT32(&MF_MT_INTERLACE_MODE, MFVideoInterlace_Progressive.0 as u32)?;
         t.SetUINT32(&MF_MT_ALL_SAMPLES_INDEPENDENT, 1)?;
         t.SetUINT32(&MF_MT_DEFAULT_STRIDE, w)?;
-        t.SetUINT32(&MF_MT_AVG_BITRATE, w * h * 12 * FPS)?;
+        t.SetUINT32(&MF_MT_AVG_BITRATE, w * h * 12 * fps)?;
         Ok(t)
     }
+}
+
+fn frame_rate(t: &IMFMediaType) -> u32 {
+    let v = unsafe { t.GetUINT64(&MF_MT_FRAME_RATE) }.unwrap_or(((DEFAULT_FPS as u64) << 32) | 1);
+    let (num, den) = ((v >> 32) as u32, (v as u32).max(1));
+    (num / den).clamp(1, 120)
 }
 
 fn frame_size(t: &IMFMediaType) -> (u32, u32) {
@@ -266,6 +288,7 @@ struct StreamState {
     w: u32,
     h: u32,
     tick: u64,
+    fps: u32,
     /// When the next picture is due — apps get 30 per second, not as many as the CPU can make.
     next_due: Option<Instant>,
 }
@@ -279,11 +302,13 @@ struct MediaStream {
 }
 
 impl MediaStream {
-    fn set_running(&self, start: *const PROPVARIANT, w: u32, h: u32) -> Result<()> {
+    fn set_running(&self, start: *const PROPVARIANT, w: u32, h: u32, fps: u32) -> Result<()> {
         if let Ok(mut s) = self.st.lock() {
             s.state = MF_STREAM_STATE_RUNNING;
             s.w = w;
             s.h = h;
+            s.fps = fps;
+            s.next_due = None;
         }
         unsafe { self.queue.QueueEventParamVar(MEStreamStarted.0 as u32, &GUID::zeroed(), S_OK, start) }
     }
@@ -342,7 +367,7 @@ impl IMFMediaStream_Impl for MediaStream_Impl {
         Ok(self.sd.clone())
     }
     fn RequestSample(&self, token: Ref<'_, IUnknown>) -> Result<()> {
-        let (w, h, tick, due_at) = {
+        let (w, h, tick, due_at, fps) = {
             let mut s = self.st.lock().map_err(|_| Error::from(E_FAIL))?;
             if s.shutdown {
                 return Err(MF_E_SHUTDOWN.into());
@@ -355,8 +380,8 @@ impl IMFMediaStream_Impl for MediaStream_Impl {
             let due = s.next_due.unwrap_or(now);
             // If we fell far behind (app paused reading), restart the clock instead of bursting.
             let next = if due + Duration::from_millis(200) < now { now } else { due };
-            s.next_due = Some(next + Duration::from_nanos(1_000_000_000 / FPS as u64));
-            (s.w, s.h, s.tick, next)
+            s.next_due = Some(next + Duration::from_nanos(1_000_000_000 / s.fps.max(1) as u64));
+            (s.w, s.h, s.tick, next, s.fps)
         };
         let wait = due_at.saturating_duration_since(Instant::now());
         if !wait.is_zero() {
@@ -377,7 +402,7 @@ impl IMFMediaStream_Impl for MediaStream_Impl {
             let sample = MFCreateSample()?;
             sample.AddBuffer(&buffer)?;
             sample.SetSampleTime(MFGetSystemTime())?;
-            sample.SetSampleDuration(FRAME_100NS)?;
+            sample.SetSampleDuration(10_000_000 / fps.max(1) as i64)?;
             sample.SetUINT32(&MFSampleExtension_CleanPoint, 1)?;
             if let Some(t) = token.as_ref() {
                 sample.SetUnknown(&MFSampleExtension_Token, t)?;
@@ -439,7 +464,7 @@ impl MediaSource {
     fn new() -> Result<Self> {
         unsafe {
             let types: Vec<Option<IMFMediaType>> =
-                SIZES.iter().map(|&(w, h)| video_type(w, h).ok()).collect();
+                MODES.iter().map(|&(w, h, f)| video_type(w, h, f).ok()).collect();
             let sd = MFCreateStreamDescriptor(0, &types)?;
             sd.SetGUID(&MF_DEVICESTREAM_STREAM_CATEGORY, &PINNAME_VIDEO_CAPTURE)?;
             sd.SetUINT32(&MF_DEVICESTREAM_STREAM_ID, 0)?;
@@ -501,18 +526,18 @@ impl IMFMediaSource_Impl for MediaSource_Impl {
     fn Start(&self, pd: Ref<'_, IMFPresentationDescriptor>, _fmt: *const GUID, start: *const PROPVARIANT) -> Result<()> {
         self.check()?;
         // Which size did the app choose? Read it from the descriptor Windows hands back.
-        let (w, h) = unsafe {
+        let (w, h, fps) = unsafe {
             let pd = pd.as_ref().cloned().unwrap_or_else(|| self.pd.clone());
             let mut selected = BOOL(0);
             let mut sd: Option<IMFStreamDescriptor> = None;
             pd.GetStreamDescriptorByIndex(0, &mut selected, &mut sd)?;
             let sd = sd.unwrap_or_else(|| self.sd.clone());
             match sd.GetMediaTypeHandler().and_then(|hd| hd.GetCurrentMediaType()) {
-                Ok(t) => frame_size(&t),
-                Err(_) => SIZES[0],
+                Ok(t) => { let (w, h) = frame_size(&t); (w, h, frame_rate(&t)) }
+                Err(_) => (MODES[0].0, MODES[0].1, MODES[0].2),
             }
         };
-        log(&format!("source Start {w}x{h}"));
+        log(&format!("source Start {w}x{h} @{fps}"));
         start_reader();
 
         let (stream, first) = {
@@ -523,7 +548,7 @@ impl IMFMediaSource_Impl for MediaSource_Impl {
                     source: Mutex::new(Some(me)),
                     sd: self.sd.clone(),
                     queue: unsafe { MFCreateEventQueue()? },
-                    st: Mutex::new(StreamState { state: MF_STREAM_STATE_STOPPED, shutdown: false, w, h, tick: 0, next_due: None }),
+                    st: Mutex::new(StreamState { state: MF_STREAM_STATE_STOPPED, shutdown: false, w, h, tick: 0, fps, next_due: None }),
                 });
                 s.stream = Some(stream);
             }
@@ -536,7 +561,7 @@ impl IMFMediaSource_Impl for MediaSource_Impl {
             let met = if first { MENewStream } else { MEUpdatedStream };
             self.queue.QueueEventParamUnk(met.0 as u32, &GUID::zeroed(), S_OK, &unk)?;
         }
-        stream.set_running(start, w, h)?;
+        stream.set_running(start, w, h, fps)?;
         unsafe { self.queue.QueueEventParamVar(MESourceStarted.0 as u32, &GUID::zeroed(), S_OK, start) }
     }
     fn Stop(&self) -> Result<()> {
@@ -833,6 +858,21 @@ mod tests {
         let mut small = vec![0u8; 4 * 2 * 3 / 2];
         scale_nv12(&src, 8, 4, &mut small, 4, 2);
         assert_eq!(small[0], src[0]);
+    }
+
+    #[test]
+    fn tall_picture_is_fitted_with_black_bars() {
+        // 4x8 tall source of white (Y=235) into an 8x4 wide frame: centred 2x4 column, black either side.
+        let (sw, sh) = (4usize, 8usize);
+        let mut src = vec![235u8; sw * sh * 3 / 2];
+        src[sw * sh..].fill(128);
+        let (dw, dh) = (8usize, 4usize);
+        let mut dst = vec![0u8; dw * dh * 3 / 2];
+        scale_nv12(&src, sw as u32, sh as u32, &mut dst, dw as u32, dh as u32);
+        assert_eq!(dst[0], 16);
+        assert_eq!(dst[dw - 1], 16);
+        assert_eq!(dst[2], 235); // fitted column starts at x = 2 (even-aligned)
+        assert!(dst[dw * dh..].iter().all(|&v| v == 128));
     }
 
     #[test]

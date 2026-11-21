@@ -17,13 +17,13 @@
         android:theme="@style/Theme.CamOS"
         android:usesCleartextTraffic="false">
 
-        <!-- Landscape only: a webcam picture is wide (16:9), and in landscape the camera's own frames are
-             already upright for both the back and the front camera, so no rotation is needed on the PC. -->
+        <!-- Turns with the phone like any app (owner, 2026-11-21). While streaming, MainActivity holds the screen still
+             in the picture shape chosen in Settings; the picture engine (GlPipeline) turns the camera upright. -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
             android:launchMode="singleTask"
-            android:screenOrientation="landscape"
+            android:screenOrientation="fullUser"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|smallestScreenSize|uiMode|density">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

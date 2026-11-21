@@ -107,6 +107,11 @@ fn serve(c: &mut TcpStream, key: &str) -> Result<(), String> {
         }
     };
     c.write_all(&proto::server_ack(proto::STATUS_OK)).map_err(|e| e.to_string())?;
+    if hello.check {
+        // The phone's "is this PC ready?" check after pairing: key proven, nothing to stream.
+        println!("camos: {} checked this PC (ready)", hello.name);
+        return Ok(());
+    }
     println!("camos: {} streaming {}x{} @{}", hello.name, hello.width, hello.height, hello.fps);
     if let Ok(mut s) = STATUS.lock() {
         *s = CamStatus { live: true, device: hello.name.clone(), width: hello.width as u32, height: hello.height as u32, fps: 0.0, last_error: String::new() };
