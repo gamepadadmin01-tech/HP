@@ -73,6 +73,7 @@ class MainActivity : AppCompatActivity() {
     @Volatile private var scanning = false
 
     private val page = Color.parseColor("#1A1210")
+    @Volatile private var mirrorPreview = true
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -98,6 +99,8 @@ class MainActivity : AppCompatActivity() {
         val assets = WebViewAssetLoader.Builder().addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(this)).build()
         webView = WebView(this).apply {
             setBackgroundColor(page)
+            setLayerType(View.LAYER_TYPE_HARDWARE, null)   // as GamepadOS: GPU-drawn page, smooth motion
+            overScrollMode = View.OVER_SCROLL_NEVER
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true
             settings.mediaPlaybackRequiresUserGesture = false
@@ -119,6 +122,31 @@ class MainActivity : AppCompatActivity() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
             ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.CAMERA), 1)
         }
+        preferHighestRefreshRate()
+
+        // Back: the page decides first (close the scanner, leave Connect, stop streaming, go back to the Camera tab),
+        // exactly like GamepadOS; only when it has nothing to close does Back leave the app.
+        onBackPressedDispatcher.addCallback(this, object : androidx.activity.OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                if (dimCover.visibility == View.VISIBLE) { setDim(false); return }
+                webView.evaluateJavascript("(window.camosBack && window.camosBack()) ? 'y' : 'n'") { r ->
+                    if (r?.contains("y") != true) { isEnabled = false; onBackPressedDispatcher.onBackPressed(); isEnabled = true }
+                }
+            }
+        })
+    }
+
+    /** Same as GamepadOS: ask for the screen's fastest refresh rate (120 Hz phones), so every animation is smooth. */
+    private fun preferHighestRefreshRate() {
+        try {
+            val d = if (Build.VERSION.SDK_INT >= 30) display else @Suppress("DEPRECATION") windowManager.defaultDisplay
+            val cur = d?.mode ?: return
+            val best = d.supportedModes.filter { it.physicalWidth == cur.physicalWidth && it.physicalHeight == cur.physicalHeight }
+                .maxByOrNull { it.refreshRate } ?: return
+            val lp = window.attributes
+            lp.preferredDisplayModeId = best.modeId
+            window.attributes = lp
+        } catch (_: Exception) {}
     }
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
@@ -187,7 +215,7 @@ class MainActivity : AppCompatActivity() {
         }
         stopQr()
         cameraView.visibility = View.VISIBLE
-        cameraView.scaleX = if (front) -1f else 1f     // mirror the preview only; the PC gets the true picture
+        cameraView.scaleX = if (front && mirrorPreview) -1f else 1f     // mirror the preview only; the PC gets the true picture
         webView.setBackgroundColor(Color.TRANSPARENT)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         acquireWifiLock()
@@ -286,10 +314,11 @@ class MainActivity : AppCompatActivity() {
         @JavascriptInterface fun stop() = runOnUiThread { streamer.stop() }
         @JavascriptInterface fun flip() = runOnUiThread {
             withPreview { st -> streamer.flip(st) }
-            cameraView.scaleX = if (!streamer.facingFront) 1f else -1f
+            cameraView.scaleX = if (streamer.facingFront && mirrorPreview) -1f else 1f
         }
         @JavascriptInterface fun torch(on: Boolean) = streamer.setTorch(on)
         @JavascriptInterface fun dim(on: Boolean) = runOnUiThread { setDim(on) }
+        @JavascriptInterface fun mirror(on: Boolean) = runOnUiThread { mirrorPreview = on; cameraView.scaleX = if (streamer.facingFront && on) -1f else 1f }
         @JavascriptInterface fun deviceName(): String = (Build.MANUFACTURER.replaceFirstChar { it.uppercase() } + " " + Build.MODEL).trim()
         @JavascriptInterface fun version(): String = BuildConfig.VERSION_NAME
     }

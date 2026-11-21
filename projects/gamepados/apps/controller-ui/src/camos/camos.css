@@ -1,39 +1,41 @@
-/* CamOS screens. Everything else (buttons, steps, choice bars, fields, colours) comes from GamepadOS's
-   calm-shell.css + redesign.css, so the two apps look like one family. Only layout lives here. */
-.gp-shell.camos-root { position: fixed; inset: 0; overflow: hidden; }
-/* While the camera shows behind the page, the page itself must be see-through. */
-.gp-shell.camos-root[data-screen='live'], .gp-shell.camos-root[data-screen='scan'] { background: transparent; }
-.camos-home { position: absolute; inset: 0; display: flex; flex-direction: column; background: var(--calm-paper); }
-.gp-shell .camos-header { justify-content: flex-start; gap: 14px; padding-left: calc(env(safe-area-inset-left, 0px) + 28px); }
-.camos-wordmark { display: inline-flex; align-items: center; gap: 8px; font: 600 20px var(--calm-display); color: var(--calm-ink); }
-.camos-wordmark svg { color: var(--calm-accent); }
-.camos-tagline { font-size: 13px; color: var(--calm-muted); }
-.camos-grid { flex: 1; min-height: 0; overflow-y: auto; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 40px;
-  padding: 22px calc(env(safe-area-inset-right, 0px) + 28px) 24px calc(env(safe-area-inset-left, 0px) + 28px); scrollbar-width: none; }
-.camos-col { min-width: 0; display: flex; flex-direction: column; gap: 10px; }
-.camos-col .calm-steps { margin-bottom: 6px; }
-.camos-gap { margin-top: 6px; }
-.camos-hd { margin-left: 4px; padding: 1px 5px; border-radius: 4px; font-size: 10px; font-weight: 700; background: var(--calm-tint); color: var(--calm-accent); }
-[aria-pressed='true'] .camos-hd { background: rgba(0,0,0,.18); color: inherit; }
-.gp-shell .camos-error { color: var(--calm-error); font-size: 13px; line-height: 1.5; margin: 4px 0 0; }
-@media (max-width: 640px) { .camos-grid { grid-template-columns: 1fr; gap: 18px; } }
+/* CamOS. Every screen is built from GamepadOS's own classes (calm-shell.css + redesign.css): header, tab bar,
+   settings panels, plan cards, Connect screen, QR scanner. This file holds only what GamepadOS has no screen for:
+   the live camera overlay, the toast layer, and the small brand mark in the header. Same tokens, same radii. */
 
-/* QR scanner: only a frame and a hint over the camera. */
-.camos-scan { position: absolute; inset: 0; }
-.camos-scan-frame { position: absolute; left: 50%; top: 50%; width: min(56vh, 280px); aspect-ratio: 1; transform: translate(-50%, -50%);
-  border-radius: 20px; box-shadow: 0 0 0 100vmax rgba(9, 6, 5, .55); outline: 2px solid var(--calm-accent); outline-offset: -2px; }
-.camos-scan-hint { position: absolute; left: 0; right: 0; bottom: 22px; text-align: center; font-size: 14px; color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,.6); }
-.gp-shell .camos-scan-close { position: absolute; top: 18px; right: calc(env(safe-area-inset-right, 0px) + 18px); background: rgba(9,6,5,.6); }
+#root { position: relative; }
 
-/* Live: a status pill at the top, a control bar at the bottom, the picture everywhere else. */
-.camos-live { position: absolute; inset: 0; pointer-events: none; }
-.camos-live > * { pointer-events: auto; }
-.camos-pill { position: absolute; top: 16px; left: calc(env(safe-area-inset-left, 0px) + 18px); display: inline-flex; align-items: center; gap: 8px;
-  padding: 8px 14px; border-radius: 999px; background: rgba(9, 6, 5, .62); color: #fff; font-size: 13px; font-weight: 600; }
-.camos-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--calm-warning); }
-.camos-pill[data-state='live'] .camos-dot { background: #ff3b30; box-shadow: 0 0 0 4px rgba(255,59,48,.25); }
-.camos-bar { position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 10px;
-  padding: 8px; border-radius: 16px; background: rgba(9, 6, 5, .62); }
-.gp-shell .camos-bar .calm-icon-button { background: rgba(255,255,255,.08); border-color: transparent; }
+/* Header brand: where GamepadOS has its bell, CamOS shows its name in the display font. */
+.gp-shell .camos-brand { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; font: 600 18px var(--calm-display); letter-spacing: -.4px; color: var(--calm-ink); }
+.gp-shell .camos-brand svg { color: var(--calm-accent); }
+
+/* Quick picture settings on the Camera tab use the Settings panel look. */
+.gp-shell .camos-quick { margin-bottom: 22px; }
+.gp-shell .calm-setting-detail.camos-first { border-top: 0; }
+.gp-shell .camos-gap { margin-top: 4px; }
+.gp-shell .console-connect-status .calm-why-link { margin-left: 6px; }
+.gp-shell .camos-hd { margin-left: 5px; padding: 1px 5px; border-radius: 4px; font-size: 9px; font-weight: 700; letter-spacing: .4px; background: var(--calm-tint); color: var(--calm-accent); }
+.gp-shell [aria-pressed='true'] .camos-hd { background: rgba(0, 0, 0, .2); color: inherit; }
+.gp-shell .calm-inline-note { padding: 0 2px; }
+
+/* Toasts: GamepadOS's surface card, dropping in at the top (motion.ts toastIn). */
+.camos-toast-layer { position: fixed; top: 14px; left: 0; right: 0; z-index: 200; display: flex; justify-content: center; pointer-events: none; padding: 0 16px; }
+.gp-shell.camos-toast { pointer-events: auto; display: flex; align-items: center; gap: 10px; max-width: 520px; padding: 11px 8px 11px 14px; border-radius: 12px;
+  background: var(--calm-surface); border: 1px solid var(--calm-line); box-shadow: 0 12px 32px rgba(0, 0, 0, .45); font-size: 13px; line-height: 1.45; color: var(--calm-ink); }
+.gp-shell.camos-toast > svg { color: var(--calm-accent); flex-shrink: 0; }
+.gp-shell .camos-toast-close { width: 32px; height: 32px; flex-shrink: 0; display: grid; place-items: center; border-radius: 8px; color: var(--calm-muted); }
+
+/* Live: the camera fills the screen behind a see-through page; status pill on top, control bar at the bottom.
+   The smoked surfaces use the scanner's cover colour so both camera screens feel the same. */
+.gp-shell.camos-live { position: absolute; inset: 0; background: transparent; pointer-events: none; }
+.gp-shell.camos-live > * { pointer-events: auto; }
+.gp-shell .camos-pill { position: absolute; top: calc(var(--android-safe-top, env(safe-area-inset-top, 0px)) + 16px); left: calc(env(safe-area-inset-left, 0px) + 18px);
+  display: inline-flex; align-items: center; gap: 9px; padding: 9px 15px; border-radius: 999px; background: rgba(9, 6, 5, .66); border: 1px solid rgba(255, 255, 255, .08);
+  color: var(--calm-ink); font-size: 13px; font-weight: 600; }
+.gp-shell .camos-pill-text { white-space: nowrap; }
+.gp-shell .camos-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--calm-warning); flex-shrink: 0; transition: background-color var(--dur-ui) var(--ease-out), box-shadow var(--dur-ui) var(--ease-out); }
+.gp-shell .camos-pill[data-state='live'] .camos-dot { background: var(--calm-accent); box-shadow: 0 0 0 4px var(--calm-tint); }
+.gp-shell .camos-bar { position: absolute; bottom: calc(var(--android-safe-bottom, env(safe-area-inset-bottom, 0px)) + 16px); left: 0; right: 0; margin: 0 auto; width: max-content;
+  display: flex; align-items: center; gap: 10px; padding: 8px; border-radius: 16px; background: rgba(9, 6, 5, .66); border: 1px solid rgba(255, 255, 255, .08); }
+.gp-shell .camos-bar .calm-icon-button { background: rgba(255, 255, 255, .07); border-color: transparent; transition: background-color var(--dur-ui) var(--ease-out), color var(--dur-ui) var(--ease-out); }
 .gp-shell .camos-bar .calm-icon-button[data-on='true'] { background: var(--calm-accent); color: var(--calm-on-accent); }
-.gp-shell .camos-stop { width: auto; min-height: 44px; padding: 0 18px; }
+.gp-shell .camos-bar .camos-stop { width: auto; min-height: 44px; padding: 0 20px; }
