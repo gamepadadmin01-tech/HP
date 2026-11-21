@@ -90,3 +90,18 @@
   padding: 6px 16px 12px; border-radius: 16px; background: rgba(9, 6, 5, .82); border: 1px solid rgba(255, 255, 255, .08); }
 .gp-shell .camos-panel .calm-range, .gp-shell .camos-panel .calm-setting-detail { padding: 8px 0; }
 .gp-shell .camos-panel .calm-segment button { min-height: 34px; padding: 0 13px; font-size: 13px; }
+
+/* Settings menu: one GamepadOS chevron row per category (like the Language row), each opens its own page. */
+.gp-shell .camos-menu { padding: 0; }
+.gp-shell .camos-menu-row { width: 100%; text-align: left; align-items: center; gap: 14px; padding: 14px 4px; border-top: 1px solid var(--calm-line);
+  transition: background-color var(--dur-ui) var(--ease-out); border-radius: 0; }
+.gp-shell .camos-menu-row:first-child { border-top: 0; }
+.gp-shell .camos-menu-row:active { background: var(--calm-soft, rgba(255, 255, 255, .04)); }
+.gp-shell .camos-menu-row p { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gp-shell .camos-menu-row .calm-grow { min-width: 0; }
+.gp-shell .camos-menu-icon { width: 36px; height: 36px; flex-shrink: 0; display: grid; place-items: center; border-radius: 10px; background: var(--calm-tint); color: var(--calm-accent); }
+.gp-shell .camos-menu-row .calm-help-chevron { color: var(--calm-muted); flex-shrink: 0; }
+/* A category page: back arrow + title, then the same settings panel as before. */
+.gp-shell .camos-page-head { display: flex; align-items: center; gap: 10px; margin: 0 0 14px -6px; }
+.gp-shell .camos-page-head h1 { display: flex; align-items: center; gap: 9px; font: 600 20px var(--calm-display); letter-spacing: -.3px; color: var(--calm-ink); }
+.gp-shell .camos-page-head h1 > svg { color: var(--calm-accent); }

@@ -1,8 +1,8 @@
 import React, { useEffect, useId, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import {
-  ArrowLeft, ArrowRight, Camera, Check, Crown, Download, Flashlight, FlashlightOff, Info, Lock, Monitor, Moon,
-  MonitorSmartphone, Palette, Play, QrCode, RefreshCw, ScanLine, Settings as SettingsIcon, SlidersHorizontal, Sparkles,
+  ArrowLeft, ArrowRight, Camera, Check, ChevronRight, Crown, Download, Flashlight, FlashlightOff, Info, Lock, Monitor, Moon,
+  MonitorSmartphone, Palette, Play, QrCode, RefreshCw, ScanLine, Settings as SettingsIcon, SlidersHorizontal, Smartphone, Sparkles,
   Square, Sun, SwitchCamera, Timer, Usb, Video, Wifi, X,
 } from "lucide-react";
 import { ChoiceBar, Collapse, SwapIn } from "../app/components/Motion";
@@ -101,6 +101,7 @@ const TABS: { id: Tab; label: string; Icon: typeof Video }[] = [
 export default function CamOSApp() {
   const [route, setRoute] = useState<Route>("dashboard");
   const [tab, setTab] = useState<Tab>("home");
+  const [settingsPage, setSettingsPage] = useState<SettingsPage>("menu");
   const [pc, setPc] = useSaved<PC | null>("camos.pc", null);
   const [settings, setSettingsRaw] = useSaved<Settings>("camos.settings", DEFAULTS);
   const s: Settings = { ...DEFAULTS, ...settings };
@@ -224,17 +225,18 @@ export default function CamOSApp() {
       if (scanning) { bridge()?.stopScan(); setScanning(false); return true; }
       if (route === "connect") { setRoute("dashboard"); return true; }
       if (route === "live") { bridge()?.stop(); return true; }
+      if (tab === "system" && settingsPage !== "menu") { setSettingsPage("menu"); return true; }
       if (tab !== "home") { setTab("home"); return true; }
       return false;
     };
   });
 
-  const goPremium = () => { setTab("system"); setTimeout(() => document.getElementById("camos-premium")?.scrollIntoView({ behavior: "smooth", block: "start" }), 60); };
+  const goPremium = () => { setTab("system"); setSettingsPage("premium"); };
 
   return <>
   <AnimatePresence mode="wait" initial={false}>
     {route === "dashboard" && <ShellScreenTransition key="dashboard" direction={1} className="absolute inset-0">
-      <Dashboard tab={tab} setTab={setTab} pc={pc} pcStatus={pcStatus} s={s} set={set} lenses={lenses} lens={lens}
+      <Dashboard tab={tab} setTab={setTab} page={settingsPage} setPage={setSettingsPage} pc={pc} pcStatus={pcStatus} s={s} set={set} lenses={lenses} lens={lens}
         premium={premium} setPremium={setPremium} testBuild={testBuild} adHd={adHd} hdUntil={hdUntil} hdAllowed={hdAllowed}
         onStart={() => start()} onConnect={() => setRoute("connect")} onCheck={() => checkPc()} onWatchAd={watchAd} goPremium={goPremium}
         showToast={showToast}
@@ -290,7 +292,7 @@ function TestAd({ onDone, onCancel }: { onDone: () => void; onCancel: () => void
 
 // ─── Dashboard: the GamepadOS shell (header + two tabs) ─────────────────────────────────────────────────────────
 type DashProps = {
-  tab: Tab; setTab: (t: Tab) => void; pc: PC | null; pcStatus: PcStatus; s: Settings; set: (p: Partial<Settings>) => void;
+  tab: Tab; setTab: (t: Tab) => void; page: SettingsPage; setPage: (p: SettingsPage) => void; pc: PC | null; pcStatus: PcStatus; s: Settings; set: (p: Partial<Settings>) => void;
   lenses: Lens[]; lens: Lens; premium: boolean; setPremium: (v: boolean) => void; testBuild: boolean;
   adHd: boolean; hdUntil: number; hdAllowed: boolean;
   onStart: () => void; onConnect: () => void; onCheck: () => void; onWatchAd: () => void; goPremium: () => void;
@@ -302,7 +304,12 @@ function Dashboard(p: DashProps) {
   const mainRef = useRef<HTMLElement>(null);
   const entered = useRef(false);
   useEffect(() => { entered.current = true; }, []);
-  const change = (t: Tab) => { if (t === p.tab) return; mainRef.current?.scrollTo({ top: 0 }); p.setTab(t); };
+  const change = (t: Tab) => {
+    if (t === p.tab) { if (t === "system" && p.page !== "menu") p.setPage("menu"); return; }
+    mainRef.current?.scrollTo({ top: 0 }); p.setTab(t);
+    if (t === "home") p.setPage("menu");
+  };
+  useEffect(() => { mainRef.current?.scrollTo({ top: 0 }); }, [p.page]);
 
   return <div className="gp-dashboard gp-shell camos-shell flex flex-col h-full">
     <ShellMotion />
@@ -317,7 +324,7 @@ function Dashboard(p: DashProps) {
     <main ref={mainRef} className="calm-main">
       <div className={p.tab === "home" ? "calm-home-content" : "calm-legacy-content"}>
         <TabFade key={p.tab} animate={!reduced && entered.current}>
-          {p.tab === "home" && <TabCamera {...p} openSettings={() => change("system")} />}
+          {p.tab === "home" && <TabCamera {...p} openSettings={() => { p.setPage("video"); change("system"); }} />}
           {p.tab === "system" && <TabSettings {...p} />}
         </TabFade>
       </div>
@@ -436,6 +443,10 @@ function CamRange({ label, detail, min, max, step = 1, value, shown, onChange, t
 
 const premiumBadge = <span className="camos-badge"><Crown size={11} aria-hidden="true" />Premium</span>;
 
+export type SettingsPage = "menu" | "premium" | "video" | "camera" | "light" | "filters" | "screen" | "pc" | "about";
+
+/** Settings = a short list of categories (GamepadOS's chevron rows); each opens its own page (owner, 2026-11-21:
+ *  "divide the settings based on the category and type, so that users can handle easily"). */
 function TabSettings(p: DashProps) {
   const { s, set, lens } = p;
   const version = (() => { try { return bridge()?.version() ?? "browser preview"; } catch { return ""; } })();
@@ -446,12 +457,14 @@ function TabSettings(p: DashProps) {
     if (q === 1080 && !p.hdAllowed) { p.showToast("1080p HD: watch an ad on the Camera tab for 45 minutes, or get Premium."); return; }
     set({ quality: q });
   };
+  const panel = (body: React.ReactNode, cls = "") => <div className={`calm-settings-panel ${cls}`}>{body}</div>;
+  const wbName: Record<string, string> = { auto: "Auto", daylight: "Sunny", cloudy: "Cloudy", incandescent: "Bulb", fluorescent: "Tube light" };
+  const lookName = LOOKS.find((l) => l.value === s.look)?.label ?? "None";
+  const q = s.quality === 1080 && !p.hdAllowed ? 720 : s.quality;
 
-  return <div className="calm-settings">
-    <h1 className="sr-only">Settings</h1>
-
-    {/* Premium */}
-    <section id="camos-premium" className="calm-settings-section"><h2><Crown size={15} />Premium</h2>
+  const pages: { id: Exclude<SettingsPage, "menu">; title: string; Icon: typeof Video; tone?: string; summary: string; badge?: boolean; body: () => React.ReactNode }[] = [
+    { id: "premium", title: "Premium", Icon: Crown, summary: p.premium ? "Active · HD, no watermark, filters" : "₹19 Lifetime · HD, no watermark, filters",
+      body: () => <div className="space-y-2">
       <div className="space-y-2">
         <div className="console-plan-card" data-plan="LIFETIME">
           <div className="flex items-start justify-between gap-3">
@@ -465,10 +478,9 @@ function TabSettings(p: DashProps) {
         {!p.premium && <p className="calm-inline-note">Buying arrives with the Play Store release. One purchase covers both CamOS and GamepadOS.</p>}
         {p.testBuild && <div className="calm-settings-panel"><CalmSwitch label="Test build: pretend Premium" detail="Only in test builds, so every Premium screen and filter can be tried." on={p.premium} onChange={p.setPremium} /></div>}
       </div>
-    </section>
-
-    {/* Video */}
-    <section data-tone="blue" className="calm-settings-section"><h2><Video size={15} />Video</h2><div className="calm-settings-panel">
+      </div> },
+    { id: "video", title: "Video quality", Icon: Video, tone: "blue", summary: `${q}p · ${fpsChoices.includes(s.fps) ? s.fps : 30} fps · ${s.bitrate ? `${(s.bitrate / 1000).toFixed(1)} Mbit/s` : "Auto bitrate"} · ${{ auto: "Auto shape", landscape: "Wide", portrait: "Tall" }[s.shape]}`,
+      body: () => panel(<>
       <div className="calm-setting-detail camos-first"><h3>Quality</h3>
         <ChoiceBar label="Picture quality" value={String(s.quality)} onChoose={chooseQuality}
           choices={[{ value: "480", label: "480p", testId: "s-q-480" }, { value: "720", label: "720p", testId: "s-q-720" },
@@ -490,10 +502,9 @@ function TabSettings(p: DashProps) {
           choices={[{ value: "auto", label: "Auto", testId: "s-shape-auto" }, { value: "landscape", label: "Wide", testId: "s-shape-wide" }, { value: "portrait", label: "Tall", testId: "s-shape-tall" }]} />
         <SwapIn swapKey={s.shape}><p>{SHAPE_HELP[s.shape]}</p></SwapIn>
       </div>
-    </div></section>
-
-    {/* Camera */}
-    <section data-tone="green" className="calm-settings-section"><h2><Camera size={15} />Camera</h2><div className="calm-settings-panel">
+      </>) },
+    { id: "camera", title: "Lens & focus", Icon: Camera, tone: "green", summary: `${lensShort(lens)} · ${s.zoom.toFixed(1)}× · ${lens.manualFocus && s.focus === "manual" ? "Manual focus" : "Auto focus"}${lens.flash && s.torch ? " · Flashlight on" : ""}`,
+      body: () => panel(<>
       <div className="calm-setting-detail camos-first"><h3>Lens</h3>
         <ChoiceBar label="Lens" value={lens.id} onChoose={(id) => { const l = p.lenses.find((x) => x.id === id); if (l) set({ cameraId: l.id, front: l.front, zoom: 1, torch: l.flash && s.torch }); }}
           choices={p.lenses.map((l) => ({ value: l.id, label: lensShort(l), testId: `s-lens-${l.id}` }))} />
@@ -511,11 +522,9 @@ function TabSettings(p: DashProps) {
       </Collapse>
       {lens.stabilize && <CalmSwitch label="Stabilisation" detail="Smooths out shaky hands. Turn off if the picture looks slightly zoomed." on={s.stabilize} onChange={(v) => set({ stabilize: v })} />}
       {lens.flash && <CalmSwitch label="Flashlight" detail="Lights you up in a dark room. Back camera only." on={s.torch} onChange={(v) => set({ torch: v })} />}
-      {lens.front && <CalmSwitch label="Mirror the preview on this phone" detail="Only the phone's preview. Your PC always gets the true picture." on={s.mirror} onChange={(v) => set({ mirror: v })} />}
-    </div></section>
-
-    {/* Light & colour */}
-    <section data-tone="yellow" className="calm-settings-section"><h2><Sun size={15} />Light & colour</h2><div className="calm-settings-panel">
+      </>) },
+    { id: "light", title: "Light & colour", Icon: Sun, tone: "yellow", summary: `Brightness ${fmtEv(s.ev, lens.evStep)} · ${wbName[s.wb] ?? "Auto"} white balance`,
+      body: () => panel(<>
       {lens.evMax > lens.evMin && <CamRange label="Brightness" min={lens.evMin} max={lens.evMax} value={s.ev} shown={fmtEv(s.ev, lens.evStep)} onChange={(v) => set({ ev: v })} testId="s-ev" />}
       <div className="calm-setting-detail"><h3>White balance</h3>
         <ChoiceBar label="White balance" value={s.wb} onChoose={(v) => set({ wb: v })}
@@ -532,10 +541,10 @@ function TabSettings(p: DashProps) {
           choices={[{ value: "off", label: "Off" }, { value: "normal", label: "Normal" }, { value: "strong", label: "Strong" }].map((c) => ({ ...c, testId: `s-nr-${c.value}` }))} />
         <p>Cleans up grain in dim rooms. Strong can look a little soft.</p>
       </div>
-    </div></section>
-
-    {/* Filters (Premium) */}
-    <section data-tone="violet" className="calm-settings-section"><h2><Sparkles size={15} />Filters {!p.premium && premiumBadge}</h2><div className={`calm-settings-panel ${p.premium ? "" : "camos-locked"}`}>
+      </>) },
+    { id: "filters", title: "Filters", Icon: Sparkles, tone: "violet", badge: !p.premium,
+      summary: p.premium ? [lookName !== "None" ? lookName : "", s.smooth ? `Smoothing ${Math.round(s.smooth * 100)}%` : "", s.lowLight ? "Low-light boost" : ""].filter(Boolean).join(" · ") || "No filter" : "Colour looks, face smoothing, low-light boost",
+      body: () => panel(<>
       <div className="calm-setting-detail camos-first"><h3>Colour look</h3>
         <ChoiceBar label="Colour look" value={p.premium ? s.look : "none"} onChoose={(v) => p.premium ? set({ look: v }) : lockedTap("Colour looks")}
           choices={LOOKS.map((l) => ({ value: l.value, label: l.label, testId: `s-look-${l.value}` }))} />
@@ -544,24 +553,48 @@ function TabSettings(p: DashProps) {
         detail="Softens skin, keeps eyes and outlines sharp." onChange={(v) => p.premium ? set({ smooth: v / 100 }) : lockedTap("Face smoothing")} testId="s-smooth" />
       <CalmSwitch label="Low-light boost" detail="Brightens a dark room. The camera may drop to 15 fps in the dark to gather more light." on={p.premium && s.lowLight} onChange={(v) => p.premium ? set({ lowLight: v }) : lockedTap("Low-light boost")} />
       <div className="calm-setting-row camos-soon"><div className="calm-grow"><span className="calm-setting-label">Background blur</span><p>Blurs the room behind you. Coming in the next update.</p></div><Lock size={16} aria-hidden="true" /></div>
-    </div></section>
-
-    {/* While streaming */}
-    <section className="calm-settings-section"><h2><Moon size={15} />While streaming</h2><div className="calm-settings-panel">
+      </>, p.premium ? "" : "camos-locked") },
+    { id: "screen", title: "Phone screen", Icon: Smartphone, summary: `${s.autoDim ? "Dims after 30 s" : "Stays bright"}${lens.front || p.lenses.some((l) => l.front) ? ` · ${s.mirror ? "Mirrored" : "Not mirrored"} front preview` : ""}`,
+      body: () => panel(<>
+      {p.lenses.some((l) => l.front) && <CalmSwitch label="Mirror the preview on this phone" detail="Only the phone's preview. Your PC always gets the true picture." on={s.mirror} onChange={(v) => set({ mirror: v })} />}
       <CalmSwitch label="Dim the screen after 30 seconds" detail="Saves battery and heat. The PC keeps getting the picture; tap the phone to wake it." on={s.autoDim} onChange={(v) => set({ autoDim: v })} />
-    </div></section>
-
-    {/* PC */}
-    <section className="calm-settings-section"><h2><MonitorSmartphone size={15} />Your PC</h2><div className="calm-settings-panel">
+      </>) },
+    { id: "pc", title: "Your PC", Icon: MonitorSmartphone, summary: p.pc ? `Paired with ${p.pc.ip}` : "Not paired",
+      body: () => panel(<>
       <div className="calm-setting-row"><div className="calm-grow"><span className="calm-setting-label">{p.pc ? `Paired with ${p.pc.ip}` : "No PC paired"}</span>
         <p>{p.pc ? "Uses the same pairing as GamepadOS." : "Scan the QR code in the Gamepad Server window."}</p></div>
         {p.pc ? <button className="calm-text-button" onClick={p.onForget}>Forget</button> : <button className="calm-text-button" onClick={p.onConnect}>Pair</button>}
       </div>
-    </div></section>
-
-    <section className="calm-settings-section"><h2><Info size={15} />About</h2><div className="calm-settings-panel">
+      </>) },
+    { id: "about", title: "About", Icon: Info, summary: `Version ${version}`,
+      body: () => panel(<>
       <div className="calm-setting-row"><div className="calm-grow"><span className="calm-setting-label">CamOS</span><p>Version {version}. Made by the GamepadOS team.</p></div></div>
-    </div></section>
+      </>) },
+  ];
+  const open = pages.find((x) => x.id === p.page);
+
+  return <div className="calm-settings camos-settings">
+    <AnimatePresence mode="wait" initial={false}>
+      {!open
+        ? <motion.div key="menu" initial={{ opacity: 0, x: -24 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -24 }} transition={SPRING}>
+            <h1 className="sr-only">Settings</h1>
+            <div className="calm-settings-panel camos-menu">
+              {pages.map(({ id, title, Icon, tone, summary, badge }) =>
+                <button key={id} type="button" className="calm-setting-row camos-menu-row" data-tone={tone} data-testid={`settings-${id}`} onClick={() => p.setPage(id)}>
+                  <span className="camos-menu-icon" aria-hidden="true"><Icon size={18} /></span>
+                  <div className="calm-grow"><span className="calm-setting-label">{title}{badge && premiumBadge}</span><p>{summary}</p></div>
+                  <span className="calm-help-chevron" aria-hidden="true"><ChevronRight size={18} /></span>
+                </button>)}
+            </div>
+          </motion.div>
+        : <motion.div key={open.id} initial={{ opacity: 0, x: 24 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 24 }} transition={SPRING}>
+            <div className="camos-page-head">
+              <button className="calm-icon-button" onClick={() => p.setPage("menu")} aria-label="Back to settings" data-testid="settings-back"><ArrowLeft size={20} aria-hidden="true" /></button>
+              <h1><open.Icon size={18} aria-hidden="true" />{open.title}{open.badge && premiumBadge}</h1>
+            </div>
+            <section className="calm-settings-section" data-tone={open.tone}>{open.body()}</section>
+          </motion.div>}
+    </AnimatePresence>
   </div>;
 }
 
