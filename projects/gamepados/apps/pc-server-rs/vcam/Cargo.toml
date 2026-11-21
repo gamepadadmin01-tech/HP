@@ -1,0 +1,39 @@
+[package]
+name = "camos-vcam"
+version = "0.1.0"
+edition = "2024"
+description = "CamOS virtual camera media source (loaded by the Windows 11 Frame Server)"
+
+# A DLL, not a program. Windows' camera service loads it (see src/lib.rs).
+[lib]
+name = "camos_vcam"
+crate-type = ["cdylib"]
+
+[dependencies]
+windows-core = "0.61"
+
+[dependencies.windows]
+version = "0.61"
+features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_Storage_FileSystem",
+    "Win32_System_Com",
+    "Win32_System_Com_StructuredStorage",
+    "Win32_System_LibraryLoader",
+    "Win32_System_Registry",
+    "Win32_System_SystemServices",
+    "Win32_System_Threading",
+    "Win32_System_Variant",
+    "Win32_System_Diagnostics_Debug",
+    "Win32_System_IO",
+    "Win32_Media_KernelStreaming",
+    "Win32_Media_MediaFoundation",
+]
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+# NOT "abort": a panic inside a Windows service process must never take the
+# whole camera service down. Every COM entry point catches what it can.

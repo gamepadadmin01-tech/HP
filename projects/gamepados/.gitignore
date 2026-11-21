@@ -41,6 +41,7 @@ venv/
 # NOT ignored — the APK ships it and it must be tracked.
 apps/controller-ui/dist/
 apps/controller-ui/dist-play/
+apps/controller-ui/dist-camos/
 apps/controller-ui/i18n-crawl*.json
 !apps/android-client/app/src/main/assets/dist/
 

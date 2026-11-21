@@ -19,6 +19,7 @@
 //! time beyond this one machine.
 
 pub mod adbreverse;
+pub mod camera;
 pub mod grx;
 pub mod http;
 pub mod net;

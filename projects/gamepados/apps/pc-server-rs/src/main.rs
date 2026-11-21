@@ -468,6 +468,27 @@ fn main() -> std::io::Result<()> {
     let grx_psk = pc_server_rs::grx::psk_from_pairing_key(&key_hex);
     println!("  grx     : enabled (encrypted input; legacy cleartext still accepted)");
 
+    // CamOS phone webcam (src/camera/). Fully independent of the gamepad: its own
+    // port and threads, and a failure here (Windows 10, helper DLL not
+    // registered) is reported and otherwise ignored — the gamepad must never
+    // depend on the camera. Dry-run servers (tests) skip it.
+    // Started on its own thread so neither the gamepad nor the window ever waits
+    // on Windows' camera service.
+    #[cfg(windows)]
+    if !args.dry_run {
+        let cam_key = key_hex.clone();
+        let _ = std::thread::Builder::new().name("camos-start".into()).spawn(move || {
+            match pc_server_rs::camera::vcam::start() {
+                Ok(()) => println!("  camera  : \"{}\" ready", pc_server_rs::camera::vcam::CAMERA_NAME),
+                Err(e) => println!("  camera  : unavailable — {e}"),
+            }
+            match pc_server_rs::camera::stream::start(cam_key) {
+                Ok(()) => println!("  camera  : CamOS phones connect on tcp/{}", pc_server_rs::camera::CAMERA_PORT),
+                Err(e) => println!("  camera  : could not listen — {e}"),
+            }
+        });
+    }
+
     // Print the scannable code unless suppressed. A phone on Wi-Fi CANNOT pair
     // any other way: manual connect sends auth token 0, which is only accepted
     // from an off-LAN or tether source. Over USB tether this is unnecessary,

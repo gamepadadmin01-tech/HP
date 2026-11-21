@@ -7,6 +7,15 @@
 //! user as a different — or worse, an untrusted — application.
 fn main() {
     println!("cargo:rerun-if-changed=assets/app_icon.ico");
+    // CamOS camera (src/camera/) uses Windows' media library, mfplat.dll. "Windows N"
+    // editions (Europe/Korea) ship WITHOUT it until the Media Feature Pack is
+    // installed, and a normal import would stop Gamepad Server from starting there
+    // at all. Delay-loading means Windows only looks for it the first time the
+    // camera code runs; the gamepad never touches it.
+    if std::env::var("CARGO_CFG_TARGET_ENV").as_deref() == Ok("msvc") {
+        println!("cargo:rustc-link-arg=/DELAYLOAD:mfplat.dll");
+        println!("cargo:rustc-link-arg=delayimp.lib");
+    }
     #[cfg(windows)]
     {
         let mut res = winresource::WindowsResource::new();

@@ -493,6 +493,20 @@ impl eframe::App for App {
                         .size(12.0)
                         .weak(),
                 );
+                // CamOS phone webcam (src/camera/): one line, so the window keeps its size.
+                #[cfg(windows)]
+                {
+                    let cam = crate::camera::stream::status();
+                    if cam.live {
+                        ui.label(
+                            egui::RichText::new(format!("Phone camera live · {} · {}×{} · {:.0} fps", cam.device, cam.width, cam.height, cam.fps))
+                                .size(12.0)
+                                .color(ORANGE),
+                        );
+                    } else {
+                        ui.label(egui::RichText::new("Phone camera: open CamOS on your phone").size(12.0).weak());
+                    }
+                }
             });
 
             ui.add_space(4.0);

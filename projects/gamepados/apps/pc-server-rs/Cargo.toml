@@ -48,6 +48,24 @@ image = { version = "0.25.10", default-features = false, features = ["png"] }
 # the game back to us. Without it the pad works but the phone never vibrates.
 vigem-client = { version = "0.1", features = ["unstable_xtarget_notification"] }
 
+# CamOS phone webcam (src/camera/): Windows 11's built-in virtual camera, the
+# built-in H.264 decoder, and the named pipe that feeds the camera DLL (vcam/).
+# These are Windows' own media APIs — there is no sensible hand-rolled option.
+[target.'cfg(windows)'.dependencies.windows]
+version = "0.61"
+features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_Storage_FileSystem",
+    "Win32_System_Com",
+    "Win32_System_Com_StructuredStorage",
+    "Win32_System_IO",
+    "Win32_System_LibraryLoader",
+    "Win32_System_Pipes",
+    "Win32_System_Variant",
+    "Win32_Media_MediaFoundation",
+]
+
 [dev-dependencies]
 # Test-only: parses tests/golden_vectors.json (generated from the real Python
 # server by tools/gen_golden.py). Not linked into the shipped binary.
