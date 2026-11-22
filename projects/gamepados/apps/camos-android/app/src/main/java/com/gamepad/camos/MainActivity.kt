@@ -342,8 +342,23 @@ class MainActivity : AppCompatActivity() {
             val json = JSONObject().put("ip", ip).put("status", status).put("message", message)
             js("window.camosOnCheck && window.camosOnCheck(${JSONObject.quote(json.toString())})")
         }
+        /** "Where is my PC?" — answers through window.camosOnFind({ip, name, via}); ip is null if nothing answered. */
+        @JavascriptInterface fun find(key: String, usbOnly: Boolean) = streamer.find(key.ifEmpty { null }, usbOnly) { ip, name, via ->
+            val json = JSONObject().put("ip", ip ?: JSONObject.NULL).put("name", name).put("via", via)
+            js("window.camosOnFind && window.camosOnFind(${JSONObject.quote(json.toString())})")
+        }
+        /** Android's tethering settings (where "USB tethering" is switched on). */
+        @JavascriptInterface fun openTetherSettings() = runOnUiThread {
+            val tries = listOf(
+                android.content.Intent().setClassName("com.android.settings", "com.android.settings.TetherSettings"),
+                android.content.Intent(android.provider.Settings.ACTION_WIRELESS_SETTINGS),
+                android.content.Intent(android.provider.Settings.ACTION_SETTINGS))
+            for (i in tries) { try { startActivity(i.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)); break } catch (_: Exception) {} }
+        }
         /** Every lens and what it can do, for the Settings screen. */
         @JavascriptInterface fun cameras(): String = try { CameraCatalog.describe(this@MainActivity) } catch (_: Exception) { "[]" }
+        /** Plain-text report of what the cameras offer to apps (Settings → About → Camera report). */
+        @JavascriptInterface fun cameraReport(): String = try { CameraCatalog.report(this@MainActivity) } catch (e: Exception) { "Report failed: ${e.message}" }
         @JavascriptInterface fun dim(on: Boolean) = runOnUiThread { setDim(on) }
         /** The page's answer to the PC window: what is set and what this phone's plan allows. */
         @JavascriptInterface fun sendState(json: String) = streamer.sendState(json)

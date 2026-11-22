@@ -29,10 +29,13 @@ type Bridge = {
   cameras(): string;
   deviceName(): string; version(): string; isTestBuild?(): boolean;
   sendState?(json: string): void;
+  cameraReport?(): string;
+  find?(key: string, usbOnly: boolean): void;
+  openTetherSettings?(): void;
 };
 const bridge = (): Bridge | undefined => (window as any).CamOSBridge;
 
-type PC = { ip: string; key: string };
+type PC = { ip: string; key: string; via?: "usb" | "wifi" };
 type Route = "dashboard" | "connect" | "live";
 type Tab = "home" | "system";
 type LiveState = { state: "connecting" | "live"; message: string; fps: number; kbps: number; portrait?: boolean };
@@ -121,6 +124,10 @@ export default function CamOSApp() {
   const busyRetried = useRef(false);
   /** 60 fps chosen but the camera delivers much less: count live seconds, tell the user once. */
   const lowFpsSeconds = useRef(0);
+  /** Wi-Fi: the saved address didn't answer, so the phone asked "where is my PC?" once (the PC's address changes
+   *  when it joins another network or the router hands out a new one). */
+  const refinding = useRef<{ forIp: string; message: string } | null>(null);
+  const [usbSearch, setUsbSearch] = useState<"idle" | "searching" | "failed">("idle");
   const told60 = useRef(false);
   const showToast = (m: string) => { setToast(m); clearTimeout(toastTimer.current); toastTimer.current = window.setTimeout(() => setToast(""), 4600); };
 
@@ -287,7 +294,34 @@ export default function CamOSApp() {
         window.setTimeout(() => checkPc(), 1200);
         return;
       }
+      if (r.status === "unreachable" && pc.key && pc.via !== "usb" && refinding.current?.forIp !== pc.ip && bridge()?.find) {
+        // Before saying "not answering", look for the PC at a new address (only it can answer: needs the key).
+        refinding.current = { forIp: pc.ip, message: r.message };
+        setPcStatus({ status: "checking", message: "" });
+        bridge()!.find!(pc.key, false);
+        return;
+      }
       setPcStatus({ status: r.status, message: r.message });
+    };
+    (window as any).camosOnFind = (json: string) => {
+      const r = JSON.parse(json) as { ip: string | null; name: string; via: string };
+      if (r.via === "usb" || usbSearch === "searching") {
+        if (r.ip) {
+          setUsbSearch("idle");
+          setPc({ ip: r.ip, key: pc?.key ?? "", via: "usb" });
+          setRoute("dashboard");
+          showToast(`Connected to ${r.name || "your PC"} over USB.`);
+        } else setUsbSearch("failed");
+        return;
+      }
+      const waiting = refinding.current;
+      if (!pc || !waiting || waiting.forIp !== pc.ip) return;
+      if (r.ip && r.ip !== pc.ip) {
+        setPc({ ...pc, ip: r.ip });   // the home screen re-checks at the new address by itself
+        showToast(`Found your PC at its new address (${r.ip}).`);
+      } else {
+        setPcStatus({ status: "unreachable", message: waiting.message });
+      }
     };
     (window as any).camosOnState = (json: string) => {
       const st = JSON.parse(json);
@@ -302,7 +336,7 @@ export default function CamOSApp() {
         lowFpsSeconds.current = s.fps === 60 && st.fps < 45 ? lowFpsSeconds.current + 1 : 0;
         if (lowFpsSeconds.current === 5 && !told60.current) {
           told60.current = true;
-          showToast(`This camera gives about ${st.fps} fps here. For 60 fps try 720p or another lens.`);
+          showToast(`Camera is at ${st.fps} fps. In a dark room cameras slow down for light: add light, or try 720p.`);
         }
       }
     };
@@ -327,13 +361,15 @@ export default function CamOSApp() {
     {route === "dashboard" && <ShellScreenTransition key="dashboard" direction={1} className="absolute inset-0">
       <Dashboard tab={tab} setTab={setTab} page={settingsPage} setPage={setSettingsPage} pc={pc} pcStatus={pcStatus} s={s} set={set} lenses={lenses} lens={lens}
         premium={premium} setPremium={setPremium} testBuild={testBuild} adHd={adHd} hdUntil={hdUntil} hdAllowed={hdAllowed}
-        onStart={() => start()} onConnect={() => setRoute("connect")} onCheck={() => checkPc()} onWatchAd={watchAd} goPremium={goPremium}
+        onStart={() => start()} onConnect={() => setRoute("connect")} onCheck={() => { refinding.current = null; checkPc(); }} onWatchAd={watchAd} goPremium={goPremium}
         showToast={showToast}
         onForget={() => { setPc(null); setPcStatus({ status: "unknown", message: "" }); showToast("This phone forgot the PC. Scan its QR code to pair again."); }} />
     </ShellScreenTransition>}
     {route === "connect" && <ShellScreenTransition key="connect" direction={-1} className="absolute inset-0">
-      <ConnectScreen scanning={scanning} setScanning={setScanning} onBack={() => setRoute("dashboard")}
-        onManual={(found) => { setPc(found); setRoute("dashboard"); }} />
+      <ConnectScreen scanning={scanning} setScanning={setScanning} onBack={() => { setUsbSearch("idle"); setRoute("dashboard"); }}
+        onManual={(found) => { setPc(found); setRoute("dashboard"); }}
+        usbSearch={usbSearch}
+        onUsb={() => { const b = bridge(); if (!b?.find) { showToast("Open CamOS on your Android phone to connect."); return; } setUsbSearch("searching"); b.find(pc?.key ?? "", true); }} />
     </ShellScreenTransition>}
     {route === "live" && <ShellScreenTransition key="live" direction={1} className="absolute inset-0">
       <LiveScreen live={live} s={s} set={set} lens={lens} lenses={lenses} premium={premium} hdAllowed={hdAllowed} goPremium={() => { bridge()?.stop(); goPremium(); }} showToast={showToast}
@@ -442,7 +478,7 @@ function statusLine(pc: PC | null, st: PcStatus): { text: string; tone: "ok" | "
   if (!pc) return { text: "No PC paired yet", tone: "none" };
   switch (st.status) {
     case "checking": return { text: "Checking your PC…", tone: "wait" };
-    case "ready": return { text: `PC ready · ${pc.ip}`, tone: "ok" };
+    case "ready": return { text: pc.via === "usb" ? "PC ready · USB" : `PC ready · ${pc.ip}`, tone: "ok" };
     case "unknown": return { text: `Paired with ${pc.ip}`, tone: "wait" };
     case "old": return { text: "Update Gamepad Server", tone: "warn" };
     case "badkey": return { text: "Pairing key changed", tone: "warn" };
@@ -474,7 +510,7 @@ function TabCamera(p: DashProps & { openSettings: () => void }) {
       <div className="camos-notice" role="status">
         <p>{p.pcStatus.message}</p>
         {(p.pcStatus.status === "old" || p.pcStatus.status === "unreachable") &&
-          <button className="calm-text-button" onClick={() => window.open("https://gamepad.space/#download", "_blank")}><Download size={15} aria-hidden="true" />Get the PC server</button>}
+          <p className="camos-pc-hint"><Download size={14} aria-hidden="true" />On your PC, go to <b>gamepad.space</b> and download the PC server.</p>}
       </div>
     </Collapse>
 
@@ -516,6 +552,19 @@ function CamRange({ label, detail, min, max, step = 1, value, shown, onChange, t
     <input data-testid={testId} id={id} type="range" min={min} max={max} step={step} value={value} aria-valuetext={shown}
       style={{ "--pct": `${((value - min) / (max - min || 1)) * 100}%` } as React.CSSProperties} onChange={(e) => onChange(Number(e.target.value))} />
     {detail && <p>{detail}</p>}</div>;
+}
+
+/** What this phone's cameras offer to apps (frame rates, high-speed modes, fastest rate per size). For support:
+ *  it shows whether 1080p60 / 4K are possible for CamOS on this phone. */
+function CameraReport() {
+  const [open, setOpen] = useState(false);
+  const text = useMemo(() => { try { return open ? bridge()?.cameraReport?.() ?? "Open CamOS on your phone to see this." : ""; } catch { return ""; } }, [open]);
+  return <>
+    <div className="calm-setting-row"><div className="calm-grow"><span className="calm-setting-label">Camera report</span>
+      <p>What your cameras offer to apps: frame rates and sizes.</p></div>
+      <button className="calm-text-button" onClick={() => setOpen((v) => !v)} aria-expanded={open}>{open ? "Hide" : "Show"}</button></div>
+    <Collapse open={open}><pre className="camos-report">{text}</pre></Collapse>
+  </>;
 }
 
 const premiumBadge = <span className="camos-badge"><Crown size={11} aria-hidden="true" />Premium</span>;
@@ -651,6 +700,7 @@ function TabSettings(p: DashProps) {
     { id: "about", title: "About", Icon: Info, summary: `Version ${version}`,
       body: () => panel(<>
       <div className="calm-setting-row"><div className="calm-grow"><span className="calm-setting-label">CamOS</span><p>Version {version}. Made by the GamepadOS team.</p></div></div>
+      <CameraReport />
       </>) },
   ];
   const open = pages.find((x) => x.id === p.page);
@@ -682,8 +732,9 @@ function TabSettings(p: DashProps) {
 }
 
 // ─── Connect screen (same layout as GamepadOS's CalmConnect) ────────────────────────────────────────────────────
-function ConnectScreen({ scanning, setScanning, onBack, onManual }: {
+function ConnectScreen({ scanning, setScanning, onBack, onManual, usbSearch, onUsb }: {
   scanning: boolean; setScanning: (v: boolean) => void; onBack: () => void; onManual: (pc: PC) => void;
+  usbSearch: "idle" | "searching" | "failed"; onUsb: () => void;
 }) {
   const [method, setMethod] = useState<"wireless" | "wired">("wireless");
   const [manual, setManual] = useState(false);
@@ -722,7 +773,7 @@ function ConnectScreen({ scanning, setScanning, onBack, onManual }: {
             <SwapIn swapKey={method}>
               {method === "wireless" ? <>
                 <ol className="calm-steps">
-                  {step(1, "Open Gamepad Server", <>Keep your phone and PC on the same Wi-Fi network.<button className="calm-text-button" onClick={() => window.open("https://gamepad.space/#download", "_blank")}><Download size={16} aria-hidden="true" />Get the PC server</button></>)}
+                  {step(1, "Open Gamepad Server", <>Same Wi-Fi as this phone. No server yet? On your PC, go to <b>gamepad.space</b> and download it.</>)}
                   {step(2, "Scan the code on your PC", "The code appears in the Gamepad Server window. It is the same code GamepadOS uses.")}
                 </ol>
                 <button className="calm-primary" data-testid="scan-qr-button" onClick={scan}><ScanLine size={20} aria-hidden="true" />Scan PC QR code</button>
@@ -738,10 +789,12 @@ function ConnectScreen({ scanning, setScanning, onBack, onManual }: {
                 </form></Collapse>
               </> : <>
                 <ol className="calm-steps">
-                  {step(1, "USB is on its way", "Streaming over a USB cable comes in the next CamOS update.")}
-                  {step(2, "Use Wi-Fi for now", "Wi-Fi works with the same Gamepad Server, no cable needed.")}
+                  {step(1, "Plug in the USB cable", "Phone to PC. Keep Gamepad Server open.")}
+                  {step(2, "Turn on USB tethering", <>Or USB debugging, if you use it.<button className="calm-text-button" onClick={() => bridge()?.openTetherSettings?.()}>Open tethering settings</button></>)}
                 </ol>
-                <button className="calm-secondary" onClick={() => setMethod("wireless")}><Wifi size={18} aria-hidden="true" />Use Wi-Fi</button>
+                <button className="calm-primary" data-testid="usb-connect-button" disabled={usbSearch === "searching"} onClick={onUsb}>
+                  <Usb size={20} aria-hidden="true" />{usbSearch === "searching" ? "Looking for your PC…" : "Connect over USB"}</button>
+                {usbSearch === "failed" && <p className="calm-error" role="alert">No PC on the cable. Check that Gamepad Server is open and USB tethering is on.</p>}
               </>}
             </SwapIn>
           </div></main>

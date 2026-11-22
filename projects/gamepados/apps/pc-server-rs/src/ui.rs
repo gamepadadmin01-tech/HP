@@ -134,6 +134,8 @@ enum Msg {
     DownloadProgress(u64, u64),
     DownloadDone(Result<std::path::PathBuf, String>),
     FeedbackDone(Result<(), String>),
+    /// The PC's Wi-Fi address changed: redraw the QR (owner, 2026-11-22).
+    LanIp(String),
 }
 
 #[derive(PartialEq)]
@@ -164,6 +166,8 @@ pub struct App {
     notice: Option<(String, std::time::Instant)>,
     /// The window size last asked for: compact for the QR, taller for the CamOS controls.
     win_size: egui::Vec2,
+    /// The pairing QR needs redrawing (the Wi-Fi address changed).
+    qr_dirty: bool,
 
     tx: Sender<Msg>,
     rx: Receiver<Msg>,
@@ -203,6 +207,7 @@ impl App {
             last_live: None,
             notice: None,
             win_size: QR_WINDOW,
+            qr_dirty: false,
             tx,
             rx,
             update_state: UpdateState::Idle,
@@ -223,7 +228,32 @@ impl App {
         // surfaces if an update is actually available — a launch-time popup
         // saying "you're up to date" is noise.
         app.start_update_check(&cc.egui_ctx);
+        app.watch_lan_ip(&cc.egui_ctx);
         app
+    }
+
+    /// Watch the PC's Wi-Fi address every few seconds and redraw the QR when it changes (a new network, a hotspot,
+    /// a router that handed out a new address). Without this the window kept showing the old address and phones
+    /// scanned a dead QR. Skipped when the address was set by hand (--lan-ip).
+    fn watch_lan_ip(&self, ctx: &egui::Context) {
+        let (tx, ctx, start) = (self.tx.clone(), ctx.clone(), self.lan_ip.clone());
+        std::thread::Builder::new().name("lan-ip-watch".into()).spawn(move || {
+            if crate::netdetect::lan_ip() != start {
+                return; // set by hand: leave it alone
+            }
+            let mut last = start;
+            loop {
+                std::thread::sleep(Duration::from_secs(3));
+                let now = crate::netdetect::lan_ip();
+                if now != last && !now.is_empty() && now != "0.0.0.0" {
+                    last = now.clone();
+                    if tx.send(Msg::LanIp(now)).is_err() {
+                        return;
+                    }
+                    ctx.request_repaint();
+                }
+            }
+        }).ok();
     }
 
     /// Rasterise the pairing QR into a texture.
@@ -361,6 +391,12 @@ impl App {
                     self.update_state = UpdateState::Failed;
                     self.update_msg = e;
                 }
+                Msg::LanIp(ip) => {
+                    let port = self.qr_payload.split(',').nth(1).and_then(|p| p.parse::<u16>().ok()).unwrap_or(7777);
+                    self.qr_payload = crate::pairing::qr_payload(&ip, port, &self.pairing_key);
+                    self.lan_ip = ip;
+                    self.qr_dirty = true;
+                }
                 Msg::FeedbackDone(r) => {
                     self.feedback_sending = false;
                     match r {
@@ -393,6 +429,10 @@ impl eframe::App for App {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
         self.drain_messages();
+        if self.qr_dirty {
+            self.qr_dirty = false;
+            self.build_qr_texture(&ctx);
+        }
 
         let preview = crate::camera::preview::latest();
         let phone = crate::camera::remote::state();
@@ -413,7 +453,9 @@ impl eframe::App for App {
         let footer = egui::Rect::from_min_max(egui::pos2(full.min.x, full.max.y - footer_h), full.max);
 
         let used = ui.scope_builder(egui::UiBuilder::new().max_rect(body.shrink2(egui::vec2(16.0, 0.0))), |ui| {
-            if camera_screen {
+            if self.feedback_open {
+                self.feedback_screen(ui, &ctx);
+            } else if camera_screen {
                 self.camera_screen(ui, &ctx, preview.as_ref(), phone.as_ref());
             } else {
                 self.qr_screen(ui);
@@ -431,7 +473,6 @@ impl eframe::App for App {
             self.footer(ui, &ctx);
         });
 
-        self.show_feedback_window(&ctx);
     }
 }
 
@@ -673,18 +714,22 @@ impl App {
                     ui.label(egui::RichText::new("Checking…").size(12.0).color(MUTED));
                 }
                 _ => {
-                    if link(ui, &format!("v{}", http::APP_VERSION)).on_hover_text("Check for updates").clicked() {
+                    ui.label(egui::RichText::new(format!("v{}", http::APP_VERSION)).size(12.0).color(MUTED));
+                    if link(ui, if self.update_state == UpdateState::UpToDate { "Up to date · check again" } else { "Check for updates" }).clicked() {
                         self.start_update_check(ctx);
-                    }
-                    if self.update_state == UpdateState::UpToDate {
-                        ui.label(egui::RichText::new("up to date").size(12.0).color(MUTED));
                     }
                 }
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if link(ui, "Feedback").clicked() {
+                if !self.feedback_open && link(ui, "Feedback").clicked() {
                     self.feedback_open = true;
                     self.feedback_status.clear();
+                }
+                // Short notes (feedback sent) live here on the QR screen.
+                if let Some((msg, at)) = &self.notice {
+                    if at.elapsed() < Duration::from_secs(3) && self.last_live.is_none() {
+                        ui.label(egui::RichText::new(msg).size(12.0).color(GOOD));
+                    }
                 }
             });
         });
@@ -832,80 +877,52 @@ fn draw_lock(p: &egui::Painter, c: egui::Pos2, color: egui::Color32) {
 }
 
 impl App {
-    fn show_feedback_window(&mut self, ctx: &egui::Context) {
-        if !self.feedback_open {
-            return;
+    /// Feedback as a page of its own, in the app's look (replaces the old floating box).
+    fn feedback_screen(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
+        ui.add_space(16.0);
+        ui.label(egui::RichText::new("Feedback").size(22.0).color(INK).strong());
+        ui.label(egui::RichText::new("We read every message. Add your email so we can reply.").size(13.0).color(MUTED));
+        ui.add_space(14.0);
+        let field = |ui: &mut egui::Ui, label: &str| { ui.label(egui::RichText::new(label).size(12.0).color(MUTED)); };
+        field(ui, "Your email");
+        ui.add(egui::TextEdit::singleline(&mut self.feedback_email).desired_width(f32::INFINITY).margin(egui::vec2(10.0, 8.0)).hint_text("you@example.com"));
+        ui.add_space(10.0);
+        field(ui, "Message");
+        ui.add(egui::TextEdit::multiline(&mut self.feedback_message).desired_rows(7).desired_width(f32::INFINITY).margin(egui::vec2(10.0, 8.0)).hint_text("What happened, or what would make it better?"));
+        ui.add_space(8.0);
+        if !self.feedback_status.is_empty() {
+            ui.label(egui::RichText::new(&self.feedback_status).size(12.0).color(if self.feedback_ok { GOOD } else { BAD }));
+            ui.add_space(4.0);
         }
-        let mut open = true;
-        egui::Window::new("Send Feedback")
-            .open(&mut open)
-            .collapsible(false)
-            .resizable(false)
-            .default_width(330.0)
-            .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
-            .show(ctx, |ui| {
-                ui.label(
-                    egui::RichText::new("We read every message — add your email so we can reply.")
-                        .size(11.0)
-                        .weak(),
-                );
-                ui.add_space(8.0);
-                ui.label(egui::RichText::new("Your email").size(11.0).weak());
-                ui.add(
-                    egui::TextEdit::singleline(&mut self.feedback_email)
-                        .desired_width(f32::INFINITY),
-                );
-                ui.add_space(6.0);
-                ui.label(egui::RichText::new("Message").size(11.0).weak());
-                ui.add(
-                    egui::TextEdit::multiline(&mut self.feedback_message)
-                        .desired_rows(6)
-                        .desired_width(f32::INFINITY),
-                );
-                ui.add_space(4.0);
-
-                if !self.feedback_status.is_empty() {
-                    let color = if self.feedback_ok {
-                        GOOD
-                    } else {
-                        BAD
-                    };
-                    ui.colored_label(color, egui::RichText::new(&self.feedback_status).size(11.0));
+        ui.horizontal(|ui| {
+            let send = ui.add_enabled(!self.feedback_sending,
+                egui::Button::new(egui::RichText::new(if self.feedback_sending { "Sending…" } else { "Send" }).color(PAPER).strong())
+                    .fill(ORANGE).corner_radius(999.0).min_size(egui::vec2(110.0, 38.0)));
+            if send.clicked() {
+                // Same checks (and messages) as before, before spending a network round-trip.
+                if !http::looks_like_email(&self.feedback_email) {
+                    self.feedback_ok = false;
+                    self.feedback_status = "Please enter a valid email.".into();
+                } else if self.feedback_message.trim().chars().count() < http::MIN_FEEDBACK_LEN {
+                    self.feedback_ok = false;
+                    self.feedback_status = format!("Please write at least {} characters.", http::MIN_FEEDBACK_LEN);
+                } else {
+                    self.start_feedback_send(ctx);
                 }
-
-                ui.add_space(4.0);
-                ui.horizontal(|ui| {
-                    // Validate before spending a network round-trip, and give
-                    // the SAME messages the Python dialog gives.
-                    let can_send = !self.feedback_sending;
-                    if ui.add_enabled(can_send, egui::Button::new("Send")).clicked() {
-                        if !http::looks_like_email(&self.feedback_email) {
-                            self.feedback_ok = false;
-                            self.feedback_status = "Please enter a valid email.".into();
-                        } else if self.feedback_message.trim().chars().count() < http::MIN_FEEDBACK_LEN {
-                            self.feedback_ok = false;
-                            self.feedback_status = format!(
-                                "Please write at least {} characters.",
-                                http::MIN_FEEDBACK_LEN
-                            );
-                        } else {
-                            self.start_feedback_send(ctx);
-                        }
-                    }
-                    if self.feedback_sending {
-                        ui.spinner();
-                    }
-                });
-            });
-
-        // Close on success, mirroring Python's `dlg.after(1400, dlg.destroy)`.
+            }
+            ui.add_space(8.0);
+            if link(ui, "Cancel").clicked() {
+                self.feedback_open = false;
+                self.feedback_status.clear();
+            }
+        });
+        // Sent: back to the main screen (the footer shows the thank-you for a moment).
         if self.feedback_ok {
             self.feedback_open = false;
             self.feedback_email.clear();
             self.feedback_message.clear();
             self.feedback_ok = false;
-        } else if !open {
-            self.feedback_open = false;
+            self.notice = Some(("Thanks! Your feedback was sent.".into(), std::time::Instant::now()));
         }
     }
 }

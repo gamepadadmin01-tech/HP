@@ -57,6 +57,7 @@ fn set_error(e: impl Into<String>) {
 pub fn start(key: String) -> Result<(), String> {
     super::media_available()?;
     let l = TcpListener::bind(("0.0.0.0", CAMERA_PORT)).map_err(|e| format!("tcp/{CAMERA_PORT}: {e}"))?;
+    start_discovery(key.clone());
     std::thread::Builder::new()
         .name("camos-listen".into())
         .spawn(move || {
@@ -106,6 +107,42 @@ pub fn start(key: String) -> Result<(), String> {
     Ok(())
 }
 
+/// A phone on the USB cable: the adb tunnel (arrives as 127.0.0.1) or a USB-tether address. Like GamepadOS, the
+/// cable itself is the trust: no pairing key needed.
+pub fn on_the_cable(ip: std::net::IpAddr) -> bool {
+    if ip.is_loopback() {
+        return true;
+    }
+    let std::net::IpAddr::V4(v4) = ip else { return false };
+    let o = v4.octets();
+    let prefix = format!("{}.{}.{}", o[0], o[1], o[2]);
+    crate::netdetect::tether_subnets().iter().any(|p| *p == prefix)
+}
+
+/// Answer "where is my PC?" broadcasts on UDP 7780 (proto.rs). A phone that proves the pairing key gets an answer
+/// from any network (Wi-Fi after the PC's address changed); a phone without the key only on the USB cable.
+fn start_discovery(key: String) {
+    let sock = match std::net::UdpSocket::bind(("0.0.0.0", CAMERA_PORT)) {
+        Ok(s) => s,
+        Err(e) => { eprintln!("camos: discovery off (udp/{CAMERA_PORT}: {e})"); return; }
+    };
+    let name = std::env::var("COMPUTERNAME").unwrap_or_else(|_| "PC".into());
+    let _ = std::thread::Builder::new().name("camos-discover".into()).spawn(move || {
+        let mut buf = [0u8; 64];
+        loop {
+            let Ok((n, from)) = sock.recv_from(&mut buf) else { continue };
+            let answer = match proto::check_discover(&key, &buf[..n]) {
+                Some(proto::Discover::Keyed(nonce)) => Some(nonce),
+                Some(proto::Discover::Keyless(nonce)) if on_the_cable(from.ip()) => Some(nonce),
+                _ => None,
+            };
+            if let Some(nonce) = answer {
+                let _ = sock.send_to(&proto::build_discover_reply(&nonce, CAMERA_PORT, &name), from);
+            }
+        }
+    });
+}
+
 fn serve(c: &mut TcpStream, key: &str) -> Result<(), String> {
     c.set_nodelay(true).ok();
     c.set_read_timeout(Some(Duration::from_secs(5))).ok();
@@ -120,7 +157,8 @@ fn serve(c: &mut TcpStream, key: &str) -> Result<(), String> {
     c.read_exact(&mut fixed).map_err(|e| format!("hello: {e}"))?;
     let mut name = vec![0u8; proto::name_len(&fixed)];
     c.read_exact(&mut name).map_err(|e| format!("hello name: {e}"))?;
-    let hello = match proto::verify_client_hello(key, &nonce, &fixed, &name) {
+    let cable = c.peer_addr().map(|a| on_the_cable(a.ip())).unwrap_or(false);
+    let hello = match proto::verify_client_hello_from(key, &nonce, &fixed, &name, cable) {
         Ok(h) => h,
         Err(st) => {
             let _ = c.write_all(&proto::server_ack(st));

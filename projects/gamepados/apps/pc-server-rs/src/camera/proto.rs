@@ -13,6 +13,14 @@
 //!                  what this phone/plan allows) instead of video
 //! ```
 //!
+//! **Finding the PC** (UDP :7780, broadcast). The phone asks "where is my PC?":
+//! ```text
+//! phone  → broadcast  "CAMD" ver:u8 nonce:[16] tag:[16]      tag = HMAC(key, "CAMD" ‖ nonce)[..16]
+//! server → phone      "CAMR" ver:u8 nonce:[16] port:u16 name_len:u8 name   (only if the tag proves the key —
+//!                     or, with an all-zero tag, only to a phone on the USB cable, which needs no key)
+//! ```
+//! It finds the PC on a USB-tether cable, and on Wi-Fi after the PC's address changed.
+//!
 //! **Who decides.** The phone. The PC only *asks*; the phone applies a request only if its own plan allows it
 //! (Premium, the 45-minute HD unlock), then reports back what is really set. The watermark and the HD limit are
 //! applied on the phone before the picture is encoded, so a modified PC server cannot unlock or remove anything.
@@ -89,6 +97,89 @@ pub fn tag(key: &str, nonce: &[u8; 16], fixed: &[u8], name: &[u8]) -> [u8; 16] {
 /// Name length from the fixed header, so the caller knows how much more to read.
 pub fn name_len(fixed: &[u8; CLIENT_HELLO_FIXED]) -> usize {
     fixed[11] as usize
+}
+
+// ── finding the PC ───────────────────────────────────────────────────────────────────────────────────────────
+
+pub const DISCOVER_LEN: usize = 37;
+
+fn discover_tag(key: &str, nonce: &[u8; 16]) -> [u8; 16] {
+    let mut mac = <Hmac<Sha256>>::new_from_slice(key.as_bytes()).expect("HMAC takes any key length");
+    mac.update(b"CAMD");
+    mac.update(nonce);
+    let out = mac.finalize().into_bytes();
+    let mut t = [0u8; 16];
+    t.copy_from_slice(&out[..16]);
+    t
+}
+
+/// The phone's "where is my PC?" (also used by tests and the test phone). `None` key = USB cable, no key.
+pub fn build_discover(key: Option<&str>, nonce: &[u8; 16]) -> [u8; DISCOVER_LEN] {
+    let mut b = [0u8; DISCOVER_LEN];
+    b[0..4].copy_from_slice(b"CAMD");
+    b[4] = VERSION;
+    b[5..21].copy_from_slice(nonce);
+    if let Some(k) = key {
+        b[21..37].copy_from_slice(&discover_tag(k, nonce));
+    }
+    b
+}
+
+/// What a "where is my PC?" packet proves.
+#[derive(Debug, PartialEq)]
+pub enum Discover {
+    /// Proves the pairing key: answer from anywhere on the network.
+    Keyed([u8; 16]),
+    /// No key (all-zero tag): answer only a phone on the USB cable.
+    Keyless([u8; 16]),
+}
+
+pub fn check_discover(key: &str, pkt: &[u8]) -> Option<Discover> {
+    if pkt.len() != DISCOVER_LEN || &pkt[0..4] != b"CAMD" || pkt[4] != VERSION {
+        return None;
+    }
+    let nonce: [u8; 16] = pkt[5..21].try_into().ok()?;
+    let tag = &pkt[21..37];
+    if tag.iter().all(|&b| b == 0) {
+        return Some(Discover::Keyless(nonce));
+    }
+    if bool::from(discover_tag(key, &nonce).ct_eq(tag)) { Some(Discover::Keyed(nonce)) } else { None }
+}
+
+/// The PC's answer: the nonce back (so the phone knows it is a reply to its own question), the TCP port, a name.
+pub fn build_discover_reply(nonce: &[u8; 16], port: u16, name: &str) -> Vec<u8> {
+    let n: Vec<u8> = name.bytes().take(40).collect();
+    let mut v = Vec::with_capacity(24 + n.len());
+    v.extend_from_slice(b"CAMR");
+    v.push(VERSION);
+    v.extend_from_slice(nonce);
+    v.extend_from_slice(&port.to_be_bytes());
+    v.push(n.len() as u8);
+    v.extend_from_slice(&n);
+    v
+}
+
+/// Check the phone's hello. `Err(status)` is what to send back.
+///
+/// `trusted` = the phone is on the USB cable (adb tunnel or USB tether): like GamepadOS, no key is needed there,
+/// so the fingerprint is not checked (the hello must still be well formed).
+pub fn verify_client_hello_from(
+    key: &str,
+    nonce: &[u8; 16],
+    fixed: &[u8; CLIENT_HELLO_FIXED],
+    name: &[u8],
+    trusted: bool,
+) -> Result<ClientHello, u8> {
+    if trusted {
+        return verify_client_hello("", nonce, &with_tag(fixed, &tag("", nonce, fixed, name)), name);
+    }
+    verify_client_hello(key, nonce, fixed, name)
+}
+
+fn with_tag(fixed: &[u8; CLIENT_HELLO_FIXED], t: &[u8; 16]) -> [u8; CLIENT_HELLO_FIXED] {
+    let mut f = *fixed;
+    f[12..28].copy_from_slice(t);
+    f
 }
 
 /// Check the phone's hello. `Err(status)` is what to send back.
@@ -174,6 +265,27 @@ mod tests {
         let mut f = [0u8; CLIENT_HELLO_FIXED];
         f.copy_from_slice(&v[..CLIENT_HELLO_FIXED]);
         (f, v[CLIENT_HELLO_FIXED..].to_vec())
+    }
+
+    #[test]
+    fn discover_needs_the_key_or_the_cable() {
+        let n = [9u8; 16];
+        assert_eq!(check_discover("777a51b3", &build_discover(Some("777a51b3"), &n)), Some(Discover::Keyed(n)));
+        assert_eq!(check_discover("777a51b3", &build_discover(None, &n)), Some(Discover::Keyless(n)));
+        assert_eq!(check_discover("777a51b3", &build_discover(Some("deadbeef"), &n)), None, "wrong key: no answer");
+        assert_eq!(check_discover("777a51b3", b"hello"), None);
+        let r = build_discover_reply(&n, 7780, "DESKTOP-1");
+        assert_eq!(&r[0..4], b"CAMR");
+        assert_eq!(&r[5..21], &n);
+        assert_eq!(u16::from_be_bytes([r[21], r[22]]), 7780);
+    }
+
+    #[test]
+    fn cable_phone_needs_no_key_but_wifi_phone_does() {
+        let nonce = [7u8; 16];
+        let (f, n) = split(&build_client_hello("", &nonce, &hello()));
+        assert!(verify_client_hello_from("777a51b3", &nonce, &f, &n, true).is_ok());
+        assert_eq!(verify_client_hello_from("777a51b3", &nonce, &f, &n, false), Err(STATUS_BAD_KEY));
     }
 
     #[test]

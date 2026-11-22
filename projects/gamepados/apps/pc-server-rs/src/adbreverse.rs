@@ -109,9 +109,12 @@ pub fn start_adb_reverse_watcher(port: u16) {
             if let Ok(out) = new_command(&adb).arg("devices").output() {
                 serials = parse_devices(&String::from_utf8_lossy(&out.stdout));
                 for serial in &serials {
-                    let _ = new_command(&adb)
-                        .args(["-s", serial, "reverse", &format!("tcp:{port}"), &format!("tcp:{port}")])
-                        .output();
+                    // The GamepadOS port, and CamOS's camera port so CamOS also streams over USB debugging.
+                    for p in [port, crate::camera::CAMERA_PORT] {
+                        let _ = new_command(&adb)
+                            .args(["-s", serial, "reverse", &format!("tcp:{p}"), &format!("tcp:{p}")])
+                            .output();
+                    }
                 }
             }
             if serials != announced {

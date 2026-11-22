@@ -239,6 +239,79 @@ class CamStreamer(
         else h.post { repeat() }
     }
 
+    // ───────────────────────── "where is my PC?" ─────────────────────────
+
+    /**
+     * Find Gamepad Server without knowing its address: a short UDP broadcast on port 7780 that only Gamepad Server
+     * answers (proto.rs "Finding the PC"). With `key` it proves the pairing key, so the PC answers on Wi-Fi too (its
+     * address may have changed); without a key only a PC on the USB cable answers. `usbOnly` = only ask on the USB
+     * cable (tethering), after first trying the USB-debugging tunnel (127.0.0.1). Calls back with the PC's address
+     * and name, or null.
+     */
+    fun find(key: String?, usbOnly: Boolean, done: (ip: String?, name: String, via: String) -> Unit) {
+        Thread({
+            // 1. USB debugging: Gamepad Server keeps "adb reverse tcp:7780" open, so the PC is at 127.0.0.1.
+            if (usbOnly) {
+                try {
+                    Socket().use { s ->
+                        s.connect(InetSocketAddress("127.0.0.1", PORT), 700)
+                        s.soTimeout = 1500
+                        val b = ByteArray(4)
+                        DataInputStream(s.getInputStream()).readFully(b)
+                        if (String(b, Charsets.US_ASCII) == "CAMS") { done("127.0.0.1", "PC (USB debugging)", "usb"); return@Thread }
+                    }
+                } catch (_: Exception) {}
+            }
+            // 2. Broadcast on each network the phone has (the USB-tether one only, for usbOnly).
+            var sock: java.net.DatagramSocket? = null
+            try {
+                sock = java.net.DatagramSocket().apply { broadcast = true; soTimeout = 300 }
+                val nonce = ByteArray(16).also { java.security.SecureRandom().nextBytes(it) }
+                val pkt = ByteArray(37)
+                "CAMD".toByteArray(Charsets.US_ASCII).copyInto(pkt, 0)
+                pkt[4] = 1
+                nonce.copyInto(pkt, 5)
+                if (!key.isNullOrEmpty()) {
+                    val mac = Mac.getInstance("HmacSHA256")
+                    mac.init(SecretKeySpec(key.toByteArray(Charsets.US_ASCII), "HmacSHA256"))
+                    mac.update("CAMD".toByteArray(Charsets.US_ASCII)); mac.update(nonce)
+                    mac.doFinal().copyOf(16).copyInto(pkt, 21)
+                }
+                val targets = ArrayList<java.net.InetAddress>()
+                for (ni in java.util.Collections.list(java.net.NetworkInterface.getNetworkInterfaces() ?: return@Thread done(null, "", "none"))) {
+                    if (!ni.isUp || ni.isLoopback) continue
+                    val cable = ni.name.startsWith("rndis") || ni.name.startsWith("usb") || ni.name.startsWith("ncm")
+                    if (usbOnly && !cable) continue
+                    for (ia in ni.interfaceAddresses) ia.broadcast?.let { targets.add(it) }
+                }
+                if (!usbOnly) targets.add(java.net.InetAddress.getByName("255.255.255.255"))
+                val deadline = System.currentTimeMillis() + 1800
+                val buf = ByteArray(128)
+                var nextSend = 0L
+                while (System.currentTimeMillis() < deadline) {
+                    if (System.currentTimeMillis() >= nextSend) {   // ask three times (Wi-Fi drops broadcasts now and then)
+                        for (t in targets) try { sock.send(java.net.DatagramPacket(pkt, pkt.size, t, PORT)) } catch (_: Exception) {}
+                        nextSend = System.currentTimeMillis() + 600
+                    }
+                    val r = java.net.DatagramPacket(buf, buf.size)
+                    try { sock.receive(r) } catch (_: java.net.SocketTimeoutException) { continue }
+                    val d = r.data
+                    if (r.length >= 24 && String(d, 0, 4, Charsets.US_ASCII) == "CAMR" && d.copyOfRange(5, 21).contentEquals(nonce)) {
+                        val nameLen = d[23].toInt() and 0xff
+                        val name = if (24 + nameLen <= r.length) String(d, 24, nameLen, Charsets.UTF_8) else "PC"
+                        done(r.address.hostAddress, name, if (usbOnly) "usb" else "wifi")
+                        return@Thread
+                    }
+                }
+                done(null, "", "none")
+            } catch (_: Exception) {
+                done(null, "", "none")
+            } finally {
+                try { sock?.close() } catch (_: Exception) {}
+            }
+        }, "camos-find").start()
+    }
+
     // ───────────────────────── "is my PC ready?" ─────────────────────────
 
     /** Quick check right after pairing / when the home screen opens. Calls back with a status word + message. */
@@ -858,5 +931,37 @@ object CameraCatalog {
                 .put("fps", fpsList))
         }
         return list.toString()
+    }
+
+    /**
+     * Plain-text camera report for Settings → About (the owner screenshots it): what each camera offers to
+     * third-party apps — frame-rate ranges, high-speed ranges, and the fastest each video size can go. This is what
+     * decides whether 1080p60 / 4K30 are possible here; the phone's own camera app may use private modes.
+     */
+    fun report(context: Context): String {
+        val mgr = context.getSystemService(Context.CAMERA_SERVICE) as CameraManager
+        val sb = StringBuilder()
+        sb.append(Build.MANUFACTURER).append(' ').append(Build.MODEL).append(" · Android ").append(Build.VERSION.RELEASE).append('\n')
+        for (id in mgr.cameraIdList) {
+            val ch = try { mgr.getCameraCharacteristics(id) } catch (_: Exception) { continue }
+            val facing = when (ch.get(CameraCharacteristics.LENS_FACING)) { CameraCharacteristics.LENS_FACING_FRONT -> "front"; CameraCharacteristics.LENS_FACING_BACK -> "back"; else -> "other" }
+            val level = when (ch.get(CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL)) { 0 -> "limited"; 1 -> "full"; 2 -> "legacy"; 3 -> "level3"; 4 -> "external"; else -> "?" }
+            sb.append("\nCamera ").append(id).append(" (").append(facing).append(", ").append(level).append(")\n")
+            val fr = ch.get(CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES) ?: emptyArray()
+            sb.append("  fps ranges: ").append(fr.joinToString(" ") { "[${it.lower}-${it.upper}]" }).append('\n')
+            val map = ch.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
+            if (map != null) {
+                val hs = try { map.highSpeedVideoFpsRanges.joinToString(" ") { "[${it.lower}-${it.upper}]" } } catch (_: Exception) { "" }
+                sb.append("  high-speed: ").append(hs.ifEmpty { "none" }).append('\n')
+                val sizes = (map.getOutputSizes(SurfaceTexture::class.java) ?: emptyArray())
+                    .filter { it.width >= 1280 }.sortedByDescending { it.width * it.height }.take(8)
+                for (sz in sizes) {
+                    val ns = try { map.getOutputMinFrameDuration(SurfaceTexture::class.java, sz) } catch (_: Exception) { 0L }
+                    val maxFps = if (ns > 0) (1_000_000_000.0 / ns).roundToInt() else 0
+                    sb.append("  ").append(sz.width).append('x').append(sz.height).append(" up to ").append(maxFps).append(" fps\n")
+                }
+            }
+        }
+        return sb.toString().trimEnd()
     }
 }

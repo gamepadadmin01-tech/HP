@@ -13,8 +13,8 @@ android {
         // 26 = Android 8. Adaptive icons and every Camera2/MediaCodec feature we use exist from here.
         minSdk = 26
         targetSdk = 36
-        versionCode = 6
-        versionName = "0.3.1-test"
+        versionCode = 7
+        versionName = "0.4.0-test"
     }
 
     buildTypes {

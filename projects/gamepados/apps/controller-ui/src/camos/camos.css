@@ -17,12 +17,17 @@
 .gp-shell [aria-pressed='true'] .camos-hd { background: rgba(0, 0, 0, .2); color: inherit; }
 .gp-shell .calm-inline-note { padding: 0 2px; }
 
-/* Toasts: GamepadOS's surface card, dropping in at the top (motion.ts toastIn). */
-.camos-toast-layer { position: fixed; top: 14px; left: 0; right: 0; z-index: 200; display: flex; justify-content: center; pointer-events: none; padding: 0 16px; }
-.gp-shell.camos-toast { pointer-events: auto; display: flex; align-items: center; gap: 10px; max-width: 520px; padding: 11px 8px 11px 14px; border-radius: 12px;
-  background: var(--calm-surface); border: 1px solid var(--calm-line); box-shadow: 0 12px 32px rgba(0, 0, 0, .45); font-size: 13px; line-height: 1.45; color: var(--calm-ink); }
+/* Alerts: the app's own look (warm brown surface, orange icon, body font, pill shape), dropping in just BELOW the
+   top bar / live status pill instead of on top of it (owner, 2026-11-22). Motion: motion.ts toastIn. */
+.camos-toast-layer { position: fixed; left: 0; right: 0; top: calc(var(--android-safe-top, env(safe-area-inset-top, 0px)) + 68px); z-index: 200;
+  display: flex; justify-content: center; pointer-events: none; padding: 0 16px; }
+.gp-shell.camos-toast { pointer-events: auto; display: flex; align-items: center; gap: 10px; max-width: 480px; padding: 10px 8px 10px 16px; border-radius: 18px;
+  background: rgba(37, 26, 23, .97); border: 1px solid rgba(255, 85, 0, .32); box-shadow: 0 10px 28px rgba(0, 0, 0, .45);
+  font: 500 14px/1.4 var(--calm-body); color: var(--calm-ink); }
 .gp-shell.camos-toast > svg { color: var(--calm-accent); flex-shrink: 0; }
-.gp-shell .camos-toast-close { width: 32px; height: 32px; flex-shrink: 0; display: grid; place-items: center; border-radius: 8px; color: var(--calm-muted); }
+.gp-shell .camos-toast-close { width: 30px; height: 30px; flex-shrink: 0; display: grid; place-items: center; border-radius: 999px; color: var(--calm-muted); }
+.gp-shell .camos-pc-hint { display: flex; align-items: center; justify-content: center; gap: 6px; margin-top: 6px; font-size: 13px; color: var(--calm-muted); }
+.gp-shell .camos-pc-hint b, .gp-shell .calm-step b { color: var(--calm-ink); font-weight: 600; }
 
 /* Live: the camera fills the screen behind a see-through page; status pill on top, control bar at the bottom.
    The smoked surfaces use the scanner's cover colour so both camera screens feel the same. */
@@ -127,3 +132,5 @@
 @keyframes camos-page-in { from { opacity: 0; transform: translateX(14px); } to { opacity: 1; transform: none; } }
 @keyframes camos-menu-in { from { opacity: 0; transform: translateX(-14px); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .gp-shell :is(.camos-page-in, .camos-menu-in) { animation: none; } }
+.gp-shell .camos-report { margin: 4px 0 10px; padding: 12px; border-radius: 12px; background: var(--calm-art, #140d0b); border: 1px solid var(--calm-line);
+  font: 12px/1.5 ui-monospace, Consolas, monospace; color: var(--calm-ink); white-space: pre-wrap; user-select: text; }
