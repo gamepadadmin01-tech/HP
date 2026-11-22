@@ -192,6 +192,7 @@ class CamStreamer(
         curBitrate = bitrate
         lastKeyAsk = 0L
         waitForKey = true
+        linked = false
         queue.clear()
         socket = null
         onState("connecting", "Connecting to $ip…", 0, 0)
@@ -200,6 +201,7 @@ class CamStreamer(
 
     fun stop() {
         if (!running.getAndSet(false)) return
+        linked = false
         try { socket?.close() } catch (_: Exception) {}
         closeAll()
         onState("stopped", "", 0, 0)
@@ -213,7 +215,7 @@ class CamStreamer(
 
     /** Tell the PC window what is set and what this phone's plan allows (a small JSON message in the stream). */
     fun sendState(json: String) {
-        if (!running.get()) return
+        if (!running.get() || !linked) return
         val b = json.toByteArray(Charsets.UTF_8)
         if (b.size > 16 * 1024) return
         queue.offer(Packet(b, 0, FLAG_STATE))
@@ -324,6 +326,7 @@ class CamStreamer(
             var s: Socket? = null
             try {
                 s = Socket()
+                bindToPcNetwork(s, ip)
                 s.connect(InetSocketAddress(ip, PORT), 2500)
                 s.soTimeout = 3000
                 val input = DataInputStream(s.getInputStream())
@@ -363,35 +366,100 @@ class CamStreamer(
     // ───────────────────────── network ─────────────────────────
 
     private class BusyException : Exception("Another phone is already streaming to this PC.")
+    /** Refusals that a retry cannot fix (wrong key, not our server): stop and say why. */
+    private class FatalLinkException(message: String) : Exception(message)
 
+    /**
+     * Connect, stream, and — once the stream has been live — come back by itself after a network hiccup (owner,
+     * 2026-11-23: "the PC server keeps on disconnecting" on campus Wi-Fi). The camera and video chip stay on while
+     * the connection is re-made, so a drop is a short freeze on the PC instead of being thrown back to the home
+     * screen. Gives up after 30 seconds without a connection.
+     */
     private fun networkMain(ip: String, key: String) {
-        try {
-            try { connectAndStream(ip, key) }
-            catch (e: BusyException) {
-                // Usually our own "is my PC ready?" check, still closing on the PC. One quiet retry.
-                Thread.sleep(700)
-                if (running.get()) connectAndStream(ip, key)
-            }
-        } catch (e: Exception) {
-            if (running.get()) {
-                val network = e is java.net.SocketTimeoutException || e is java.net.ConnectException || e is java.net.NoRouteToHostException
-                val msg = when {
-                    e is java.net.SocketException && !network && socket?.isConnected == true ->
-                        "The connection to your PC dropped. Check the Wi-Fi and press Start camera again."
-                    e is java.net.ConnectException && (e.message ?: "").contains("refused", true) -> OLD_SERVER
-                    network -> NO_ANSWER
-                    else -> e.message ?: "Connection lost."
+        var wasLive = false
+        var busyRetried = false
+        var downSince = 0L
+        while (running.get()) {
+            try {
+                connectAndStream(ip, key) { wasLive = true; downSince = 0L }
+                return   // returns normally only after stop()
+            } catch (e: Exception) {
+                linked = false
+                try { socket?.close() } catch (_: Exception) {}
+                if (!running.get()) return
+                Log.w(TAG, "link lost (${e.javaClass.simpleName}: ${e.message})")
+                if (!wasLive) {
+                    // Never got going: a busy answer is usually our own "is my PC ready?" check still closing on the
+                    // PC (one quiet retry); anything else is reported at once, as before.
+                    if (e is BusyException && !busyRetried) { busyRetried = true; Thread.sleep(700); continue }
+                    fail(firstConnectMessage(e)); return
                 }
-                fail(msg)
+                if (e is FatalLinkException) { fail(e.message ?: "Gamepad Server refused the connection."); return }
+                val now = android.os.SystemClock.elapsedRealtime()
+                if (downSince == 0L) downSince = now
+                if (now - downSince > 30_000) {
+                    fail("Lost the connection to your PC for 30 seconds. Check the Wi-Fi and press Start camera again."); return
+                }
+                onState("connecting", "Connection dropped. Reconnecting…", 0, 0)
+                Thread.sleep(700)
             }
         }
     }
 
-    private fun connectAndStream(ip: String, key: String) {
+    private fun firstConnectMessage(e: Exception): String {
+        val network = e is java.net.SocketTimeoutException || e is java.net.ConnectException || e is java.net.NoRouteToHostException
+        return when {
+            e is FatalLinkException -> e.message ?: "Gamepad Server refused the connection."
+            e is BusyException -> e.message ?: "Another phone is already streaming to this PC."
+            e is java.net.ConnectException && (e.message ?: "").contains("refused", true) -> OLD_SERVER
+            network -> NO_ANSWER
+            else -> e.message ?: "Connection lost."
+        }
+    }
+
+    /** True while a connection is up and taking frames. While it is down, frames are not queued (so a drop doesn't
+     *  overflow the queue and halve the picture quality), and the next frame sent is a full picture. */
+    @Volatile private var linked = false
+    /** When the current write to the PC began (0 = not writing). A write stuck this long means the link is dead. */
+    @Volatile private var writeSince = 0L
+
+    /**
+     * Send this socket over the network the PC is on (the Wi-Fi, or the USB cable). Without it, Android uses its
+     * "default" network: on a campus/hotel Wi-Fi it considers "no internet", that is mobile data, and the PC can't be
+     * reached from there.
+     */
+    private fun bindToPcNetwork(s: Socket, ip: String) {
+        try {
+            val target = java.net.InetAddress.getByName(ip)
+            if (target.isLoopbackAddress) return   // USB debugging (adb tunnel)
+            val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
+            @Suppress("DEPRECATION")
+            for (n in cm.allNetworks) {
+                val lp = cm.getLinkProperties(n) ?: continue
+                if (lp.linkAddresses.any { sameSubnet(it.address, it.prefixLength, target) }) { n.bindSocket(s); return }
+            }
+        } catch (e: Exception) { Log.w(TAG, "bind to PC network: ${e.message}") }
+    }
+
+    private fun sameSubnet(a: java.net.InetAddress, prefix: Int, b: java.net.InetAddress): Boolean {
+        val x = a.address; val y = b.address
+        if (x.size != y.size || prefix <= 0) return false
+        var bits = prefix
+        for (i in x.indices) {
+            if (bits <= 0) return true
+            val mask = if (bits >= 8) 0xff else (0xff shl (8 - bits)) and 0xff
+            if ((x[i].toInt() and mask) != (y[i].toInt() and mask)) return false
+            bits -= 8
+        }
+        return true
+    }
+
+    private fun connectAndStream(ip: String, key: String, onLive: () -> Unit) {
         run {
             val s = Socket()
             s.tcpNoDelay = true
             s.sendBufferSize = 128 * 1024
+            bindToPcNetwork(s, ip)
             s.connect(InetSocketAddress(ip, PORT), 4000)
             s.soTimeout = 5000
             socket = s
@@ -403,24 +471,45 @@ class CamStreamer(
             // A PC that is already busy answers straight away with "CAMA" + status, without a challenge.
             if (String(hello, 0, 4, Charsets.US_ASCII) == "CAMA") {
                 if (input.read() == 2) { s.close(); throw BusyException() }
-                throw Exception("Gamepad Server refused the connection.")
+                throw FatalLinkException("Gamepad Server refused the connection.")
             }
             input.readFully(hello, 4, 17)
-            if (String(hello, 0, 4, Charsets.US_ASCII) != "CAMS") throw Exception("This is not Gamepad Server")
-            if (hello[4].toInt() != 1) throw Exception("Please update Gamepad Server on your PC")
+            if (String(hello, 0, 4, Charsets.US_ASCII) != "CAMS") throw FatalLinkException("This is not Gamepad Server")
+            if (hello[4].toInt() != 1) throw FatalLinkException("Please update Gamepad Server on your PC")
             outStream.write(buildHello(key, hello.copyOfRange(5, 21), out.width, out.height, settings.fps, deviceName()))
             outStream.flush()
             val ack = ByteArray(5)
             input.readFully(ack)
             when (ack[4].toInt()) {
                 0 -> {}
-                1 -> throw Exception("Wrong pairing key. Scan the QR code on your PC again.")
+                1 -> throw FatalLinkException("Wrong pairing key. Scan the QR code on your PC again.")
                 2 -> { s.close(); throw BusyException() }
-                else -> throw Exception("Gamepad Server refused the connection.")
+                else -> throw FatalLinkException("Gamepad Server refused the connection.")
             }
             s.soTimeout = 0
 
-            startCameraThread()
+            // The camera starts with the first connection and stays on through reconnects.
+            if (camThread == null) startCameraThread()
+            queue.clear()
+            waitForKey = true
+            lastKeyAsk = 0L
+            // A drop may have pushed the quality right down; start the new connection from a sensible level.
+            setBitrate(max(curBitrate, bitrate * 2 / 3))
+            linked = true
+            requestKeyFrame()
+
+            // Watchdog: a write that hasn't finished in 4 seconds means the Wi-Fi link is dead even though Android
+            // hasn't noticed yet (it can take minutes). Closing the socket makes the sender fail and reconnect.
+            Thread({
+                while (running.get() && socket === s && !s.isClosed) {
+                    try { Thread.sleep(500) } catch (_: InterruptedException) { break }
+                    val since = writeSince
+                    if (since != 0L && android.os.SystemClock.elapsedRealtime() - since > 4000) {
+                        Log.w(TAG, "write stuck for 4 s: reconnecting")
+                        try { s.close() } catch (_: Exception) {}
+                    }
+                }
+            }, "camos-net-watch").start()
 
             // Reader: the server asks for a key frame with a single 'K', and the PC window sends requests as
             // 'C' + length + JSON ("zoom 2x"). Requests go to the UI, which applies them only if this phone's plan
@@ -442,21 +531,28 @@ class CamStreamer(
                         }
                     }
                 } catch (_: Exception) {}
-                if (running.get()) fail("Gamepad Server closed the connection.")
+                // The PC closed this connection (or it broke): close it here too, so the sender notices and the
+                // stream reconnects instead of ending.
+                if (socket === s) try { s.close() } catch (_: Exception) {}
             }, "camos-net-read").start()
 
             onState("live", "", 0, 0)
+            onLive()
             var window = System.nanoTime()
             var lastAdapt = System.nanoTime()
             calmSince = android.os.SystemClock.elapsedRealtime()
             while (running.get()) {
+                if (s.isClosed) throw java.net.SocketException("connection closed")
                 if (System.nanoTime() - lastAdapt >= 500_000_000L) { adaptBitrate(); lastAdapt = System.nanoTime() }
                 val p = queue.poll(500, TimeUnit.MILLISECONDS) ?: continue
-                outStream.writeInt(p.data.size)
-                outStream.writeLong(p.ptsUs)
-                outStream.writeByte(p.flags)
-                outStream.write(p.data)
-                if (queue.isEmpty()) outStream.flush()
+                writeSince = android.os.SystemClock.elapsedRealtime()
+                try {
+                    outStream.writeInt(p.data.size)
+                    outStream.writeLong(p.ptsUs)
+                    outStream.writeByte(p.flags)
+                    outStream.write(p.data)
+                    if (queue.isEmpty()) outStream.flush()
+                } finally { writeSince = 0L }
                 if (p.flags and FLAG_STATE == 0) sentFrames++
                 sentBytes += p.data.size + 13
                 val now = System.nanoTime()
@@ -474,6 +570,7 @@ class CamStreamer(
 
     private fun fail(message: String) {
         if (!running.getAndSet(false)) return
+        linked = false
         try { socket?.close() } catch (_: Exception) {}
         closeAll()
         onState("error", message, 0, 0)
@@ -648,6 +745,9 @@ class CamStreamer(
             return
         }
         val key = info.flags and MediaCodec.BUFFER_FLAG_KEY_FRAME != 0
+        // Reconnecting: nothing to send to. Drop the frame (queuing it would only overflow and halve the quality);
+        // the new connection starts from a full picture.
+        if (!linked) { waitForKey = true; return }
         if (waitForKey && !key) return
         waitForKey = false
         val data = if (key) (codecConfig ?: ByteArray(0)) + bytes else bytes
@@ -685,14 +785,15 @@ class CamStreamer(
 
     /**
      * Adaptive bitrate, checked twice a second from the sending loop. A queue of waiting frames means Wi-Fi is not
-     * keeping up: step down 25 % at once. Three calm seconds in a row: step back up 10 %, never above the ceiling.
+     * keeping up: step down 25 % at once. Two calm seconds in a row: step back up 15 %, never above the ceiling
+     * (was 10 % every 3 s: after one hiccup the picture stayed soft for about 45 seconds; now about 20).
      */
     private fun adaptBitrate() {
         val now = android.os.SystemClock.elapsedRealtime()
         val backlog = queue.size
         when {
             backlog >= 6 -> { setBitrate(curBitrate * 3 / 4); calmSince = now }
-            backlog <= 1 -> if (now - calmSince >= 3000) { setBitrate(curBitrate * 11 / 10); calmSince = now }
+            backlog <= 1 -> if (now - calmSince >= 2000) { setBitrate(curBitrate * 115 / 100); calmSince = now }
             else -> calmSince = now
         }
     }

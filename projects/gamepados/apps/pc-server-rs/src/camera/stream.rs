@@ -46,10 +46,46 @@ pub fn status() -> CamStatus {
 
 fn set_error(e: impl Into<String>) {
     let e = e.into();
-    eprintln!("camos: {e}");
+    log(&e);
     if let Ok(mut s) = STATUS.lock() {
         s.last_error = e;
     }
+}
+
+/// Every CamOS connect, stop and error also goes to `%LOCALAPPDATA%\GamepadServer\camos.log` (kept under 1 MB,
+/// the previous one as camos.old.log). A server started from its shortcut has no console, so before this a dropped
+/// stream left no reason behind (owner, 2026-11-23: "keeps on disconnecting, I don't know why").
+pub fn log(line: &str) {
+    eprintln!("camos: {line}");
+    let Some(dir) = std::env::var_os("LOCALAPPDATA").map(|d| std::path::PathBuf::from(d).join("GamepadServer")) else { return };
+    let path = dir.join("camos.log");
+    if std::fs::metadata(&path).map(|m| m.len() > 1_000_000).unwrap_or(false) {
+        let _ = std::fs::rename(&path, dir.join("camos.old.log"));
+    }
+    let _ = std::fs::create_dir_all(&dir);
+    if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(&path) {
+        let _ = writeln!(f, "{} {line}", local_time());
+    }
+}
+
+#[cfg(windows)]
+fn local_time() -> String {
+    #[repr(C)]
+    #[derive(Default)]
+    struct SystemTime { y: u16, mo: u16, _dow: u16, d: u16, h: u16, mi: u16, s: u16, ms: u16 }
+    #[link(name = "kernel32")]
+    unsafe extern "system" {
+        fn GetLocalTime(t: *mut SystemTime);
+    }
+    let mut t = SystemTime::default();
+    // SAFETY: GetLocalTime only fills the struct we pass; it has the SYSTEMTIME layout (eight u16).
+    unsafe { GetLocalTime(&mut t) };
+    format!("{:04}-{:02}-{:02} {:02}:{:02}:{:02}.{:03}", t.y, t.mo, t.d, t.h, t.mi, t.s, t.ms)
+}
+
+#[cfg(not(windows))]
+fn local_time() -> String {
+    format!("{:?}", std::time::SystemTime::now())
 }
 
 /// Start listening for the CamOS phone app. `key` is the same 8-character
@@ -67,6 +103,7 @@ pub fn start(key: String) -> Result<(), String> {
                     let ip = c.peer_addr().map(|a| a.ip()).ok();
                     let same_phone = CURRENT.lock().ok().and_then(|g| g.as_ref().map(|(cur, _)| Some(*cur) == ip)).unwrap_or(false);
                     if same_phone {
+                        log(&format!("{} came back (reconnect): closing its old stream", ip.map(|i| i.to_string()).unwrap_or_default()));
                         if let Ok(g) = CURRENT.lock() {
                             if let Some((_, old)) = g.as_ref() {
                                 let _ = old.shutdown(std::net::Shutdown::Both);
@@ -87,7 +124,7 @@ pub fn start(key: String) -> Result<(), String> {
                 let _ = std::thread::Builder::new().name("camos-phone".into()).spawn(move || {
                     let peer = c.peer_addr().map(|a| a.to_string()).unwrap_or_default();
                     match serve(&mut c, &key) {
-                        Ok(()) => println!("camos: phone {peer} stopped streaming"),
+                        Ok(()) => log(&format!("phone {peer} stopped streaming")),
                         // A phone that only knocks (reads our greeting, then hangs up) is the CamOS app checking
                         // the USB-debugging tunnel: normal, not an error.
                         Err(e) if e.starts_with("hello:") && e.contains("fill") => {}
@@ -178,7 +215,8 @@ fn serve(c: &mut TcpStream, key: &str) -> Result<(), String> {
         println!("camos: {} checked this PC (ready)", hello.name);
         return Ok(());
     }
-    println!("camos: {} streaming {}x{} @{}", hello.name, hello.width, hello.height, hello.fps);
+    log(&format!("{} ({}) streaming {}x{} @{}{}", hello.name, c.peer_addr().map(|a| a.ip().to_string()).unwrap_or_default(),
+        hello.width, hello.height, hello.fps, if cable { " over the USB cable" } else { "" }));
     if let Ok(mut s) = STATUS.lock() {
         *s = CamStatus { live: true, device: hello.name.clone(), width: hello.width as u32, height: hello.height as u32, fps: 0.0, last_error: String::new() };
     }
@@ -201,11 +239,18 @@ fn serve(c: &mut TcpStream, key: &str) -> Result<(), String> {
     let mut frames = 0u32;
     let mut window = Instant::now();
     let mut errors = 0u32;
+    let started = Instant::now();
     loop {
         match c.read_exact(&mut hdr) {
             Ok(()) => {}
             // The phone closing the connection (Stop, app closed, Wi-Fi gone) is a normal end.
-            Err(e) if matches!(e.kind(), std::io::ErrorKind::UnexpectedEof | std::io::ErrorKind::ConnectionReset | std::io::ErrorKind::ConnectionAborted) => return Ok(()),
+            Err(e) if matches!(e.kind(), std::io::ErrorKind::UnexpectedEof | std::io::ErrorKind::ConnectionReset | std::io::ErrorKind::ConnectionAborted) => {
+                log(&format!("connection closed ({:?}) after {:.0} s", e.kind(), started.elapsed().as_secs_f32()));
+                return Ok(());
+            }
+            Err(e) if matches!(e.kind(), std::io::ErrorKind::TimedOut | std::io::ErrorKind::WouldBlock) => {
+                return Err(format!("nothing arrived from the phone for 5 s (Wi-Fi stalled) after {:.0} s of streaming", started.elapsed().as_secs_f32()));
+            }
             Err(e) => return Err(format!("stream: {e}")),
         }
         let fh = proto::parse_frame_header(&hdr)?;
