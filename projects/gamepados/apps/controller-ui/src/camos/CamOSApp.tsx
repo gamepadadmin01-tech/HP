@@ -41,7 +41,10 @@ type Tab = "home" | "system";
 type LiveState = { state: "connecting" | "live"; message: string; fps: number; kbps: number; portrait?: boolean };
 type PcStatus = { status: "unknown" | "checking" | "ready" | "old" | "unreachable" | "badkey" | "busy" | "error"; message: string };
 type Lens = { id: string; front: boolean; label: string; zoomMin: number; zoomMax: number; evMin: number; evMax: number; evStep: number;
-  flash: boolean; manualFocus: boolean; stabilize: boolean; fps: number[] };
+  flash: boolean; manualFocus: boolean; stabilize: boolean; fps: number[];
+  /** 60 fps only exists in the camera's fast (high-speed) mode, which skips the picture engine: Premium only
+   *  (no watermark to draw), filters pause while it runs (owner, 2026-11-23). */
+  direct60?: boolean };
 
 /** Everything the user can set. Mirrors CamSettings in CamStreamer.kt (same names). */
 type Settings = {
@@ -134,6 +137,7 @@ export default function CamOSApp() {
   const [usbOn, setUsbOn] = useState(false);
   const findUsb = () => { const b = bridge(); if (!b?.find) return; setUsbSearch("searching"); b.find(pc?.key ?? "", true); };
   const told60 = useRef(false);
+  const toldDirect = useRef(false);
   const showToast = (m: string) => { setToast(m); clearTimeout(toastTimer.current); toastTimer.current = window.setTimeout(() => setToast(""), 4600); };
 
   const testBuild = (() => { try { return bridge()?.isTestBuild?.() ?? true; } catch { return false; } })();
@@ -151,7 +155,7 @@ export default function CamOSApp() {
   const nativeSettings = (st: Settings = s) => JSON.stringify({
     ...st,
     quality: st.quality === 1080 && !hdAllowed ? 720 : st.quality,
-    fps: st.fps <= 30 ? st.fps : lens.fps.includes(60) ? 60 : 30,
+    fps: st.fps <= 30 ? st.fps : lens.fps.includes(60) && (premium || !lens.direct60) ? 60 : 30,
     cameraId: lens.id,
     front: lens.front,
     watermark: !premium,
@@ -233,7 +237,7 @@ export default function CamOSApp() {
   const portraitNow = live.portrait ?? s.shape === "portrait";
   const effQuality = s.quality === 1080 && !hdAllowed ? 720 : s.quality;
   const phoneState = () => JSON.stringify({
-    quality: effQuality, fps: s.fps <= 30 ? s.fps : lens.fps.includes(60) ? 60 : 30, portrait: portraitNow, front: lens.front,
+    quality: effQuality, fps: s.fps <= 30 ? s.fps : lens.fps.includes(60) && (premium || !lens.direct60) ? 60 : 30, portrait: portraitNow, front: lens.front,
     zoom: Math.min(Math.max(s.zoom, lens.zoomMin), lens.zoomMax), zoomMin: lens.zoomMin, zoomMax: lens.zoomMax,
     ev: s.ev, evMin: lens.evMin, evMax: lens.evMax, evStep: lens.evStep,
     look: premium ? s.look : "none", smooth: premium ? s.smooth : 0, lowLight: premium && s.lowLight,
@@ -352,6 +356,10 @@ export default function CamOSApp() {
         setRoute("dashboard"); return;
       }
       if (st.state === "error") { setScanning(false); setRoute((r) => (r === "live" ? "dashboard" : r)); showToast(st.message); return; }
+      // Direct 60 fps can't switch lens on the fly: the phone asks for a fresh stream.
+      if (st.state === "restart") { restartAfterStop.current = true; setLive((l) => ({ ...l, state: "connecting", message: st.message })); bridge()?.stop(); return; }
+      if (st.state === "live" && st.direct && !toldDirect.current) { toldDirect.current = true; showToast("Real 60 fps (fast mode): filters and the phone preview are paused while streaming."); }
+      if (st.state === "connecting" && !restartAfterStop.current) toldDirect.current = false;
       setLive({ state: st.state, message: st.message, fps: st.fps, kbps: st.kbps, portrait: st.portrait });
       if (st.state === "live" && st.fps > 0) {
         lowFpsSeconds.current = s.fps === 60 && st.fps < 45 ? lowFpsSeconds.current + 1 : 0;
@@ -601,6 +609,7 @@ function TabSettings(p: DashProps) {
   const version = (() => { try { return bridge()?.version() ?? "browser preview"; } catch { return ""; } })();
   const fpsChoices = [15, 24, 30, 60] as const;
   const can60 = lens.fps.includes(60);
+  const lock60 = can60 && !!lens.direct60 && !p.premium;
   const fpsNow = s.fps === 60 && !can60 ? 30 : s.fps;
   const lockedTap = (what: string) => { p.showToast(`${what} is part of Premium.`); p.goPremium(); };
   const chooseQuality = (v: string) => {
@@ -639,9 +648,12 @@ function TabSettings(p: DashProps) {
         <SwapIn swapKey={String(s.quality)}><p>{QUALITY_HELP[s.quality]}</p></SwapIn>
       </div>
       <div className="calm-setting-detail"><h3>Frame rate</h3>
-        <ChoiceBar label="Frame rate" value={String(s.fps)} onChoose={(v) => set({ fps: Number(v) as Settings["fps"] })}
-          choices={fpsChoices.map((f) => ({ value: String(f), label: `${f} fps`, testId: `s-fps-${f}` }))} />
-        <SwapIn swapKey={`${s.fps}-${can60}`}><p>{s.fps >= 60 ? (can60 ? "Smoothest motion. Uses more Wi-Fi and battery." : "This lens can't film 60 fps, so CamOS uses 30. Try another lens.")
+        <ChoiceBar label="Frame rate" value={String(s.fps)} onChoose={(v) => (v === "60" && lock60 ? lockedTap("60 fps on this phone") : set({ fps: Number(v) as Settings["fps"] }))}
+          choices={fpsChoices.map((f) => ({ value: String(f), label: f === 60 && lock60 ? <>{f} fps<span className="camos-hd"><Lock size={9} /></span></> : `${f} fps`, testId: `s-fps-${f}` }))} />
+        <SwapIn swapKey={`${s.fps}-${can60}-${lock60}`}><p>{s.fps >= 60 ? (!can60 ? "This lens can't film 60 fps, so CamOS uses 30. Try another lens."
+            : lock60 ? "On this phone, 60 fps uses the camera's fast mode, which is part of Premium. CamOS streams 30 for now."
+            : lens.direct60 ? "Uses the camera's fast mode for real 60 fps. Filters and the phone preview pause while streaming."
+            : "Smoothest motion. Uses more Wi-Fi and battery.")
           : s.fps <= 15 ? "Saves Wi-Fi and battery. Motion looks choppy." : "30 fps is what most webcams use."}</p></SwapIn>
       </div>
       <CalmSwitch label="Automatic bitrate" detail="CamOS picks how much detail to send for your quality and frame rate." on={s.bitrate === 0} onChange={(v) => set({ bitrate: v ? 0 : 6000 })} />

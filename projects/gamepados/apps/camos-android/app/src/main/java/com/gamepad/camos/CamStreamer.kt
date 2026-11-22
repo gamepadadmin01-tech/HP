@@ -119,7 +119,8 @@ class CamStreamer(
         }
 
         /** flags bit 0 = "check only" (is this PC ready? no video follows); bit 1 = "I can send the video over UDP". */
-        fun buildHello(key: String, nonce: ByteArray, w: Int, h: Int, fps: Int, deviceName: String, checkOnly: Boolean = false, udp: Boolean = false): ByteArray {
+        /** bits 2-3 = quarter turns the PC applies to make the picture upright (direct 60 fps mode). */
+        fun buildHello(key: String, nonce: ByteArray, w: Int, h: Int, fps: Int, deviceName: String, checkOnly: Boolean = false, udp: Boolean = false, rotate: Int = 0): ByteArray {
             val name = deviceName.toByteArray(Charsets.UTF_8).let { if (it.size > 40) it.copyOf(40) else it }
             val fixed = ByteArray(28)
             "CAMC".toByteArray(Charsets.US_ASCII).copyInto(fixed, 0)
@@ -127,7 +128,7 @@ class CamStreamer(
             fixed[5] = (w shr 8).toByte(); fixed[6] = w.toByte()
             fixed[7] = (h shr 8).toByte(); fixed[8] = h.toByte()
             fixed[9] = fps.toByte()
-            fixed[10] = ((if (checkOnly) 1 else 0) or (if (udp) 2 else 0)).toByte()
+            fixed[10] = ((if (checkOnly) 1 else 0) or (if (udp) 2 else 0) or ((rotate and 3) shl 2)).toByte()
             fixed[11] = name.size.toByte()
             tag(key, nonce, fixed, name).copyInto(fixed, 12)
             return fixed + name
@@ -186,9 +187,59 @@ class CamStreamer(
     @Volatile private var lastUiState: String? = null
     private var lastStateResend = 0L
 
+    // ── Direct 60 fps (owner, 2026-11-23: "60 fps = Premium") ──
+    // On phones whose camera only reaches 60 in Android's high-speed mode, that mode gives the picture engine (a
+    // "preview" surface) just 30 pictures a second; only a video-chip surface gets the full rate. So for Premium at
+    // 60 fps the camera feeds the video chip directly: no filters and no phone preview while it runs, and the PC
+    // turns the picture upright (proto.rs hello flags, pc-server-rs/src/camera/turn.rs). Free users have the
+    // watermark, which needs the picture engine, so they stay on 30 on such phones.
+    /** This stream runs in direct mode. Read by the activity (phone preview off) and the UI (a short note). */
+    @Volatile var direct = false; private set
+    private var directSize = Size(1920, 1080)
+    private var directRange: Range<Int>? = null
+    /** Quarter turns clockwise the PC applies to make the picture upright. */
+    private var directTurn = 0
+    @Volatile private var encFrames = 0
+
+    /** Decide direct mode for this stream (network thread, before the hello). */
+    private fun planDirect() {
+        direct = false
+        if (settings.fps < 60 || settings.watermark || Build.VERSION.SDK_INT < 29) return
+        try {
+            val mgr = context.getSystemService(Context.CAMERA_SERVICE) as CameraManager
+            val ch = mgr.getCameraCharacteristics(pickCameraId(mgr))
+            val regular = ch.get(CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES) ?: emptyArray()
+            val regular60 = regular.any { it.upper >= 60 && it.lower <= 60 } && pickCaptureSize(ch, minFps = 60) != null
+            // The normal way gives 60 here (and wasn't measured short before): keep the picture engine.
+            if (regular60 && !preferHighSpeed && directKey() !in regularShortAt60) return
+            val (range, size) = highSpeedPlan(ch, max(out.width, out.height), minOf(out.width, out.height)) ?: return
+            // The activity has just locked the screen to the picture shape; give the rotation a moment to settle so
+            // the turn matches what the user will see.
+            val t0 = android.os.SystemClock.elapsedRealtime()
+            while (android.os.SystemClock.elapsedRealtime() - t0 < 1000) {
+                val r = displayRotation()
+                if ((r == 0 || r == 180) == portrait) break
+                Thread.sleep(50)
+            }
+            val sensor = ch.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 90
+            val front = ch.get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_FRONT
+            // Android's own rule for turning a camera picture upright (CaptureRequest.JPEG_ORIENTATION).
+            val device = (360 - displayRotation()) % 360
+            val deg = if (front) (sensor - device + 360) % 360 else (sensor + device) % 360
+            directSize = if (size.width >= size.height) size else Size(size.height, size.width)
+            directRange = range
+            directTurn = deg / 90
+            direct = true
+            Log.i(TAG, "direct 60 fps: ${directSize.width}x${directSize.height} at ${range.lower}-${range.upper}, turn ${deg}°")
+        } catch (e: Exception) {
+            Log.w(TAG, "direct 60 fps not possible: ${e.message}")
+            direct = false
+        }
+    }
+
     /** One line for the PC's camos.log: which camera mode, size, range, and what it really gives. */
     private fun camLine(): String =
-        "${if (highSpeed) "high-speed" else "regular"} mode ${cap.width}x${cap.height}, asked " +
+        "${if (direct) "direct high-speed" else if (highSpeed) "high-speed" else "regular"} mode ${cap.width}x${cap.height}, asked " +
             "${aeRange?.let { "${it.lower}-${it.upper}" } ?: "?"} fps (want ${settings.fps}), camera gives $camFps fps, " +
             "sends $sentFps fps, electronic stabilisation ${if (eisOn) "on" else "off"}"
 
@@ -207,10 +258,23 @@ class CamStreamer(
             lowCamSeconds = Int.MIN_VALUE / 2   // don't keep checking
             return
         }
+        if (!settings.watermark && Build.VERSION.SDK_INT >= 29) {
+            // Premium: the high-speed mode only gives the picture engine 30 too, so go direct. That is decided
+            // before the hello, hence a fresh stream; remember this camera + size so it starts direct next time.
+            Log.i(TAG, "camera gives $camFps fps in the regular mode at 60: restarting in direct 60 fps mode")
+            regularShortAt60 += directKey()
+            lowCamSeconds = Int.MIN_VALUE / 2
+            onState("restart", "Switching to the camera's fast mode for real 60 fps…", 0, 0)
+            return
+        }
         Log.i(TAG, "camera gives $camFps fps in the regular mode at 60: switching to its high-speed mode")
         preferHighSpeed = true
         camHandler?.post { if (running.get()) { closeCameraOnly(); openCamera() } }
     }
+
+    /** Camera + picture sizes measured short of 60 in the regular mode (kept while the app runs). */
+    private val regularShortAt60 = mutableSetOf<String>()
+    private fun directKey() = "${settings.cameraId}/${settings.front}/${out.width}x${out.height}"
     @Volatile var portrait = false; private set
     private var out = Size(1280, 720)
     private var cap = Size(1280, 720)
@@ -240,6 +304,8 @@ class CamStreamer(
         linked = false
         udpBlocked = false
         preferHighSpeed = false
+        direct = false
+        encFrames = 0
         lowCamSeconds = 0
         lastCamFrames = 0
         camFps = 0
@@ -297,6 +363,8 @@ class CamStreamer(
         settings = s
         applyFilters()
         val h = camHandler ?: return
+        // Direct mode's size and turn belong to one lens: another lens needs a fresh stream (the UI restarts it).
+        if (direct && (s.front != old.front || s.cameraId != old.cameraId)) { onState("restart", "Switching camera…", 0, 0); return }
         if (s.front != old.front || s.cameraId != old.cameraId) h.post { closeCameraOnly(); openCamera() }
         else h.post { repeat() }
     }
@@ -581,7 +649,11 @@ class CamStreamer(
             // Ask for smooth Wi-Fi mode unless it is switched off, already failed on this Wi-Fi, or this is the adb
             // cable (127.0.0.1 can't carry UDP). The PC says no for a USB-tether cable too.
             val wantUdp = settings.udp && !udpBlocked && !java.net.InetAddress.getByName(ip).isLoopbackAddress
-            outStream.write(buildHello(key, hello.copyOfRange(5, 21), out.width, out.height, settings.fps, deviceName(), udp = wantUdp))
+            // Direct 60 fps is decided once, before the camera starts (a reconnect keeps it).
+            if (camThread == null) planDirect()
+            val (hw, hh) = if (direct) directSize.width to directSize.height else out.width to out.height
+            outStream.write(buildHello(key, hello.copyOfRange(5, 21), hw, hh, settings.fps, deviceName(), udp = wantUdp,
+                rotate = if (direct) directTurn else 0))
             outStream.flush()
             val ack = ByteArray(5)
             input.readFully(ack)
@@ -703,7 +775,8 @@ class CamStreamer(
                 val now = System.nanoTime()
                 if (now - window >= 1_000_000_000L) {
                     val secs = (now - window) / 1e9
-                    val frames = gl?.camFrames ?: 0
+                    // Direct mode has no picture engine: count what the video chip produced instead.
+                    val frames = if (direct) encFrames else gl?.camFrames ?: 0
                     camFps = ((frames - lastCamFrames) / secs).roundToInt().coerceAtLeast(0)
                     lastCamFrames = frames
                     sentFps = (sentFrames / secs).roundToInt()
@@ -744,6 +817,12 @@ class CamStreamer(
                 val ch = mgr.getCameraCharacteristics(id)
                 cap = planCapture(ch)
                 startEncoder()
+                if (direct) {
+                    // Camera → video chip, no picture engine (see planDirect).
+                    camSurface = encoderSurface
+                    openCamera()
+                    return@post
+                }
                 val pipe = GlPipeline(displayRotation) { fail(it) }
                 gl = pipe
                 applyFilters()
@@ -790,6 +869,11 @@ class CamStreamer(
      * offers a few fixed sizes, so the picture size comes from that list.
      */
     private fun planCapture(ch: CameraCharacteristics): Size {
+        if (direct) {
+            highSpeed = true
+            hsRange = directRange
+            return directSize
+        }
         highSpeed = false
         hsRange = null
         if (settings.fps >= 60) {
@@ -864,7 +948,10 @@ class CamStreamer(
             c.codecInfo.getCapabilitiesForType(MediaFormat.MIMETYPE_VIDEO_AVC).encoderCapabilities
                 .isBitrateModeSupported(MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_CBR)
         } catch (_: Exception) { false }
-        val f = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, out.width, out.height).apply {
+        val encSize = if (direct) directSize else out
+        val f = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, encSize.width, encSize.height).apply {
+            // Direct 60 fps: the camera feeds 120 pictures a second; the video chip keeps 60 of them.
+            if (direct && Build.VERSION.SDK_INT >= 29) setFloat(MediaFormat.KEY_MAX_FPS_TO_ENCODER, settings.fps.toFloat())
             setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)
             setInteger(MediaFormat.KEY_BIT_RATE, curBitrate)
             if (cbr) setInteger(MediaFormat.KEY_BITRATE_MODE, MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_CBR)
@@ -901,6 +988,7 @@ class CamStreamer(
     }
 
     private fun onEncoded(bytes: ByteArray, info: MediaCodec.BufferInfo) {
+        if (info.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG == 0) encFrames++
         if (info.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG != 0) {
             codecConfig = bytes          // SPS + PPS: the decoder's "how to read this video" header
             return
@@ -1207,7 +1295,9 @@ object CameraCatalog {
                 .put("flash", ch.get(CameraCharacteristics.FLASH_INFO_AVAILABLE) == true)
                 .put("manualFocus", (ch.get(CameraCharacteristics.LENS_INFO_MINIMUM_FOCUS_DISTANCE) ?: 0f) > 0f)
                 .put("stabilize", vs.contains(CameraMetadata.CONTROL_VIDEO_STABILIZATION_MODE_ON) || ois.contains(CameraMetadata.LENS_OPTICAL_STABILIZATION_MODE_ON))
-                .put("fps", fpsList))
+                .put("fps", fpsList)
+                // 60 only through the fast mode = direct 60 fps (Premium; CamStreamer.planDirect).
+                .put("direct60", hs60 && !reg60 && Build.VERSION.SDK_INT >= 29))
         }
         return list.toString()
     }

@@ -269,7 +269,7 @@ class MainActivity : AppCompatActivity() {
             releaseWifiLock()
         }
         val json = JSONObject().put("state", state).put("message", message).put("fps", fps).put("kbps", kbps)
-            .put("front", streamer.facingFront).put("portrait", streamer.portrait)
+            .put("front", streamer.facingFront).put("portrait", streamer.portrait).put("direct", streamer.direct)
         js("window.camosOnState && window.camosOnState(${JSONObject.quote(json.toString())})")
     }
 

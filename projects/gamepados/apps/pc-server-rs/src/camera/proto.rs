@@ -6,6 +6,9 @@
 //!                  flags bit 0 = "check only": prove the key, get the answer, stream nothing (the phone's
 //!                  "is my PC ready?" check right after pairing)
 //!                  flags bit 1 = "I can send the video over UDP" (smooth Wi-Fi mode, udp.rs)
+//!                  flags bits 2-3 = quarter turns (clockwise) the PC must apply to make the picture upright, bit 4 =
+//!                  mirror it. Used by "direct 60 fps" (Premium, phones whose 60 fps only exists in Android's
+//!                  high-speed mode): the camera feeds the video chip directly, so the phone can't turn the picture.
 //! server → phone   "CAMA" status:u8                                         (5 bytes)
 //! server → phone   only if the phone set bit 1 and status is OK:
 //!                  "CAMU" mode:u8 port:u16 token:[8]                       (15 bytes)
@@ -102,6 +105,10 @@ pub struct ClientHello {
     pub check: bool,
     /// The phone can send the video over UDP (flags bit 1).
     pub udp: bool,
+    /// Quarter turns clockwise to make the picture upright (flags bits 2-3; 0 = already upright).
+    pub rotate: u8,
+    /// Mirror the picture left-right (flags bit 4).
+    pub mirror: bool,
 }
 
 /// The fingerprint the phone must send. `fixed` is the 28-byte header with the
@@ -226,7 +233,7 @@ pub fn verify_client_hello(
         return Err(STATUS_BAD_REQUEST);
     }
     let name: String = String::from_utf8_lossy(name).chars().filter(|c| !c.is_control()).take(40).collect();
-    Ok(ClientHello { width, height, fps, name, check: fixed[10] & 1 != 0, udp: fixed[10] & 2 != 0 })
+    Ok(ClientHello { width, height, fps, name, check: fixed[10] & 1 != 0, udp: fixed[10] & 2 != 0, rotate: (fixed[10] >> 2) & 3, mirror: fixed[10] & 16 != 0 })
 }
 
 #[derive(Debug, PartialEq)]
@@ -267,7 +274,7 @@ pub fn build_client_hello(key: &str, nonce: &[u8; 16], h: &ClientHello) -> Vec<u
     fixed[5..7].copy_from_slice(&h.width.to_be_bytes());
     fixed[7..9].copy_from_slice(&h.height.to_be_bytes());
     fixed[9] = h.fps;
-    fixed[10] = h.check as u8 | (h.udp as u8) << 1;
+    fixed[10] = h.check as u8 | (h.udp as u8) << 1 | (h.rotate & 3) << 2 | (h.mirror as u8) << 4;
     fixed[11] = name.len() as u8;
     let t = tag(key, nonce, &fixed, name);
     fixed[12..28].copy_from_slice(&t);
@@ -281,7 +288,7 @@ mod tests {
     use super::*;
 
     fn hello() -> ClientHello {
-        ClientHello { width: 1280, height: 720, fps: 30, name: "Redmi Note 12".into(), check: false, udp: false }
+        ClientHello { width: 1280, height: 720, fps: 30, name: "Redmi Note 12".into(), check: false, udp: false, rotate: 0, mirror: false }
     }
 
     fn split(v: &[u8]) -> ([u8; CLIENT_HELLO_FIXED], Vec<u8>) {

@@ -13,7 +13,7 @@ use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
-use super::{CAMERA_PORT, decode::H264Decoder, preview, proto, remote, udp, vcam};
+use super::{CAMERA_PORT, decode::H264Decoder, preview, proto, remote, turn, udp, vcam};
 
 /// What the server window shows on the "Phone camera" card.
 #[derive(Clone, Debug, Default)]
@@ -224,8 +224,14 @@ fn serve(c: &mut TcpStream, key: &str) -> Result<(), String> {
     log(&format!("{} ({}) streaming {}x{} @{}{}", hello.name, c.peer_addr().map(|a| a.ip().to_string()).unwrap_or_default(),
         hello.width, hello.height, hello.fps,
         if cable { " over the USB cable" } else if udp.is_some() { " over Wi-Fi (UDP)" } else { " over Wi-Fi (TCP)" }));
+    // Direct 60 fps (Premium): the picture arrives as the camera sensor sees it and is turned upright here.
+    let turning = (hello.rotate, hello.mirror);
+    if turning != (0, false) {
+        log(&format!("direct mode: turning the picture {}° clockwise{}", hello.rotate as u32 * 90, if hello.mirror { ", mirrored" } else { "" }));
+    }
+    let (up_w, up_h) = if hello.rotate % 2 == 1 { (hello.height, hello.width) } else { (hello.width, hello.height) };
     if let Ok(mut s) = STATUS.lock() {
-        *s = CamStatus { live: true, device: hello.name.clone(), width: hello.width as u32, height: hello.height as u32, fps: 0.0, last_error: String::new() };
+        *s = CamStatus { live: true, device: hello.name.clone(), width: up_w as u32, height: up_h as u32, fps: 0.0, last_error: String::new() };
     }
 
     // 3. Frames.
@@ -240,7 +246,7 @@ fn serve(c: &mut TcpStream, key: &str) -> Result<(), String> {
     let started = Instant::now();
     let Some((sock, token)) = udp else {
         let mut dec = H264Decoder::new().map_err(|e| format!("H.264 decoder: {e}"))?;
-        return control_loop(c, started, Some((&mut dec, w, h)));
+        return control_loop(c, started, Some((&mut dec, w, h)), turning);
     };
     // UDP mode: the video arrives on its own thread; this one keeps the TCP connection (settings, "still here"
     // pings) and notices when the phone leaves.
@@ -250,9 +256,9 @@ fn serve(c: &mut TcpStream, key: &str) -> Result<(), String> {
     let stop2 = stop.clone();
     let video = std::thread::Builder::new()
         .name("camos-udp".into())
-        .spawn(move || udp_loop(sock, token, phone, w, h, &stop2, tcp))
+        .spawn(move || udp_loop(sock, token, phone, w, h, &stop2, tcp, turning))
         .map_err(|e| e.to_string())?;
-    let r = control_loop(c, started, None);
+    let r = control_loop(c, started, None, turning);
     stop.store(true, Ordering::SeqCst);
     let v = video.join().unwrap_or_else(|_| Err("video thread stopped unexpectedly".into()));
     // A video-side reason (UDP silent, decoder failing) explains the end better than "connection closed".
@@ -289,17 +295,28 @@ struct Sink {
     window: Instant,
     errors: u32,
     last_key_ask: Instant,
+    /// Quarter turns + mirror to make the picture upright (direct 60 fps mode; (0, false) = nothing to do).
+    turning: (u8, bool),
 }
 
 impl Sink {
-    fn new() -> Self {
-        Sink { frames: 0, window: Instant::now(), errors: 0, last_key_ask: Instant::now() }
+    fn new(turning: (u8, bool)) -> Self {
+        Sink { frames: 0, window: Instant::now(), errors: 0, last_key_ask: Instant::now(), turning }
     }
 
     fn decode(&mut self, dec: &mut H264Decoder, data: &[u8], pts_us: u64, w: u32, h: u32) -> Result<(), String> {
         let frames = &mut self.frames;
+        let (quarters, mirror) = self.turning;
         let mut on_frame = |fw: u32, fh: u32, nv12: Vec<u8>| {
             *frames += 1;
+            let (fw, fh, nv12) = if (quarters, mirror) == (0, false) {
+                (fw, fh, nv12)
+            } else {
+                match turn::turn_nv12(fw, fh, &nv12, quarters, mirror) {
+                    Some(t) => t,
+                    None => (fw, fh, nv12),
+                }
+            };
             preview::offer(fw, fh, &nv12);
             vcam::publish(fw, fh, nv12);
         };
@@ -341,8 +358,8 @@ impl Sink {
 }
 
 /// The TCP side: video frames (TCP mode, `video` = decoder + size), the phone's state, "still here" pings.
-fn control_loop(c: &mut TcpStream, started: Instant, mut video: Option<(&mut H264Decoder, u32, u32)>) -> Result<(), String> {
-    let mut sink = Sink::new();
+fn control_loop(c: &mut TcpStream, started: Instant, mut video: Option<(&mut H264Decoder, u32, u32)>, turning: (u8, bool)) -> Result<(), String> {
+    let mut sink = Sink::new(turning);
     let mut hdr = [0u8; proto::FRAME_HEADER_LEN];
     let mut payload = Vec::new();
     let mut last_cam: Option<(String, Instant)> = None;
@@ -384,11 +401,12 @@ fn control_loop(c: &mut TcpStream, started: Instant, mut video: Option<(&mut H26
 /// UDP mode: receive the pieces, put pictures back together (udp.rs), ask for missing pieces, report losses to
 /// the phone twice a second, decode. Ends when told to, or after 5 s without video (then it also closes the TCP
 /// connection so the phone reconnects).
-fn udp_loop(sock: std::net::UdpSocket, token: [u8; 8], phone: std::net::IpAddr, w: u32, h: u32, stop: &AtomicBool, tcp: TcpStream) -> Result<(), String> {
+#[allow(clippy::too_many_arguments)]
+fn udp_loop(sock: std::net::UdpSocket, token: [u8; 8], phone: std::net::IpAddr, w: u32, h: u32, stop: &AtomicBool, tcp: TcpStream, turning: (u8, bool)) -> Result<(), String> {
     crate::winperf::raise_receive_thread();
     let mut dec = H264Decoder::new().map_err(|e| format!("H.264 decoder: {e}"))?;
     let mut re = udp::Reassembler::new();
-    let mut sink = Sink::new();
+    let mut sink = Sink::new(turning);
     let mut buf = vec![0u8; 2048];
     let mut phone_addr: Option<std::net::SocketAddr> = None;
     let started = Instant::now();
