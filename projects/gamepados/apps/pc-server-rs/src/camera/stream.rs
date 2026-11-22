@@ -259,6 +259,20 @@ fn serve(c: &mut TcpStream, key: &str) -> Result<(), String> {
     v.and(r)
 }
 
+/// The phone adds a line about its camera to every state message ("cam": which mode, size, frame-rate range, what
+/// the camera really gives). Written to camos.log when it changes, at most every 5 s, so a "60 fps shows 30"
+/// report can be explained from the log alone (owner, 2026-11-23).
+fn log_camera_facts(payload: &[u8], last: &mut Option<(String, Instant)>) {
+    let Ok(v) = serde_json::from_slice::<serde_json::Value>(payload) else { return };
+    let Some(line) = v.get("cam").and_then(|c| c.as_str()) else { return };
+    let line: String = line.chars().filter(|c| !c.is_control()).take(240).collect();
+    let due = last.as_ref().is_none_or(|(prev, at)| *prev != line && at.elapsed() >= Duration::from_secs(5));
+    if due {
+        log(&format!("phone camera: {line}"));
+        *last = Some((line, Instant::now()));
+    }
+}
+
 /// A UDP socket for one phone's video, and the token its packets must carry.
 fn open_udp() -> Option<(std::net::UdpSocket, [u8; 8])> {
     let sock = std::net::UdpSocket::bind(("0.0.0.0", 0)).map_err(|e| log(&format!("UDP mode off: {e}"))).ok()?;
@@ -331,6 +345,7 @@ fn control_loop(c: &mut TcpStream, started: Instant, mut video: Option<(&mut H26
     let mut sink = Sink::new();
     let mut hdr = [0u8; proto::FRAME_HEADER_LEN];
     let mut payload = Vec::new();
+    let mut last_cam: Option<(String, Instant)> = None;
     loop {
         match c.read_exact(&mut hdr) {
             Ok(()) => {}
@@ -353,6 +368,7 @@ fn control_loop(c: &mut TcpStream, started: Instant, mut video: Option<(&mut H26
         if fh.flags & proto::FLAG_STATE != 0 {
             // The phone's settings and what its plan allows, for the window's controls. Not video.
             remote::on_state(&payload);
+            log_camera_facts(&payload, &mut last_cam);
             continue;
         }
         if fh.flags & proto::FLAG_PING != 0 {

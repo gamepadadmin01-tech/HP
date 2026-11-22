@@ -66,6 +66,8 @@ class GlPipeline(private val displayRotation: () -> Int, private val onError: (S
     @Volatile var watermark = true
     @Volatile var mirrorPreview = true
     @Volatile var fpsLimit = 30
+    /** Pictures the camera has delivered so far (counted on the picture engine's thread). */
+    @Volatile var camFrames = 0
 
     private val thread = HandlerThread("camos-gl").also { it.start() }
     private val handler = Handler(thread.looper)
@@ -191,6 +193,9 @@ class GlPipeline(private val displayRotation: () -> Int, private val onError: (S
             st.updateTexImage()
             st.getTransformMatrix(stMatrix)
             val ts = st.timestamp
+            // Every picture the camera delivers, before the frame-rate limit below: this is what the camera really
+            // gives (the streamer compares it with the frame rate asked for, and tries another camera mode if short).
+            camFrames++
             // Hold to the chosen frame rate even if the camera runs faster.
             val interval = 1_000_000_000L / max(1, fpsLimit)
             if (lastSentNs != 0L && ts - lastSentNs < interval * 3 / 4) return

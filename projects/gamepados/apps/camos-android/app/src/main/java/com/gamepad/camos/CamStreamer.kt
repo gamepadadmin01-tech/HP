@@ -170,6 +170,47 @@ class CamStreamer(
     /** 60 fps on phones that only film that fast in Android's "high-speed video" camera mode. */
     @Volatile private var highSpeed = false
     private var hsRange: Range<Int>? = null
+
+    // ── "Is the camera really giving 60?" (owner, 2026-11-23: phone and PC both showed 30 at 60 fps) ──
+    /** The regular mode was measured short of 60: use the high-speed mode for the rest of this stream. */
+    @Volatile private var preferHighSpeed = false
+    /** Frame-rate range the camera was last asked for, electronic stabilisation on/off: for the PC log. */
+    @Volatile private var aeRange: Range<Int>? = null
+    @Volatile private var eisOn = false
+    /** What the camera delivered in the last second, and what was sent. */
+    @Volatile private var camFps = 0
+    @Volatile private var sentFps = 0
+    private var lastCamFrames = 0
+    private var lowCamSeconds = 0
+    /** The UI's last state message, re-sent every 2 s with the camera facts added (see sendState). */
+    @Volatile private var lastUiState: String? = null
+    private var lastStateResend = 0L
+
+    /** One line for the PC's camos.log: which camera mode, size, range, and what it really gives. */
+    private fun camLine(): String =
+        "${if (highSpeed) "high-speed" else "regular"} mode ${cap.width}x${cap.height}, asked " +
+            "${aeRange?.let { "${it.lower}-${it.upper}" } ?: "?"} fps (want ${settings.fps}), camera gives $camFps fps, " +
+            "sends $sentFps fps, electronic stabilisation ${if (eisOn) "on" else "off"}"
+
+    /**
+     * Called once a second while streaming. Asked for 60 but the camera gives under 45 for 3 seconds in the regular
+     * mode: many phones (Xiaomi, MediaTek) offer "30 to 60" and then pick 30 indoors for more light. Their
+     * high-speed video mode runs at a fixed 60/120, so switch to it if the camera has one.
+     */
+    private fun fpsDoctor() {
+        if (settings.fps < 60 || highSpeed || preferHighSpeed) { lowCamSeconds = 0; return }
+        if (camFps !in 1..44) { lowCamSeconds = 0; return }
+        if (++lowCamSeconds < 3) return
+        val ch = chars ?: return
+        if (highSpeedPlan(ch, max(out.width, out.height), minOf(out.width, out.height)) == null) {
+            Log.i(TAG, "camera gives $camFps fps at 60 and has no high-speed mode")
+            lowCamSeconds = Int.MIN_VALUE / 2   // don't keep checking
+            return
+        }
+        Log.i(TAG, "camera gives $camFps fps in the regular mode at 60: switching to its high-speed mode")
+        preferHighSpeed = true
+        camHandler?.post { if (running.get()) { closeCameraOnly(); openCamera() } }
+    }
     @Volatile var portrait = false; private set
     private var out = Size(1280, 720)
     private var cap = Size(1280, 720)
@@ -198,6 +239,11 @@ class CamStreamer(
         waitForKey = true
         linked = false
         udpBlocked = false
+        preferHighSpeed = false
+        lowCamSeconds = 0
+        lastCamFrames = 0
+        camFps = 0
+        aeRange = null
         queue.clear()
         socket = null
         onState("connecting", "Connecting to $ip…", 0, 0)
@@ -221,8 +267,12 @@ class CamStreamer(
 
     /** Tell the PC window what is set and what this phone's plan allows (a small JSON message in the stream). */
     fun sendState(json: String) {
+        lastUiState = json
         if (!running.get() || !linked) return
-        val b = json.toByteArray(Charsets.UTF_8)
+        // The camera facts ride along ("cam"): the PC writes them to camos.log, so a frame-rate problem can be
+        // read there afterwards. Older PC servers ignore the extra field.
+        val merged = try { JSONObject(json).put("cam", camLine()).toString() } catch (_: Exception) { json }
+        val b = merged.toByteArray(Charsets.UTF_8)
         if (b.size > 16 * 1024) return
         queue.offer(Packet(b, 0, FLAG_STATE))
     }
@@ -653,6 +703,13 @@ class CamStreamer(
                 val now = System.nanoTime()
                 if (now - window >= 1_000_000_000L) {
                     val secs = (now - window) / 1e9
+                    val frames = gl?.camFrames ?: 0
+                    camFps = ((frames - lastCamFrames) / secs).roundToInt().coerceAtLeast(0)
+                    lastCamFrames = frames
+                    sentFps = (sentFrames / secs).roundToInt()
+                    fpsDoctor()
+                    val t = android.os.SystemClock.elapsedRealtime()
+                    if (t - lastStateResend >= 2000) { lastStateResend = t; lastUiState?.let { sendState(it) } }
                     onState("live", "", (sentFrames / secs).roundToInt(), (sentBytes * 8 / 1000 / secs).toInt())
                     sentFrames = 0; sentBytes = 0; window = now
                 }
@@ -738,9 +795,10 @@ class CamStreamer(
         if (settings.fps >= 60) {
             // 1. Regular video mode, but only at a picture size the camera can really deliver 60 times a second.
             //    (Phones list "60 fps" for the camera as a whole; at big sizes they still give 30. Asking for 60 at
-            //    such a size is what made 60 fps "not work".)
+            //    such a size is what made 60 fps "not work".) Skipped once the camera was measured giving less than
+            //    60 in this mode (preferHighSpeed, see fpsDoctor).
             val regular = ch.get(CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES) ?: emptyArray()
-            if (regular.any { it.upper >= 60 && it.lower <= 60 }) {
+            if (!preferHighSpeed && regular.any { it.upper >= 60 && it.lower <= 60 }) {
                 pickCaptureSize(ch, minFps = 60)?.let { return it }
             }
             // 2. Android's high-speed video mode (often listed as 120 fps; the picture engine keeps every 2nd frame).
@@ -749,7 +807,12 @@ class CamStreamer(
                 hsRange = range
                 return size
             }
-            // 3. This camera can't do 60: stream at its best (30); the app tells the user.
+            // 3. High-speed mode was preferred but isn't there after all: back to the regular mode.
+            if (preferHighSpeed) {
+                val regular = ch.get(CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES) ?: emptyArray()
+                if (regular.any { it.upper >= 60 && it.lower <= 60 }) pickCaptureSize(ch, minFps = 60)?.let { return it }
+            }
+            // 4. This camera can't do 60: stream at its best (30); the app tells the user.
         }
         return pickCaptureSize(ch) ?: Size(max(out.width, out.height), minOf(out.width, out.height))
     }
@@ -977,7 +1040,7 @@ class CamStreamer(
                 ?: ranges.firstOrNull { it.lower == want && it.upper == want }
                 ?: ranges.filter { it.upper >= want }.minByOrNull { abs(it.upper - want) * 10 + abs(it.lower - want) }
                 ?: ranges.maxByOrNull { it.upper }
-            (if (highSpeed) hsRange else range)?.let { b.set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, it) }
+            (if (highSpeed) hsRange else range)?.let { b.set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, it); aeRange = it }
 
             // Zoom.
             if (Build.VERSION.SDK_INT >= 30 && ch.get(CameraCharacteristics.CONTROL_ZOOM_RATIO_RANGE) != null) {
@@ -1005,10 +1068,14 @@ class CamStreamer(
             }
 
             // Stabilisation (electronic, plus optical where the lens has it).
+            // Electronic stabilisation is OFF at 60 fps: on many phones (MediaTek especially) it holds the camera to
+            // 30 fps (owner, 2026-11-23: "kept 60 but getting 30"). A webcam usually stands still; the lens's own
+            // optical stabilisation (below) stays on.
             val vs = ch.get(CameraCharacteristics.CONTROL_AVAILABLE_VIDEO_STABILIZATION_MODES) ?: intArrayOf()
+            eisOn = st.stabilize && st.fps < 60 && vs.contains(CameraMetadata.CONTROL_VIDEO_STABILIZATION_MODE_ON)
             if (vs.contains(CameraMetadata.CONTROL_VIDEO_STABILIZATION_MODE_ON))
                 b.set(CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE,
-                    if (st.stabilize) CameraMetadata.CONTROL_VIDEO_STABILIZATION_MODE_ON else CameraMetadata.CONTROL_VIDEO_STABILIZATION_MODE_OFF)
+                    if (eisOn) CameraMetadata.CONTROL_VIDEO_STABILIZATION_MODE_ON else CameraMetadata.CONTROL_VIDEO_STABILIZATION_MODE_OFF)
             val ois = ch.get(CameraCharacteristics.LENS_INFO_AVAILABLE_OPTICAL_STABILIZATION) ?: intArrayOf()
             if (ois.contains(CameraMetadata.LENS_OPTICAL_STABILIZATION_MODE_ON))
                 b.set(CaptureRequest.LENS_OPTICAL_STABILIZATION_MODE,
