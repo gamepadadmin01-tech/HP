@@ -2,12 +2,13 @@
 //! over the real CamOS protocol (handshake + frames), looping, at 30 fps (or the size/fps given).
 //! Tests the whole PC path — receive, decode, virtual camera — without a phone.
 //!
-//!   cargo run --release --example camos_fake_phone -- <file.h264> [ip] [key] [seconds] [w] [h] [fps] [free|premium]
-//!   (key defaults to this PC's pairing key)
+//!   cargo run --release --example camos_fake_phone -- <file.h264> [ip] [key] [seconds] [w] [h] [fps] [free|premium] [tcp|udp] [loss%]
+//!   (key defaults to this PC's pairing key; `udp` = smooth Wi-Fi mode, `loss%` throws that share of UDP packets
+//!   away on purpose, resends included, to test the asks-to-resend and skipping)
 //!
 //! It also plays the phone's side of the PC-window remote: sends its state, applies the window's requests with
 //! the same plan rules as the real app (free: no looks/smoothing/low light/1080p), and logs every request.
-use pc_server_rs::camera::proto;
+use pc_server_rs::camera::{proto, udp};
 use std::io::{Read, Write};
 use std::net::TcpStream;
 use std::sync::{Arc, Mutex};
@@ -47,6 +48,8 @@ fn main() {
     let fps: u64 = args.get(7).and_then(|s| s.parse().ok()).unwrap_or(30);
     let frame_us = 1_000_000 / fps;
     let premium = args.get(8).map(|s| s == "premium").unwrap_or(false);
+    let want_udp = args.get(9).map(|s| s == "udp").unwrap_or(false);
+    let loss: f64 = args.get(10).and_then(|s| s.parse().ok()).unwrap_or(0.0) / 100.0;
     let data = std::fs::read(file).expect("read h264");
 
     // Group NAL units into access units: parameter sets/SEI ride with the next picture.
@@ -70,12 +73,25 @@ fn main() {
     s.read_exact(&mut hello).expect("server hello");
     assert_eq!(&hello[0..4], b"CAMS");
     let nonce: [u8; 16] = hello[5..21].try_into().unwrap();
-    let h = proto::ClientHello { width, height, fps: fps as u8, name: "Fake phone (test)".into(), check: false };
+    let h = proto::ClientHello { width, height, fps: fps as u8, name: "Fake phone (test)".into(), check: false, udp: want_udp };
     s.write_all(&proto::build_client_hello(&key, &nonce, &h)).unwrap();
     let mut ack = [0u8; 5];
     s.read_exact(&mut ack).unwrap();
     println!("server answered status {}", ack[4]);
     if ack[4] != 0 { return; }
+    let mut grant = None;
+    if want_udp {
+        let mut g = [0u8; proto::UDP_GRANT_LEN];
+        s.read_exact(&mut g).unwrap();
+        assert_eq!(&g[0..4], b"CAMU");
+        if g[4] == 1 {
+            let port = u16::from_be_bytes([g[5], g[6]]);
+            let token: [u8; 8] = g[7..15].try_into().unwrap();
+            grant = Some((port, token));
+        }
+        println!("UDP mode: {}", if grant.is_some() { "granted" } else { "refused (stays on TCP)" });
+    }
+    let udp_tx = grant.map(|(port, token)| UdpSender::start(&ip, port, token, loss));
 
     // The phone's side of the remote. Same rules as CamOSApp.tsx onRemote().
     let state = Arc::new(Mutex::new(json!({
@@ -130,6 +146,23 @@ fn main() {
     let mut n = 0u64;
     while start.elapsed().as_secs() < secs {
         let (au, key) = &aus[(n as usize) % aus.len()];
+        if let Some(u) = &udp_tx {
+            u.send_frame(n as u32, *key, n * frame_us, au);
+            if n % fps == 0 {
+                // "Still here" on TCP once a second.
+                let mut ping = Vec::with_capacity(14);
+                ping.extend_from_slice(&1u32.to_be_bytes());
+                ping.extend_from_slice(&0u64.to_be_bytes());
+                ping.push(proto::FLAG_PING);
+                ping.push(0);
+                if s.write_all(&ping).is_err() { println!("server closed"); return; }
+            }
+            if dirty.swap(false, std::sync::atomic::Ordering::SeqCst) || n % (fps * 5) == 0 { send_state(&mut s); }
+            n += 1;
+            let due = start + Duration::from_micros(n * frame_us);
+            if let Some(w) = due.checked_duration_since(Instant::now()) { std::thread::sleep(w); }
+            continue;
+        }
         let mut hdr = Vec::with_capacity(13);
         hdr.extend_from_slice(&(au.len() as u32).to_be_bytes());
         hdr.extend_from_slice(&(n * frame_us).to_be_bytes());
@@ -141,4 +174,86 @@ fn main() {
         if let Some(w) = due.checked_duration_since(Instant::now()) { std::thread::sleep(w); }
     }
     println!("sent {n} frames in {:.1}s", start.elapsed().as_secs_f32());
+    if let Some(u) = &udp_tx {
+        let st = u.stats.lock().unwrap();
+        println!("UDP: {} packets sent, {} thrown away on purpose, {} resent after asks, PC reported {} received / {} lost / {} skipped",
+            st.sent, st.dropped, st.resent, st.rx, st.lost, st.skipped);
+    }
+}
+
+#[derive(Default)]
+struct Stats { sent: u64, dropped: u64, resent: u64, rx: u64, lost: u64, skipped: u64 }
+
+/// The phone's UDP side: cuts pictures into pieces, keeps the last 64 pictures for resends, answers NACKs, reads
+/// the PC's reports. `loss` throws packets away on purpose (a pretend bad Wi-Fi).
+struct UdpSender {
+    sock: std::net::UdpSocket,
+    token: [u8; 8],
+    loss: f64,
+    seq: Arc<Mutex<u32>>,
+    recent: Arc<Mutex<Vec<Option<(u32, Vec<Vec<u8>>)>>>>,
+    rng: Arc<Mutex<u64>>,
+    stats: Arc<Mutex<Stats>>,
+}
+
+impl UdpSender {
+    fn start(ip: &str, port: u16, token: [u8; 8], loss: f64) -> Arc<UdpSender> {
+        let sock = std::net::UdpSocket::bind(("0.0.0.0", 0)).unwrap();
+        sock.connect((ip, port)).unwrap();
+        let me = Arc::new(UdpSender {
+            sock, token, loss,
+            seq: Arc::new(Mutex::new(0)),
+            recent: Arc::new(Mutex::new(vec![None; 64])),
+            rng: Arc::new(Mutex::new(0x2545F4914F6CDD1D)),
+            stats: Arc::new(Mutex::new(Stats::default())),
+        });
+        let r = me.clone();
+        std::thread::spawn(move || {
+            let mut buf = [0u8; 2048];
+            loop {
+                let Ok(n) = r.sock.recv(&mut buf) else { continue };
+                if let Some((frame, missing)) = udp::parse_nack(&r.token, &buf[..n]) {
+                    let pieces = r.recent.lock().unwrap()[frame as usize % 64].clone();
+                    if let Some((f, pkts)) = pieces {
+                        if f != frame { continue; }
+                        let list: Vec<usize> = if missing.is_empty() { (0..pkts.len()).collect() } else { missing.iter().map(|&i| i as usize).collect() };
+                        for i in list {
+                            if let Some(p) = pkts.get(i) {
+                                r.stats.lock().unwrap().resent += 1;
+                                r.send_raw(p.clone());
+                            }
+                        }
+                    }
+                } else if let Some(rep) = udp::parse_report(&r.token, &buf[..n]) {
+                    let mut st = r.stats.lock().unwrap();
+                    st.rx += rep.received as u64; st.lost += rep.lost as u64; st.skipped += rep.skipped as u64;
+                }
+            }
+        });
+        me
+    }
+
+    fn chance(&self) -> f64 {
+        let mut x = self.rng.lock().unwrap();
+        *x ^= *x << 13; *x ^= *x >> 7; *x ^= *x << 17;
+        (*x % 1_000_000) as f64 / 1_000_000.0
+    }
+
+    /// Send with a fresh packet number (resends get one too, like the phone).
+    fn send_raw(&self, mut p: Vec<u8>) {
+        let seq = { let mut s = self.seq.lock().unwrap(); let v = *s; *s = s.wrapping_add(1); v };
+        p[26..30].copy_from_slice(&seq.to_be_bytes());
+        self.stats.lock().unwrap().sent += 1;
+        if self.chance() < self.loss { self.stats.lock().unwrap().dropped += 1; return; }
+        let _ = self.sock.send(&p);
+    }
+
+    fn send_frame(&self, frame: u32, key: bool, pts_us: u64, au: &[u8]) {
+        let count = au.len().div_ceil(udp::MAX_CHUNK) as u16;
+        let pkts: Vec<Vec<u8>> = au.chunks(udp::MAX_CHUNK).enumerate().map(|(i, d)| udp::build_video(&self.token, &udp::Chunk {
+            flags: if key { udp::FLAG_KEY } else { 0 }, frame, idx: i as u16, count, pts_us, seq: 0, data: d,
+        })).collect();
+        self.recent.lock().unwrap()[frame as usize % 64] = Some((frame, pkts.clone()));
+        for p in pkts { self.send_raw(p); }
+    }
 }

@@ -67,8 +67,12 @@ tethering makes the cable a tiny network of its own.
 
 1. **0.4.4 (built now):** reconnect, stall watchdog, network pinning, faster quality recovery; server log.
 2. **Delay-based bitrate** (small): measure send time per frame; slow down when it grows, before the queue builds.
-3. **UDP mode for Wi-Fi** (large, 2–3 days): packets with sequence numbers, NACK for lost pieces of the current
-   frame only, skip frames that are too late, keep TCP for the USB cable. This is what makes calls feel smooth.
+3. **UDP mode for Wi-Fi — built 2026-11-23 (CamOS 0.5.0 test).** `pc-server-rs/src/camera/udp.rs` (format,
+   reassembly, NACK/give-up rules, 6 tests) + `camos-android/.../UdpLink.kt`. Settings → Video quality → "Smooth
+   Wi-Fi mode" (on by default). The USB cable stays on TCP; a Wi-Fi that blocks UDP (no report within 3 s) falls back
+   to TCP by itself. Fake-phone results on the PC: 5 % packets thrown away → all 261 resent, 0 pictures skipped;
+   20 % → 1,139 resent, 1 picture skipped, no decode errors. Each stream's totals go to camos.log
+   ("UDP: N packets, M lost (x %), K asks to resend, S pictures skipped").
 4. **Intra refresh** where supported, so a lost packet doesn't need a full key frame.
 
 ## Sources

@@ -49,11 +49,13 @@ type Settings = {
   cameraId: string; front: boolean; zoom: number; focus: "auto" | "manual"; focusDistance: number; stabilize: boolean;
   ev: number; wb: string; antiband: string; nr: string; torch: boolean; mirror: boolean;
   lowLight: boolean; look: string; smooth: number; autoDim: boolean;
+  /** Smooth Wi-Fi mode: video over UDP like a video call (pc-server-rs/src/camera/udp.rs). The USB cable ignores it. */
+  udp: boolean;
 };
 const DEFAULTS: Settings = {
   quality: 720, fps: 30, bitrate: 0, shape: "auto", cameraId: "", front: false, zoom: 1, focus: "auto", focusDistance: 0,
   stabilize: true, ev: 0, wb: "auto", antiband: "auto", nr: "normal", torch: false, mirror: true,
-  lowLight: false, look: "none", smooth: 0, autoDim: false,
+  lowLight: false, look: "none", smooth: 0, autoDim: false, udp: true,
 };
 const HD_MINUTES = 45;
 
@@ -647,6 +649,8 @@ function TabSettings(p: DashProps) {
         <CamRange label="Bitrate" min={1000} max={20000} step={500} value={s.bitrate || 6000} shown={`${((s.bitrate || 6000) / 1000).toFixed(1)} Mbit/s`}
           detail="Higher is sharper but needs stronger Wi-Fi. If the picture stutters, lower it." onChange={(v) => set({ bitrate: v })} testId="s-bitrate" />
       </Collapse>
+      <CalmSwitch label="Smooth Wi-Fi mode" detail="Sends video the way video calls do, so a weak moment in the Wi-Fi doesn't freeze the picture. The USB cable doesn't need it."
+        on={s.udp} onChange={(v) => set({ udp: v })} />
       <div className="calm-setting-detail"><h3>Picture shape</h3>
         <ChoiceBar label="Picture shape" value={s.shape} onChoose={(v) => set({ shape: v })}
           choices={[{ value: "auto", label: "Auto", testId: "s-shape-auto" }, { value: "landscape", label: "Wide", testId: "s-shape-wide" }, { value: "portrait", label: "Tall", testId: "s-shape-tall" }]} />

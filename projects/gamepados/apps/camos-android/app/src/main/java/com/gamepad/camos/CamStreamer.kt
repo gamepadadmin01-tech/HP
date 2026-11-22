@@ -60,6 +60,7 @@ data class CamSettings(
     val watermark: Boolean = true,
     val torch: Boolean = false,
     val mirror: Boolean = true,
+    val udp: Boolean = true,         // smooth Wi-Fi mode (UdpLink.kt); the USB cable always uses TCP
 ) {
     companion object {
         fun from(json: String): CamSettings = try {
@@ -73,6 +74,7 @@ data class CamSettings(
                 nr = o.optString("nr", "normal"), lowLight = o.optBoolean("lowLight", false), look = o.optString("look", "none"),
                 smooth = o.optDouble("smooth", 0.0).toFloat(), watermark = o.optBoolean("watermark", true),
                 torch = o.optBoolean("torch", false), mirror = o.optBoolean("mirror", true),
+                udp = o.optBoolean("udp", true),
             )
         } catch (_: Exception) { CamSettings() }
 
@@ -98,6 +100,8 @@ class CamStreamer(
         const val PORT = 7780
         /** A stream message that carries this phone's state for the PC window, not video (proto::FLAG_STATE). */
         const val FLAG_STATE = 8
+        /** Smooth Wi-Fi mode: an empty "still here" message on TCP once a second (proto::FLAG_PING). */
+        const val FLAG_PING = 16
         private const val TAG = "CamOS"
 
         /** HMAC-SHA256(key, nonce ‖ fixed[0..12] ‖ name), first 16 bytes. Mirrors proto::tag (Rust). */
@@ -114,8 +118,8 @@ class CamStreamer(
             return mac.doFinal().copyOf(16)
         }
 
-        /** flags bit 0 = "check only" (is this PC ready? no video follows). */
-        fun buildHello(key: String, nonce: ByteArray, w: Int, h: Int, fps: Int, deviceName: String, checkOnly: Boolean = false): ByteArray {
+        /** flags bit 0 = "check only" (is this PC ready? no video follows); bit 1 = "I can send the video over UDP". */
+        fun buildHello(key: String, nonce: ByteArray, w: Int, h: Int, fps: Int, deviceName: String, checkOnly: Boolean = false, udp: Boolean = false): ByteArray {
             val name = deviceName.toByteArray(Charsets.UTF_8).let { if (it.size > 40) it.copyOf(40) else it }
             val fixed = ByteArray(28)
             "CAMC".toByteArray(Charsets.US_ASCII).copyInto(fixed, 0)
@@ -123,7 +127,7 @@ class CamStreamer(
             fixed[5] = (w shr 8).toByte(); fixed[6] = w.toByte()
             fixed[7] = (h shr 8).toByte(); fixed[8] = h.toByte()
             fixed[9] = fps.toByte()
-            fixed[10] = if (checkOnly) 1 else 0
+            fixed[10] = ((if (checkOnly) 1 else 0) or (if (udp) 2 else 0)).toByte()
             fixed[11] = name.size.toByte()
             tag(key, nonce, fixed, name).copyInto(fixed, 12)
             return fixed + name
@@ -193,6 +197,7 @@ class CamStreamer(
         lastKeyAsk = 0L
         waitForKey = true
         linked = false
+        udpBlocked = false
         queue.clear()
         socket = null
         onState("connecting", "Connecting to $ip…", 0, 0)
@@ -202,6 +207,7 @@ class CamStreamer(
     fun stop() {
         if (!running.getAndSet(false)) return
         linked = false
+        closeUdp()
         try { socket?.close() } catch (_: Exception) {}
         closeAll()
         onState("stopped", "", 0, 0)
@@ -385,8 +391,15 @@ class CamStreamer(
                 return   // returns normally only after stop()
             } catch (e: Exception) {
                 linked = false
+                closeUdp()
                 try { socket?.close() } catch (_: Exception) {}
                 if (!running.get()) return
+                if (e is UdpBlockedException) {
+                    // Not a drop: switch to the normal (TCP) way at once, no 30-second countdown.
+                    onState("connecting", "This Wi-Fi blocks smooth mode. Switching to normal mode…", 0, 0)
+                    downSince = 0L
+                    continue
+                }
                 Log.w(TAG, "link lost (${e.javaClass.simpleName}: ${e.message})")
                 if (!wasLive) {
                     // Never got going: a busy answer is usually our own "is my PC ready?" check still closing on the
@@ -429,16 +442,55 @@ class CamStreamer(
      * reached from there.
      */
     private fun bindToPcNetwork(s: Socket, ip: String) {
-        try {
-            val target = java.net.InetAddress.getByName(ip)
-            if (target.isLoopbackAddress) return   // USB debugging (adb tunnel)
-            val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
-            @Suppress("DEPRECATION")
-            for (n in cm.allNetworks) {
-                val lp = cm.getLinkProperties(n) ?: continue
-                if (lp.linkAddresses.any { sameSubnet(it.address, it.prefixLength, target) }) { n.bindSocket(s); return }
-            }
-        } catch (e: Exception) { Log.w(TAG, "bind to PC network: ${e.message}") }
+        try { pcNetwork(ip)?.bindSocket(s) } catch (e: Exception) { Log.w(TAG, "bind to PC network: ${e.message}") }
+    }
+
+    private fun bindToPcNetwork(s: java.net.DatagramSocket, ip: String) {
+        try { pcNetwork(ip)?.bindSocket(s) } catch (e: Exception) { Log.w(TAG, "bind UDP to PC network: ${e.message}") }
+    }
+
+    /** The network (Wi-Fi, USB tether) whose address range holds the PC's address; null for 127.0.0.1 (adb). */
+    private fun pcNetwork(ip: String): android.net.Network? {
+        val target = java.net.InetAddress.getByName(ip)
+        if (target.isLoopbackAddress) return null   // USB debugging (adb tunnel)
+        val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
+        @Suppress("DEPRECATION")
+        for (n in cm.allNetworks) {
+            val lp = cm.getLinkProperties(n) ?: continue
+            if (lp.linkAddresses.any { sameSubnet(it.address, it.prefixLength, target) }) return n
+        }
+        return null
+    }
+
+    // ── Smooth Wi-Fi mode (UdpLink.kt) ──
+    /** The video's UDP path for the current connection, or null (TCP: the USB cable, an older PC, or blocked). */
+    @Volatile private var udp: UdpLink? = null
+    /** This Wi-Fi didn't carry our UDP packets: stay on TCP until the next Start. */
+    @Volatile private var udpBlocked = false
+    private var udpFrame = 0
+    @Volatile private var lastDown = 0L
+
+    private fun closeUdp() {
+        udp?.close()
+        udp = null
+    }
+
+    /**
+     * Quality from the PC's twice-a-second report (what video calls do): clear losses step the bitrate down at once
+     * (at most once a second, the report needs time to show the effect); two clean seconds step it back up 15 %.
+     * Light, random loss is left to the resends and doesn't lower the quality.
+     */
+    private fun onUdpReport(received: Int, lost: Int, skipped: Int) {
+        val total = received + lost
+        if (total <= 0) return
+        val ratio = lost.toDouble() / total
+        val now = android.os.SystemClock.elapsedRealtime()
+        when {
+            skipped > 0 || ratio > 0.10 -> if (now - lastDown >= 1000) { setBitrate(curBitrate * 7 / 10); lastDown = now; calmSince = now }
+            ratio > 0.03 -> if (now - lastDown >= 1000) { setBitrate(curBitrate * 85 / 100); lastDown = now; calmSince = now }
+            ratio < 0.01 -> if (now - calmSince >= 2000) { setBitrate(curBitrate * 115 / 100); calmSince = now }
+            else -> calmSince = now
+        }
     }
 
     private fun sameSubnet(a: java.net.InetAddress, prefix: Int, b: java.net.InetAddress): Boolean {
@@ -476,7 +528,10 @@ class CamStreamer(
             input.readFully(hello, 4, 17)
             if (String(hello, 0, 4, Charsets.US_ASCII) != "CAMS") throw FatalLinkException("This is not Gamepad Server")
             if (hello[4].toInt() != 1) throw FatalLinkException("Please update Gamepad Server on your PC")
-            outStream.write(buildHello(key, hello.copyOfRange(5, 21), out.width, out.height, settings.fps, deviceName()))
+            // Ask for smooth Wi-Fi mode unless it is switched off, already failed on this Wi-Fi, or this is the adb
+            // cable (127.0.0.1 can't carry UDP). The PC says no for a USB-tether cable too.
+            val wantUdp = settings.udp && !udpBlocked && !java.net.InetAddress.getByName(ip).isLoopbackAddress
+            outStream.write(buildHello(key, hello.copyOfRange(5, 21), out.width, out.height, settings.fps, deviceName(), udp = wantUdp))
             outStream.flush()
             val ack = ByteArray(5)
             input.readFully(ack)
@@ -486,6 +541,25 @@ class CamStreamer(
                 2 -> { s.close(); throw BusyException() }
                 else -> throw FatalLinkException("Gamepad Server refused the connection.")
             }
+            closeUdp()
+            if (wantUdp) {
+                val g = ByteArray(15)
+                input.readFully(g)
+                if (String(g, 0, 4, Charsets.US_ASCII) != "CAMU") throw FatalLinkException("Please update Gamepad Server on your PC")
+                if (g[4].toInt() == 1) {
+                    val port = ((g[5].toInt() and 0xff) shl 8) or (g[6].toInt() and 0xff)
+                    val ds = java.net.DatagramSocket()
+                    bindToPcNetwork(ds, ip)
+                    ds.sendBufferSize = 1 shl 20
+                    ds.connect(InetSocketAddress(ip, port))
+                    udp = UdpLink(ds, g.copyOfRange(7, 15)) { r, l, sk -> onUdpReport(r, l, sk) }
+                    udpFrame = 0
+                    Log.i(TAG, "smooth Wi-Fi mode: video over UDP to port $port")
+                }
+            }
+            val link = udp
+            val linkSince = android.os.SystemClock.elapsedRealtime()
+            var lastPing = 0L
             s.soTimeout = 0
 
             // The camera starts with the first connection and stays on through reconnects.
@@ -544,15 +618,36 @@ class CamStreamer(
             while (running.get()) {
                 if (s.isClosed) throw java.net.SocketException("connection closed")
                 if (System.nanoTime() - lastAdapt >= 500_000_000L) { adaptBitrate(); lastAdapt = System.nanoTime() }
-                val p = queue.poll(500, TimeUnit.MILLISECONDS) ?: continue
-                writeSince = android.os.SystemClock.elapsedRealtime()
-                try {
-                    outStream.writeInt(p.data.size)
-                    outStream.writeLong(p.ptsUs)
-                    outStream.writeByte(p.flags)
-                    outStream.write(p.data)
-                    if (queue.isEmpty()) outStream.flush()
-                } finally { writeSince = 0L }
+                if (link != null) {
+                    val t = android.os.SystemClock.elapsedRealtime()
+                    // No report from the PC within 3 s: this Wi-Fi doesn't carry our UDP packets (some campus and
+                    // office networks block it). Go back to TCP for the rest of this stream.
+                    if (link.lastReportAt == 0L && t - linkSince > 3000) { udpBlocked = true; throw UdpBlockedException() }
+                    if (link.lastReportAt != 0L && t - link.lastReportAt > 6000) throw java.net.SocketException("no reports over UDP for 6 s")
+                    // "Still here" on TCP once a second: in UDP mode no video travels on the TCP connection.
+                    if (t - lastPing >= 1000) {
+                        lastPing = t
+                        writeSince = t
+                        try {
+                            outStream.writeInt(1); outStream.writeLong(0); outStream.writeByte(FLAG_PING); outStream.writeByte(0)
+                            outStream.flush()
+                        } finally { writeSince = 0L }
+                    }
+                }
+                val p = queue.poll(if (link != null) 250 else 500, TimeUnit.MILLISECONDS) ?: continue
+                if (link != null && p.flags and FLAG_STATE == 0) {
+                    // Video over UDP; pieces are spread out at 4× the current bitrate.
+                    link.sendFrame(udpFrame++, p.flags and 2 != 0, p.ptsUs, p.data, curBitrate * 4)
+                } else {
+                    writeSince = android.os.SystemClock.elapsedRealtime()
+                    try {
+                        outStream.writeInt(p.data.size)
+                        outStream.writeLong(p.ptsUs)
+                        outStream.writeByte(p.flags)
+                        outStream.write(p.data)
+                        if (queue.isEmpty()) outStream.flush()
+                    } finally { writeSince = 0L }
+                }
                 if (p.flags and FLAG_STATE == 0) sentFrames++
                 sentBytes += p.data.size + 13
                 val now = System.nanoTime()
@@ -568,9 +663,12 @@ class CamStreamer(
     private val OLD_SERVER = "Your Gamepad Server is too old for CamOS. Install the latest one."
     private val NO_ANSWER = "No answer. Open the latest Gamepad Server, use the same Wi-Fi, and turn off any VPN on the PC."
 
+    private class UdpBlockedException : java.net.SocketException("this Wi-Fi doesn't carry UDP")
+
     private fun fail(message: String) {
         if (!running.getAndSet(false)) return
         linked = false
+        closeUdp()
         try { socket?.close() } catch (_: Exception) {}
         closeAll()
         onState("error", message, 0, 0)
@@ -791,6 +889,12 @@ class CamStreamer(
     private fun adaptBitrate() {
         val now = android.os.SystemClock.elapsedRealtime()
         val backlog = queue.size
+        if (udp != null) {
+            // Smooth Wi-Fi mode: the PC's loss reports steer the quality (onUdpReport). Only a real pile-up here
+            // (the phone itself can't send fast enough) steps it down.
+            if (backlog >= 12) { setBitrate(curBitrate * 3 / 4); calmSince = now }
+            return
+        }
         when {
             backlog >= 6 -> { setBitrate(curBitrate * 3 / 4); calmSince = now }
             backlog <= 1 -> if (now - calmSince >= 2000) { setBitrate(curBitrate * 115 / 100); calmSince = now }

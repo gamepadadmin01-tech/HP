@@ -5,7 +5,13 @@
 //! phone  → server  "CAMC" ver:u8 w:u16 h:u16 fps:u8 flags:u8 name_len:u8 tag:[16] name (28 + name_len)
 //!                  flags bit 0 = "check only": prove the key, get the answer, stream nothing (the phone's
 //!                  "is my PC ready?" check right after pairing)
+//!                  flags bit 1 = "I can send the video over UDP" (smooth Wi-Fi mode, udp.rs)
 //! server → phone   "CAMA" status:u8                                         (5 bytes)
+//! server → phone   only if the phone set bit 1 and status is OK:
+//!                  "CAMU" mode:u8 port:u16 token:[8]                       (15 bytes)
+//!                  mode 1 = send the video as UDP packets to `port`, each carrying `token`; mode 0 = stay on TCP
+//!                  (the USB cable). In UDP mode the phone sends a FLAG_PING frame on TCP every second so the PC
+//!                  knows the connection is alive; settings, requests and key-frame asks stay on TCP.
 //! phone  → server  repeated: len:u32 pts_us:u64 flags:u8 payload[len]       (H.264 Annex-B)
 //! server → phone   'K' at any time = "please send a key frame"
 //! server → phone   'C' len:u16 json[len]   a request from the PC window ("zoom 2x", "flashlight on")
@@ -47,6 +53,9 @@ pub const FLAG_CONFIG: u8 = 1;
 pub const FLAG_KEY: u8 = 2;
 /// The frame carries the phone's state (JSON), not video.
 pub const FLAG_STATE: u8 = 8;
+/// UDP mode: an empty "still here" frame on TCP, once a second.
+pub const FLAG_PING: u8 = 16;
+pub const UDP_GRANT_LEN: usize = 15;
 /// Largest state or request message accepted (they are a few hundred bytes).
 pub const MAX_STATE: usize = 16 * 1024;
 /// Server → phone request marker.
@@ -71,6 +80,18 @@ pub fn server_ack(status: u8) -> [u8; 5] {
     [b'C', b'A', b'M', b'A', status]
 }
 
+/// The answer to "I can do UDP": `Some((port, token))` = send the video there; `None` = stay on TCP.
+pub fn udp_grant(grant: Option<(u16, [u8; 8])>) -> [u8; UDP_GRANT_LEN] {
+    let mut b = [0u8; UDP_GRANT_LEN];
+    b[0..4].copy_from_slice(b"CAMU");
+    if let Some((port, token)) = grant {
+        b[4] = 1;
+        b[5..7].copy_from_slice(&port.to_be_bytes());
+        b[7..15].copy_from_slice(&token);
+    }
+    b
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct ClientHello {
     pub width: u16,
@@ -79,6 +100,8 @@ pub struct ClientHello {
     pub name: String,
     /// The phone only wants to know whether this PC is ready (flags bit 0); no video follows.
     pub check: bool,
+    /// The phone can send the video over UDP (flags bit 1).
+    pub udp: bool,
 }
 
 /// The fingerprint the phone must send. `fixed` is the 28-byte header with the
@@ -203,7 +226,7 @@ pub fn verify_client_hello(
         return Err(STATUS_BAD_REQUEST);
     }
     let name: String = String::from_utf8_lossy(name).chars().filter(|c| !c.is_control()).take(40).collect();
-    Ok(ClientHello { width, height, fps, name, check: fixed[10] & 1 != 0 })
+    Ok(ClientHello { width, height, fps, name, check: fixed[10] & 1 != 0, udp: fixed[10] & 2 != 0 })
 }
 
 #[derive(Debug, PartialEq)]
@@ -244,7 +267,7 @@ pub fn build_client_hello(key: &str, nonce: &[u8; 16], h: &ClientHello) -> Vec<u
     fixed[5..7].copy_from_slice(&h.width.to_be_bytes());
     fixed[7..9].copy_from_slice(&h.height.to_be_bytes());
     fixed[9] = h.fps;
-    fixed[10] = h.check as u8;
+    fixed[10] = h.check as u8 | (h.udp as u8) << 1;
     fixed[11] = name.len() as u8;
     let t = tag(key, nonce, &fixed, name);
     fixed[12..28].copy_from_slice(&t);
@@ -258,7 +281,7 @@ mod tests {
     use super::*;
 
     fn hello() -> ClientHello {
-        ClientHello { width: 1280, height: 720, fps: 30, name: "Redmi Note 12".into(), check: false }
+        ClientHello { width: 1280, height: 720, fps: 30, name: "Redmi Note 12".into(), check: false, udp: false }
     }
 
     fn split(v: &[u8]) -> ([u8; CLIENT_HELLO_FIXED], Vec<u8>) {

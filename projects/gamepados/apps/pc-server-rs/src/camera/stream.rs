@@ -13,7 +13,7 @@ use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
-use super::{CAMERA_PORT, decode::H264Decoder, preview, proto, remote, vcam};
+use super::{CAMERA_PORT, decode::H264Decoder, preview, proto, remote, udp, vcam};
 
 /// What the server window shows on the "Phone camera" card.
 #[derive(Clone, Debug, Default)]
@@ -215,14 +215,20 @@ fn serve(c: &mut TcpStream, key: &str) -> Result<(), String> {
         println!("camos: {} checked this PC (ready)", hello.name);
         return Ok(());
     }
+    // Smooth Wi-Fi mode (udp.rs): the phone asked, and it is not on the USB cable (the cable stays on TCP).
+    let udp = if hello.udp && !cable { open_udp() } else { None };
+    if hello.udp {
+        let grant = udp.as_ref().and_then(|(s, t)| s.local_addr().ok().map(|a| (a.port(), *t)));
+        c.write_all(&proto::udp_grant(grant)).map_err(|e| e.to_string())?;
+    }
     log(&format!("{} ({}) streaming {}x{} @{}{}", hello.name, c.peer_addr().map(|a| a.ip().to_string()).unwrap_or_default(),
-        hello.width, hello.height, hello.fps, if cable { " over the USB cable" } else { "" }));
+        hello.width, hello.height, hello.fps,
+        if cable { " over the USB cable" } else if udp.is_some() { " over Wi-Fi (UDP)" } else { " over Wi-Fi (TCP)" }));
     if let Ok(mut s) = STATUS.lock() {
         *s = CamStatus { live: true, device: hello.name.clone(), width: hello.width as u32, height: hello.height as u32, fps: 0.0, last_error: String::new() };
     }
 
     // 3. Frames.
-    let mut dec = H264Decoder::new().map_err(|e| format!("H.264 decoder: {e}"))?;
     // From here on everything sent to the phone goes through remote::write_raw (one lock), because the window can
     // send requests on the same socket at any moment.
     remote::attach(c);
@@ -230,16 +236,101 @@ fn serve(c: &mut TcpStream, key: &str) -> Result<(), String> {
         *g = Some((peer.ip(), handle));
     }
     remote::write_raw(&[proto::REQUEST_KEYFRAME]);
-    // Key-frame asks after broken frames are limited to one a second: asking on every broken frame made the phone
-    // send full pictures back to back on weak Wi-Fi, which is what kept 1080p from ever recovering.
-    let mut last_key_ask = Instant::now();
     let (w, h) = (hello.width as u32, hello.height as u32);
+    let started = Instant::now();
+    let Some((sock, token)) = udp else {
+        let mut dec = H264Decoder::new().map_err(|e| format!("H.264 decoder: {e}"))?;
+        return control_loop(c, started, Some((&mut dec, w, h)));
+    };
+    // UDP mode: the video arrives on its own thread; this one keeps the TCP connection (settings, "still here"
+    // pings) and notices when the phone leaves.
+    let phone = c.peer_addr().map_err(|e| e.to_string())?.ip();
+    let tcp = c.try_clone().map_err(|e| e.to_string())?;
+    let stop = std::sync::Arc::new(AtomicBool::new(false));
+    let stop2 = stop.clone();
+    let video = std::thread::Builder::new()
+        .name("camos-udp".into())
+        .spawn(move || udp_loop(sock, token, phone, w, h, &stop2, tcp))
+        .map_err(|e| e.to_string())?;
+    let r = control_loop(c, started, None);
+    stop.store(true, Ordering::SeqCst);
+    let v = video.join().unwrap_or_else(|_| Err("video thread stopped unexpectedly".into()));
+    // A video-side reason (UDP silent, decoder failing) explains the end better than "connection closed".
+    v.and(r)
+}
+
+/// A UDP socket for one phone's video, and the token its packets must carry.
+fn open_udp() -> Option<(std::net::UdpSocket, [u8; 8])> {
+    let sock = std::net::UdpSocket::bind(("0.0.0.0", 0)).map_err(|e| log(&format!("UDP mode off: {e}"))).ok()?;
+    crate::winperf::tune_socket(&sock); // 1 MB buffers: a 1080p key frame arrives as ~300 packets at once
+    sock.set_read_timeout(Some(Duration::from_millis(10))).ok()?;
+    let mut token = [0u8; 8];
+    crate::pairing::os_random(&mut token).ok()?;
+    Some((sock, token))
+}
+
+/// Frames delivered: to the window preview and to "CamOS Camera", with the frame rate the window shows.
+struct Sink {
+    frames: u32,
+    window: Instant,
+    errors: u32,
+    last_key_ask: Instant,
+}
+
+impl Sink {
+    fn new() -> Self {
+        Sink { frames: 0, window: Instant::now(), errors: 0, last_key_ask: Instant::now() }
+    }
+
+    fn decode(&mut self, dec: &mut H264Decoder, data: &[u8], pts_us: u64, w: u32, h: u32) -> Result<(), String> {
+        let frames = &mut self.frames;
+        let mut on_frame = |fw: u32, fh: u32, nv12: Vec<u8>| {
+            *frames += 1;
+            preview::offer(fw, fh, &nv12);
+            vcam::publish(fw, fh, nv12);
+        };
+        if let Err(e) = dec.decode(data, pts_us, w, h, &mut on_frame) {
+            self.errors += 1;
+            eprintln!("camos: decode error {e} (#{})", self.errors);
+            // A broken frame poisons everything until the next key frame.
+            self.ask_key();
+            // Only broken frames IN A ROW end the stream (30 = about a second of nothing usable). The old total
+            // count never reset, so a long call on weak Wi-Fi eventually stopped for no current reason.
+            if self.errors > 30 {
+                return Err(format!("decoder keeps failing: {e}"));
+            }
+        } else {
+            self.errors = 0;
+        }
+        Ok(())
+    }
+
+    /// Key-frame asks are limited to one a second: asking on every broken frame made the phone send full pictures
+    /// back to back on weak Wi-Fi, which is what kept 1080p from ever recovering.
+    fn ask_key(&mut self) {
+        if self.last_key_ask.elapsed() >= Duration::from_secs(1) {
+            remote::write_raw(&[proto::REQUEST_KEYFRAME]);
+            self.last_key_ask = Instant::now();
+        }
+    }
+
+    fn tick(&mut self) {
+        if self.window.elapsed() >= Duration::from_secs(1) {
+            let fps = self.frames as f32 / self.window.elapsed().as_secs_f32();
+            if let Ok(mut s) = STATUS.lock() {
+                s.fps = fps;
+            }
+            self.frames = 0;
+            self.window = Instant::now();
+        }
+    }
+}
+
+/// The TCP side: video frames (TCP mode, `video` = decoder + size), the phone's state, "still here" pings.
+fn control_loop(c: &mut TcpStream, started: Instant, mut video: Option<(&mut H264Decoder, u32, u32)>) -> Result<(), String> {
+    let mut sink = Sink::new();
     let mut hdr = [0u8; proto::FRAME_HEADER_LEN];
     let mut payload = Vec::new();
-    let mut frames = 0u32;
-    let mut window = Instant::now();
-    let mut errors = 0u32;
-    let started = Instant::now();
     loop {
         match c.read_exact(&mut hdr) {
             Ok(()) => {}
@@ -254,7 +345,7 @@ fn serve(c: &mut TcpStream, key: &str) -> Result<(), String> {
             Err(e) => return Err(format!("stream: {e}")),
         }
         let fh = proto::parse_frame_header(&hdr)?;
-        if fh.flags & proto::FLAG_STATE != 0 && fh.len > proto::MAX_STATE {
+        if fh.flags & (proto::FLAG_STATE | proto::FLAG_PING) != 0 && fh.len > proto::MAX_STATE {
             return Err(format!("state message too large ({} bytes)", fh.len));
         }
         payload.resize(fh.len, 0);
@@ -264,34 +355,100 @@ fn serve(c: &mut TcpStream, key: &str) -> Result<(), String> {
             remote::on_state(&payload);
             continue;
         }
-        let mut on_frame = |fw: u32, fh2: u32, nv12: Vec<u8>| {
-            frames += 1;
-            preview::offer(fw, fh2, &nv12);
-            vcam::publish(fw, fh2, nv12);
-        };
-        if let Err(e) = dec.decode(&payload, fh.pts_us, w, h, &mut on_frame) {
-            errors += 1;
-            eprintln!("camos: decode error {e} (#{errors})");
-            // A broken frame poisons everything until the next key frame.
-            if last_key_ask.elapsed() >= Duration::from_secs(1) {
-                remote::write_raw(&[proto::REQUEST_KEYFRAME]);
-                last_key_ask = Instant::now();
-            }
-            // Only broken frames IN A ROW end the stream (30 = about a second of nothing usable). The old total
-            // count never reset, so a long call on weak Wi-Fi eventually stopped for no current reason.
-            if errors > 30 {
-                return Err(format!("decoder keeps failing: {e}"));
-            }
-        } else {
-            errors = 0;
+        if fh.flags & proto::FLAG_PING != 0 {
+            continue;
         }
-        if window.elapsed() >= Duration::from_secs(1) {
-            let fps = frames as f32 / window.elapsed().as_secs_f32();
-            if let Ok(mut s) = STATUS.lock() {
-                s.fps = fps;
-            }
-            frames = 0;
-            window = Instant::now();
+        if let Some((dec, w, h)) = video.as_mut() {
+            sink.decode(dec, &payload, fh.pts_us, *w, *h)?;
+            sink.tick();
         }
     }
+}
+
+/// UDP mode: receive the pieces, put pictures back together (udp.rs), ask for missing pieces, report losses to
+/// the phone twice a second, decode. Ends when told to, or after 5 s without video (then it also closes the TCP
+/// connection so the phone reconnects).
+fn udp_loop(sock: std::net::UdpSocket, token: [u8; 8], phone: std::net::IpAddr, w: u32, h: u32, stop: &AtomicBool, tcp: TcpStream) -> Result<(), String> {
+    crate::winperf::raise_receive_thread();
+    let mut dec = H264Decoder::new().map_err(|e| format!("H.264 decoder: {e}"))?;
+    let mut re = udp::Reassembler::new();
+    let mut sink = Sink::new();
+    let mut buf = vec![0u8; 2048];
+    let mut phone_addr: Option<std::net::SocketAddr> = None;
+    let started = Instant::now();
+    let mut last_rx = Instant::now();
+    let mut last_report = Instant::now();
+    let (mut total_rx, mut total_lost, mut total_skipped, mut nacks) = (0u64, 0u64, 0u64, 0u64);
+    let result = loop {
+        if stop.load(Ordering::SeqCst) {
+            break Ok(());
+        }
+        match sock.recv_from(&mut buf) {
+            Ok((n, from)) if from.ip() == phone => {
+                if let Some(chunk) = udp::parse_video(&token, &buf[..n]) {
+                    re.push(&chunk);
+                    last_rx = Instant::now();
+                    phone_addr = Some(from);
+                }
+            }
+            Ok(_) => {} // someone else: ignored
+            Err(e) if matches!(e.kind(), std::io::ErrorKind::TimedOut | std::io::ErrorKind::WouldBlock) => {}
+            // Windows reports "the phone's port is closed" (an ICMP answer to our NACK/report) as an error on
+            // the NEXT receive; that is not fatal, the phone may simply be reconnecting.
+            Err(e) if e.kind() == std::io::ErrorKind::ConnectionReset => {}
+            Err(e) => break Err(format!("udp: {e}")),
+        }
+        let now = Instant::now();
+        let mut failed = None;
+        for ev in re.poll(now) {
+            match ev {
+                udp::Event::Frame { data, pts_us, .. } => {
+                    if let Err(e) = sink.decode(&mut dec, &data, pts_us, w, h) {
+                        failed = Some(e);
+                        break;
+                    }
+                }
+                udp::Event::Nack { frame, missing } => {
+                    if let Some(a) = phone_addr {
+                        nacks += 1;
+                        if missing.is_empty() {
+                            let _ = sock.send_to(&udp::build_nack(&token, frame, &[]), a);
+                        }
+                        for part in missing.chunks(udp::NACK_MAX) {
+                            let _ = sock.send_to(&udp::build_nack(&token, frame, part), a);
+                        }
+                    }
+                }
+                udp::Event::NeedKey => sink.ask_key(),
+            }
+        }
+        if let Some(e) = failed {
+            break Err(e);
+        }
+        if now.duration_since(last_report) >= Duration::from_millis(500) {
+            last_report = now;
+            let r = re.take_report();
+            total_rx += r.received as u64;
+            total_lost += r.lost as u64;
+            total_skipped += r.skipped as u64;
+            if let Some(a) = phone_addr {
+                let _ = sock.send_to(&udp::build_report(&token, &r), a);
+            }
+        }
+        if now.duration_since(last_rx) > Duration::from_secs(5) {
+            let _ = tcp.shutdown(std::net::Shutdown::Both);
+            break Err(if phone_addr.is_none() {
+                "no video arrived over UDP (Wi-Fi may block it; the phone falls back to TCP)".into()
+            } else {
+                format!("no video over UDP for 5 s (Wi-Fi stalled) after {:.0} s", started.elapsed().as_secs_f32())
+            });
+        }
+        sink.tick();
+    };
+    let sent = total_rx + total_lost;
+    log(&format!(
+        "UDP: {total_rx} packets, {total_lost} lost ({:.1} %), {nacks} asks to resend, {total_skipped} pictures skipped",
+        if sent > 0 { total_lost as f64 * 100.0 / sent as f64 } else { 0.0 }
+    ));
+    result
 }
