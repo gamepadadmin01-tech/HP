@@ -441,6 +441,8 @@ export type SettingsPage = "menu" | "premium" | "video" | "camera" | "light" | "
 /** Settings = a short list of categories (GamepadOS's chevron rows); each opens its own page (owner, 2026-11-21:
  *  "divide the settings based on the category and type, so that users can handle easily"). */
 function TabSettings(p: DashProps) {
+  const firstPaint = useRef(true);
+  useEffect(() => { firstPaint.current = false; }, []);
   const { s, set, lens } = p;
   const version = (() => { try { return bridge()?.version() ?? "browser preview"; } catch { return ""; } })();
   const fpsChoices = [15, 24, 30, 60] as const;
@@ -569,10 +571,12 @@ function TabSettings(p: DashProps) {
   ];
   const open = pages.find((x) => x.id === p.page);
 
+  // Same feel as the Camera tab (calm-swap-in, 0.22 s): the new page shows at once and glides in; nothing waits
+  // for the old page to leave. No glide on the very first paint (the tab's own fade covers that).
+  const anim = firstPaint.current ? "" : open ? "camos-page-in" : "camos-menu-in";
   return <div className="calm-settings camos-settings">
-    <AnimatePresence mode="wait" initial={false}>
       {!open
-        ? <motion.div key="menu" initial={{ opacity: 0, x: -24 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -24 }} transition={SPRING}>
+        ? <div key="menu" className={anim}>
             <h1 className="sr-only">Settings</h1>
             <div className="calm-settings-panel camos-menu">
               {pages.map(({ id, title, Icon, tone, summary, badge }) =>
@@ -582,15 +586,14 @@ function TabSettings(p: DashProps) {
                   <span className="calm-help-chevron" aria-hidden="true"><ChevronRight size={18} /></span>
                 </button>)}
             </div>
-          </motion.div>
-        : <motion.div key={open.id} initial={{ opacity: 0, x: 24 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 24 }} transition={SPRING}>
+          </div>
+        : <div key={open.id} className={anim}>
             <div className="camos-page-head">
               <button className="calm-icon-button" onClick={() => p.setPage("menu")} aria-label="Back to settings" data-testid="settings-back"><ArrowLeft size={20} aria-hidden="true" /></button>
               <h1><open.Icon size={18} aria-hidden="true" />{open.title}{open.badge && premiumBadge}</h1>
             </div>
             <section className="calm-settings-section" data-tone={open.tone}>{open.body()}</section>
-          </motion.div>}
-    </AnimatePresence>
+          </div>}
   </div>;
 }
 

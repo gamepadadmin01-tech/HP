@@ -51,7 +51,11 @@ import kotlin.math.sin
  */
 class GlPipeline(private val displayRotation: () -> Int, private val onError: (String) -> Unit) {
 
-    companion object { private const val TAG = "CamOS-GL" }
+    companion object {
+        private const val TAG = "CamOS-GL"
+        /** The free-plan mark is deliberately faint (owner: "as transparent as possible"). */
+        private const val MARK_ALPHA = 0.28f
+    }
 
     // ── what the UI can change at any time (read on the GL thread every frame) ──
     @Volatile var sensorOrientation = 90   // only for the log; the matrix is what counts
@@ -260,12 +264,12 @@ class GlPipeline(private val displayRotation: () -> Int, private val onError: (S
         drawQuad(camProg)
     }
 
-    /** The CamOS mark: bottom-right corner of the picture rectangle (clip coordinates), ~5.5 % of its height.
+    /** The CamOS mark: bottom-right corner of the picture rectangle (clip coordinates), ~4.5 % of its height, faint.
      *  The rectangle always has the output's shape, so its width in pixels is pixelsHigh × outW / outH. */
     private fun drawMark(x0: Float, y0: Float, x1: Float, y1: Float, pixelsHigh: Int) {
         val rectPxH = max(1f, pixelsHigh.toFloat())
         val rectPxW = rectPxH * outW / outH
-        val markPxH = rectPxH * 0.055f
+        val markPxH = rectPxH * 0.045f
         val markPxW = markPxH * wmW / wmH
         val marginPx = markPxH * 0.6f
         val right = x1 - (x1 - x0) * marginPx / rectPxW
@@ -274,7 +278,7 @@ class GlPipeline(private val displayRotation: () -> Int, private val onError: (S
         val top = bottom + (y1 - y0) * markPxH / rectPxH
         GLES20.glEnable(GLES20.GL_BLEND)
         GLES20.glBlendFunc(GLES20.GL_ONE, GLES20.GL_ONE_MINUS_SRC_ALPHA)
-        blit(wmTex, left, bottom, right, top, flipX = false, flipY = true, alpha = 0.85f)
+        blit(wmTex, left, bottom, right, top, flipX = false, flipY = true, alpha = MARK_ALPHA)
         GLES20.glDisable(GLES20.GL_BLEND)
     }
 
@@ -356,7 +360,7 @@ class GlPipeline(private val displayRotation: () -> Int, private val onError: (S
             color = Color.WHITE
             textSize = textPx
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-            setShadowLayer(6f, 0f, 2f, Color.argb(160, 0, 0, 0))
+            setShadowLayer(4f, 0f, 1f, Color.argb(90, 0, 0, 0))   // just enough to read on a white wall
         }
         val label = "CamOS"
         val w = (p.measureText(label) + 24).toInt()
