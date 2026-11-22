@@ -1,5 +1,5 @@
 //! A pretend CamOS phone: streams a raw H.264 file (Annex-B) to Gamepad Server
-//! over the real CamOS protocol (handshake + frames), looping, at 30 fps.
+//! over the real CamOS protocol (handshake + frames), looping, at 30 fps (or the size/fps given).
 //! Tests the whole PC path — receive, decode, virtual camera — without a phone.
 //!
 //!   cargo run --release --example camos_fake_phone -- <file.h264> [ip] [key] [seconds]
@@ -32,10 +32,14 @@ fn nal_type(n: &[u8]) -> u8 {
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
-    let file = args.get(1).expect("usage: camos_fake_phone <file.h264> [ip] [key] [seconds]");
+    let file = args.get(1).expect("usage: camos_fake_phone <file.h264> [ip] [key] [seconds] [width] [height] [fps]");
     let ip = args.get(2).cloned().unwrap_or_else(|| "127.0.0.1".into());
     let key = args.get(3).cloned().unwrap_or_else(|| pc_server_rs::pairing::load_or_create_key().unwrap());
     let secs: u64 = args.get(4).and_then(|s| s.parse().ok()).unwrap_or(20);
+    let width: u16 = args.get(5).and_then(|s| s.parse().ok()).unwrap_or(1280);
+    let height: u16 = args.get(6).and_then(|s| s.parse().ok()).unwrap_or(720);
+    let fps: u64 = args.get(7).and_then(|s| s.parse().ok()).unwrap_or(30);
+    let frame_us = 1_000_000 / fps;
     let data = std::fs::read(file).expect("read h264");
 
     // Group NAL units into access units: parameter sets/SEI ride with the next picture.
@@ -59,7 +63,7 @@ fn main() {
     s.read_exact(&mut hello).expect("server hello");
     assert_eq!(&hello[0..4], b"CAMS");
     let nonce: [u8; 16] = hello[5..21].try_into().unwrap();
-    let h = proto::ClientHello { width: 1280, height: 720, fps: 30, name: "Fake phone (test)".into(), check: false };
+    let h = proto::ClientHello { width, height, fps: fps as u8, name: "Fake phone (test)".into(), check: false };
     s.write_all(&proto::build_client_hello(&key, &nonce, &h)).unwrap();
     let mut ack = [0u8; 5];
     s.read_exact(&mut ack).unwrap();
@@ -72,11 +76,11 @@ fn main() {
         let (au, key) = &aus[(n as usize) % aus.len()];
         let mut hdr = Vec::with_capacity(13);
         hdr.extend_from_slice(&(au.len() as u32).to_be_bytes());
-        hdr.extend_from_slice(&(n * 33_333).to_be_bytes());
+        hdr.extend_from_slice(&(n * frame_us).to_be_bytes());
         hdr.push(if *key { proto::FLAG_KEY } else { 0 });
         if s.write_all(&hdr).and_then(|_| s.write_all(au)).is_err() { println!("server closed"); return; }
         n += 1;
-        let due = start + Duration::from_micros(n * 33_333);
+        let due = start + Duration::from_micros(n * frame_us);
         if let Some(w) = due.checked_duration_since(Instant::now()) { std::thread::sleep(w); }
     }
     println!("sent {n} frames in {:.1}s", start.elapsed().as_secs_f32());
