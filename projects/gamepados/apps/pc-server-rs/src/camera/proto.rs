@@ -8,7 +8,14 @@
 //! server → phone   "CAMA" status:u8                                         (5 bytes)
 //! phone  → server  repeated: len:u32 pts_us:u64 flags:u8 payload[len]       (H.264 Annex-B)
 //! server → phone   'K' at any time = "please send a key frame"
+//! server → phone   'C' len:u16 json[len]   a request from the PC window ("zoom 2x", "flashlight on")
+//! phone  → server  a frame with flags & FLAG_STATE: payload is the phone's state as JSON (what is set,
+//!                  what this phone/plan allows) instead of video
 //! ```
+//!
+//! **Who decides.** The phone. The PC only *asks*; the phone applies a request only if its own plan allows it
+//! (Premium, the 45-minute HD unlock), then reports back what is really set. The watermark and the HD limit are
+//! applied on the phone before the picture is encoded, so a modified PC server cannot unlock or remove anything.
 //! All integers big-endian (what Java's DataOutputStream writes).
 //!
 //! **Why a challenge instead of sending the key** (GamepadOS input puts the key
@@ -30,6 +37,12 @@ pub const MAX_FRAME: usize = 4 * 1024 * 1024;
 
 pub const FLAG_CONFIG: u8 = 1;
 pub const FLAG_KEY: u8 = 2;
+/// The frame carries the phone's state (JSON), not video.
+pub const FLAG_STATE: u8 = 8;
+/// Largest state or request message accepted (they are a few hundred bytes).
+pub const MAX_STATE: usize = 16 * 1024;
+/// Server → phone request marker.
+pub const REMOTE_COMMAND: u8 = b'C';
 
 pub const STATUS_OK: u8 = 0;
 pub const STATUS_BAD_KEY: u8 = 1;
@@ -118,6 +131,19 @@ pub fn parse_frame_header(b: &[u8; FRAME_HEADER_LEN]) -> Result<FrameHeader, Str
     Ok(FrameHeader { len, pts_us, flags: b[12] })
 }
 
+/// A request from the PC window to the phone: 'C' + length + JSON. None if the JSON is too big to send.
+pub fn remote_command(json: &str) -> Option<Vec<u8>> {
+    let b = json.as_bytes();
+    if b.is_empty() || b.len() > MAX_STATE || b.len() > u16::MAX as usize {
+        return None;
+    }
+    let mut v = Vec::with_capacity(3 + b.len());
+    v.push(REMOTE_COMMAND);
+    v.extend_from_slice(&(b.len() as u16).to_be_bytes());
+    v.extend_from_slice(b);
+    Some(v)
+}
+
 /// Build a client hello — used by tests and by the desktop test sender.
 pub fn build_client_hello(key: &str, nonce: &[u8; 16], h: &ClientHello) -> Vec<u8> {
     let name = h.name.as_bytes();
@@ -148,6 +174,15 @@ mod tests {
         let mut f = [0u8; CLIENT_HELLO_FIXED];
         f.copy_from_slice(&v[..CLIENT_HELLO_FIXED]);
         (f, v[CLIENT_HELLO_FIXED..].to_vec())
+    }
+
+    #[test]
+    fn remote_command_is_framed_and_bounded() {
+        let v = remote_command(r#"{"set":{"zoom":2}}"#).unwrap();
+        assert_eq!(v[0], b'C');
+        assert_eq!(u16::from_be_bytes([v[1], v[2]]) as usize, v.len() - 3);
+        assert!(remote_command("").is_none());
+        assert!(remote_command(&"x".repeat(MAX_STATE + 1)).is_none());
     }
 
     #[test]

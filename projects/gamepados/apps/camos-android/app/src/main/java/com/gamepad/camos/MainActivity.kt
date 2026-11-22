@@ -105,6 +105,8 @@ class MainActivity : AppCompatActivity() {
         }
 
         streamer = CamStreamer(this, ::displayRotationDegrees) { state, message, fps, kbps -> runOnUiThread { onStreamState(state, message, fps, kbps) } }
+        // Requests from the PC window go to the page, which checks them against this phone's plan before applying.
+        streamer.onRemote = { json -> js("window.camosOnRemote && window.camosOnRemote(${JSONObject.quote(json)})") }
 
         if (BuildConfig.DEBUG) WebView.setWebContentsDebuggingEnabled(true)
         val assets = WebViewAssetLoader.Builder().addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(this)).build()
@@ -343,6 +345,8 @@ class MainActivity : AppCompatActivity() {
         /** Every lens and what it can do, for the Settings screen. */
         @JavascriptInterface fun cameras(): String = try { CameraCatalog.describe(this@MainActivity) } catch (_: Exception) { "[]" }
         @JavascriptInterface fun dim(on: Boolean) = runOnUiThread { setDim(on) }
+        /** The page's answer to the PC window: what is set and what this phone's plan allows. */
+        @JavascriptInterface fun sendState(json: String) = streamer.sendState(json)
         @JavascriptInterface fun deviceName(): String = CamStreamer.deviceName()
         @JavascriptInterface fun version(): String = BuildConfig.VERSION_NAME
         /** Test builds can pretend to be Premium or pretend an ad was watched, so every screen can be tried. */

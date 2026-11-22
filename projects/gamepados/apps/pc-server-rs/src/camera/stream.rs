@@ -13,7 +13,7 @@ use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
-use super::{CAMERA_PORT, decode::H264Decoder, preview, proto, vcam};
+use super::{CAMERA_PORT, decode::H264Decoder, preview, proto, remote, vcam};
 
 /// What the server window shows on the "Phone camera" card.
 #[derive(Clone, Debug, Default)]
@@ -74,6 +74,7 @@ pub fn start(key: String) -> Result<(), String> {
                         s.fps = 0.0;
                     }
                     preview::clear();
+                    remote::detach();
                     BUSY.store(false, Ordering::SeqCst);
                 });
             }
@@ -120,7 +121,10 @@ fn serve(c: &mut TcpStream, key: &str) -> Result<(), String> {
 
     // 3. Frames.
     let mut dec = H264Decoder::new().map_err(|e| format!("H.264 decoder: {e}"))?;
-    let _ = c.write_all(&[proto::REQUEST_KEYFRAME]);
+    // From here on everything sent to the phone goes through remote::write_raw (one lock), because the window can
+    // send requests on the same socket at any moment.
+    remote::attach(c);
+    remote::write_raw(&[proto::REQUEST_KEYFRAME]);
     let (w, h) = (hello.width as u32, hello.height as u32);
     let mut hdr = [0u8; proto::FRAME_HEADER_LEN];
     let mut payload = Vec::new();
@@ -135,8 +139,16 @@ fn serve(c: &mut TcpStream, key: &str) -> Result<(), String> {
             Err(e) => return Err(format!("stream: {e}")),
         }
         let fh = proto::parse_frame_header(&hdr)?;
+        if fh.flags & proto::FLAG_STATE != 0 && fh.len > proto::MAX_STATE {
+            return Err(format!("state message too large ({} bytes)", fh.len));
+        }
         payload.resize(fh.len, 0);
         c.read_exact(&mut payload).map_err(|e| format!("frame: {e}"))?;
+        if fh.flags & proto::FLAG_STATE != 0 {
+            // The phone's settings and what its plan allows, for the window's controls. Not video.
+            remote::on_state(&payload);
+            continue;
+        }
         let mut on_frame = |fw: u32, fh2: u32, nv12: Vec<u8>| {
             frames += 1;
             preview::offer(fw, fh2, &nv12);
@@ -146,7 +158,7 @@ fn serve(c: &mut TcpStream, key: &str) -> Result<(), String> {
             errors += 1;
             eprintln!("camos: decode error {e} (#{errors})");
             // A broken frame poisons everything until the next key frame.
-            let _ = c.write_all(&[proto::REQUEST_KEYFRAME]);
+            remote::write_raw(&[proto::REQUEST_KEYFRAME]);
             if errors > 30 {
                 return Err(format!("decoder keeps failing: {e}"));
             }

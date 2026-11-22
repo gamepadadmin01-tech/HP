@@ -28,6 +28,7 @@ type Bridge = {
   check(ip: string, key: string): void;
   cameras(): string;
   deviceName(): string; version(): string; isTestBuild?(): boolean;
+  sendState?(json: string): void;
 };
 const bridge = (): Bridge | undefined => (window as any).CamOSBridge;
 
@@ -189,6 +190,63 @@ export default function CamOSApp() {
     return () => clearTimeout(t);
   }, [route, premium, adHd, hdUntil, s.quality]);
 
+  /** Some changes (picture shape, quality) need a new stream: stop, then start again with them. */
+  function restartWith(patch: Partial<Settings>, message: string) {
+    set(patch);
+    restartAfterStop.current = true;
+    setLive((l) => ({ ...l, state: "connecting", message }));
+    bridge()?.stop();
+  }
+
+  // ── The PC window as a remote (owner, 2026-11-22). The PHONE decides: every request below goes through the
+  // same plan checks as the phone's own buttons, and the phone then reports what is really set. A modified PC
+  // server can only ask; it cannot unlock Premium, HD or remove the watermark (those are applied on the phone).
+  const other = lenses.find((l) => l.front !== lens.front);
+  const portraitNow = live.portrait ?? s.shape === "portrait";
+  const effQuality = s.quality === 1080 && !hdAllowed ? 720 : s.quality;
+  const phoneState = () => JSON.stringify({
+    quality: effQuality, fps: s.fps <= 30 ? s.fps : lens.fps.includes(60) ? 60 : 30, portrait: portraitNow, front: lens.front,
+    zoom: Math.min(Math.max(s.zoom, lens.zoomMin), lens.zoomMax), zoomMin: lens.zoomMin, zoomMax: lens.zoomMax,
+    ev: s.ev, evMin: lens.evMin, evMax: lens.evMax, evStep: lens.evStep,
+    look: premium ? s.look : "none", smooth: premium ? s.smooth : 0, lowLight: premium && s.lowLight,
+    torch: lens.flash && s.torch, premium, hd: hdAllowed, flash: lens.flash, otherLens: !!other,
+  });
+  const pushState = () => { try { bridge()?.sendState?.(phoneState()); } catch { /* older native side */ } };
+  const stateKey = route === "live" && live.state === "live" ? phoneState() : "";
+  useEffect(() => {
+    if (!stateKey) return;
+    pushState();
+    // A quiet repeat, so a PC window that opened late (or restarted) still gets the picture of things.
+    const t = window.setInterval(pushState, 5000);
+    return () => clearInterval(t);
+  }, [stateKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function onRemote(json: string) {
+    let m: { set?: Record<string, unknown>; action?: string };
+    try { m = JSON.parse(json); } catch { return; }
+    if (route !== "live") return;
+    const b = bridge();
+    switch (m.action) {
+      case "flip": if (other) set({ front: other.front, cameraId: other.id, zoom: 1, torch: false }); break;
+      case "reshape": restartWith({ shape: portraitNow ? "landscape" : "portrait" }, portraitNow ? "Switching to wide…" : "Switching to tall…"); break;
+      case "dim": b?.dim(true); break;
+      case "stop": b?.stop(); break;
+    }
+    for (const [k, v] of Object.entries(m.set ?? {})) {
+      const num = typeof v === "number" && Number.isFinite(v) ? v : null;
+      if (k === "torch" && typeof v === "boolean" && lens.flash) set({ torch: v });
+      else if (k === "zoom" && num !== null) set({ zoom: Math.min(Math.max(num, lens.zoomMin), lens.zoomMax) });
+      else if (k === "ev" && num !== null) set({ ev: Math.round(Math.min(Math.max(num, lens.evMin), lens.evMax)) });
+      else if (k === "look" && typeof v === "string" && premium && LOOKS.some((l) => l.value === v)) set({ look: v });
+      else if (k === "smooth" && num !== null && premium) set({ smooth: Math.min(Math.max(num, 0), 1) });
+      else if (k === "lowLight" && typeof v === "boolean" && premium) set({ lowLight: v });
+      else if (k === "quality" && (num === 480 || num === 720 || num === 1080) && (num !== 1080 || hdAllowed) && num !== effQuality)
+        restartWith({ quality: num as Settings["quality"] }, `Switching to ${num}p…`);
+      // Anything else (locked, unknown, out of range) is ignored; the state below shows the PC the truth.
+    }
+    pushState();
+  }
+
   function watchAd() {
     if (premium) return;
     if (!testBuild) { showToast("Ads arrive with the Play Store release."); return; }
@@ -217,6 +275,7 @@ export default function CamOSApp() {
       if (st.state === "error") { setScanning(false); setRoute((r) => (r === "live" ? "dashboard" : r)); showToast(st.message); return; }
       setLive({ state: st.state, message: st.message, fps: st.fps, kbps: st.kbps, portrait: st.portrait });
     };
+    (window as any).camosOnRemote = onRemote;
     (window as any).camosOnPermission = (ok: boolean) => { if (!ok) showToast("CamOS needs the camera permission to work as a webcam."); };
     // Android back button: the native side asks us first (true = handled here).
     (window as any).camosBack = () => {
@@ -247,13 +306,7 @@ export default function CamOSApp() {
     </ShellScreenTransition>}
     {route === "live" && <ShellScreenTransition key="live" direction={1} className="absolute inset-0">
       <LiveScreen live={live} s={s} set={set} lens={lens} lenses={lenses} premium={premium} hdAllowed={hdAllowed} goPremium={() => { bridge()?.stop(); goPremium(); }} showToast={showToast}
-        onReshape={(shape) => {
-          // A new picture shape needs a new stream: stop, then start again in the new shape (screen turns with it).
-          set({ shape });
-          restartAfterStop.current = true;
-          setLive((l) => ({ ...l, state: "connecting", message: shape === "landscape" ? "Switching to wide…" : "Switching to tall…" }));
-          bridge()?.stop();
-        }} />
+        onReshape={(shape) => restartWith({ shape }, shape === "landscape" ? "Switching to wide…" : "Switching to tall…")} />
     </ShellScreenTransition>}
   </AnimatePresence>
   <AnimatePresence>

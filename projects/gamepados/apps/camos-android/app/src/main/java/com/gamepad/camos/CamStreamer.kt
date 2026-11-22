@@ -96,6 +96,8 @@ class CamStreamer(
 ) {
     companion object {
         const val PORT = 7780
+        /** A stream message that carries this phone's state for the PC window, not video (proto::FLAG_STATE). */
+        const val FLAG_STATE = 8
         private const val TAG = "CamOS"
 
         /** HMAC-SHA256(key, nonce ‖ fixed[0..12] ‖ name), first 16 bytes. Mirrors proto::tag (Rust). */
@@ -195,6 +197,17 @@ class CamStreamer(
     fun isRunning() = running.get()
 
     /** The app is visible again: if Android took the camera away while it was hidden, open it again. */
+    /** Requests from the PC window (JSON). Set by the activity; called on the network thread. */
+    @Volatile var onRemote: ((String) -> Unit)? = null
+
+    /** Tell the PC window what is set and what this phone's plan allows (a small JSON message in the stream). */
+    fun sendState(json: String) {
+        if (!running.get()) return
+        val b = json.toByteArray(Charsets.UTF_8)
+        if (b.size > 16 * 1024) return
+        queue.offer(Packet(b, 0, FLAG_STATE))
+    }
+
     fun resumeCamera() {
         if (!running.get()) return
         camHandler?.post { if (camera == null && camSurface != null) openCamera() }
@@ -325,13 +338,24 @@ class CamStreamer(
 
             startCameraThread()
 
-            // Reader: the server asks for a key frame with a single 'K'.
+            // Reader: the server asks for a key frame with a single 'K', and the PC window sends requests as
+            // 'C' + length + JSON ("zoom 2x"). Requests go to the UI, which applies them only if this phone's plan
+            // allows (the PC never decides).
             Thread({
                 try {
                     while (running.get()) {
                         val b = input.read()
                         if (b < 0) break
-                        if (b == 'K'.code) requestKeyFrame()
+                        when (b) {
+                            'K'.code -> requestKeyFrame()
+                            'C'.code -> {
+                                val len = input.readUnsignedShort()
+                                if (len <= 0 || len > 16 * 1024) break   // not our protocol: stop reading
+                                val msg = ByteArray(len)
+                                input.readFully(msg)
+                                onRemote?.invoke(String(msg, Charsets.UTF_8))
+                            }
+                        }
                     }
                 } catch (_: Exception) {}
                 if (running.get()) fail("Gamepad Server closed the connection.")
@@ -346,7 +370,7 @@ class CamStreamer(
                 outStream.writeByte(p.flags)
                 outStream.write(p.data)
                 if (queue.isEmpty()) outStream.flush()
-                sentFrames++
+                if (p.flags and FLAG_STATE == 0) sentFrames++
                 sentBytes += p.data.size + 13
                 val now = System.nanoTime()
                 if (now - window >= 1_000_000_000L) {

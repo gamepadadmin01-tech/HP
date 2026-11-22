@@ -63,6 +63,7 @@ const INK: egui::Color32 = egui::Color32::from_rgb(0xF6, 0xED, 0xE9);       // -
 const TEXT: egui::Color32 = egui::Color32::from_rgb(0xEA, 0xDE, 0xD8);      // body text, a touch softer than ink
 const ORANGE: egui::Color32 = egui::Color32::from_rgb(0xFF, 0x55, 0x00);    // --calm-accent (the app icon's orange)
 const BORDER: egui::Color32 = egui::Color32::from_rgb(0x3F, 0x2E, 0x28);    // --calm-line
+const MUTED: egui::Color32 = egui::Color32::from_rgb(0xB8, 0xA5, 0x9D);     // --calm-muted
 const ART: egui::Color32 = egui::Color32::from_rgb(0x14, 0x0D, 0x0B);       // --calm-art: text-entry wells
 /// Problems and success, readable on the brown page (the old #c0392b / #1e8e3e were too dark on it).
 const BAD: egui::Color32 = egui::Color32::from_rgb(0xFF, 0x6B, 0x5B);
@@ -157,6 +158,10 @@ pub struct App {
     preview_seq: u64,
     /// The user tapped "Show QR" while a phone camera is live.
     show_qr: bool,
+    /// Last moment a CamOS picture was seen (keeps the camera screen up through a quick restart).
+    last_live: Option<std::time::Instant>,
+    /// A short note under the controls ("Colour looks needs Premium on the phone").
+    notice: Option<(String, std::time::Instant)>,
 
     tx: Sender<Msg>,
     rx: Receiver<Msg>,
@@ -193,6 +198,8 @@ impl App {
             preview_tex: None,
             preview_seq: 0,
             show_qr: false,
+            last_live: None,
+            notice: None,
             tx,
             rx,
             update_state: UpdateState::Idle,
@@ -376,250 +383,440 @@ impl eframe::App for App {
         PAPER.to_normalized_gamma_f32()
     }
 
-    // eframe 0.35 hands the app a `Ui` directly; the older `update(ctx, frame)`
-    // + explicit CentralPanel form no longer exists.
+    // Two screens (owner, 2026-11-22: "QR must dominate, minimum text; when CamOS connects, the server becomes the
+    // phone's controls, based on the phone's plan; no scrolling"):
+    //   • waiting  — the QR fills the window; one short line; address + key small; update / feedback as small links
+    //   • CamOS    — the live picture, the phone's camera buttons, and its picture controls (locked ones greyed)
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
         self.drain_messages();
-        // One server for both apps: the phone camera's picture replaces the QR while a CamOS phone streams.
+
         let preview = crate::camera::preview::latest();
-        if preview.is_none() {
+        let phone = crate::camera::remote::state();
+        if preview.is_some() {
+            self.last_live = Some(std::time::Instant::now());
+        } else if self.last_live.is_some_and(|t| t.elapsed() > LIVE_GRACE) {
+            // The phone really stopped (not a quick restart for a new quality or shape).
+            self.last_live = None;
             self.show_qr = false;
             self.preview_tex = None;
         }
-        ctx.request_repaint_after(if preview.is_some() { Duration::from_millis(66) } else { REPAINT_EVERY });
+        let camera_screen = self.last_live.is_some() && !self.show_qr;
+        ctx.request_repaint_after(if self.last_live.is_some() { Duration::from_millis(66) } else { REPAINT_EVERY });
 
-        // Scrolling keeps QR, recovery and support reachable at smaller windows
-        // and larger Windows display scales, including long failure messages.
-        egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
-            ui.add_space(10.0);
-            ui.vertical_centered(|ui| {
-                let live_cam = preview.is_some() && !self.show_qr;
-                ui.heading(if live_cam { "Phone camera live." } else { "Ready when you are." });
-                ui.label(
-                    egui::RichText::new(if live_cam { "Apps see it as \u{201c}CamOS Camera\u{201d}." } else { "Scan with GamepadOS or CamOS." })
-                        .size(13.0)
-                        .weak(),
-                );
-            });
-            ui.add_space(8.0);
+        let full = ui.max_rect();
+        let footer_h = 30.0;
+        let body = egui::Rect::from_min_max(full.min, egui::pos2(full.max.x, full.max.y - footer_h));
+        let footer = egui::Rect::from_min_max(egui::pos2(full.min.x, full.max.y - footer_h), full.max);
 
-            // ── Phone camera preview (CamOS) ─────────────────────────────────
-            if let Some(pv) = preview.as_ref().filter(|_| !self.show_qr) {
-                if self.preview_tex.is_none() || self.preview_seq != pv.seq {
-                    let img = egui::ColorImage::from_rgba_unmultiplied([pv.width as usize, pv.height as usize], &pv.rgba);
-                    match &mut self.preview_tex {
-                        Some(t) => t.set(img, egui::TextureOptions::LINEAR),
-                        None => self.preview_tex = Some(ctx.load_texture("camos-preview", img, egui::TextureOptions::LINEAR)),
-                    }
-                    self.preview_seq = pv.seq;
-                }
-                ui.vertical_centered(|ui| {
-                    if let Some(tex) = &self.preview_tex {
-                        // Same footprint as the QR card, so the window keeps its layout. Fitted, never cropped.
-                        const BOX_W: f32 = 300.0;
-                        const BOX_H: f32 = 180.0;
-                        let k = (BOX_W / pv.width as f32).min(BOX_H / pv.height as f32);
-                        let size = egui::vec2(pv.width as f32 * k, pv.height as f32 * k);
-                        ui.allocate_ui(egui::vec2(BOX_W, BOX_H + 4.0), |ui| {
-                            ui.vertical_centered(|ui| {
-                                ui.add(egui::Image::new(tex).fit_to_exact_size(size).corner_radius(10.0));
-                            });
-                        });
-                    }
-                    if ui.small_button("Show QR").clicked() {
-                        self.show_qr = true;
-                    }
-                });
+        ui.scope_builder(egui::UiBuilder::new().max_rect(body.shrink2(egui::vec2(16.0, 0.0))), |ui| {
+            if camera_screen {
+                self.camera_screen(ui, &ctx, preview.as_ref(), phone.as_ref());
             } else {
-            // ── QR ───────────────────────────────────────────────────────────
-            ui.vertical_centered(|ui| {
-                if let Some(tex) = &self.qr_texture {
-                    // The white plate hugs the QR: it is sized to the code plus a
-                    // small margin, NOT stretched to the panel width. Two reasons
-                    // it must be tight — a wide white band reads as a UI surface
-                    // rather than part of the code, and the QUIET ZONE is already
-                    // baked into the texture (4 modules, added in
-                    // build_qr_texture), so extra white here adds nothing a
-                    // scanner uses. It only makes the code smaller for a given
-                    // window, which is the opposite of what helps a phone camera.
-                    const QR: f32 = 180.0;
-                    const PAD: f32 = 6.0;
-                    let side = QR + PAD * 2.0;
-                    // Allocate exactly the card's footprint so the Frame cannot
-                    // expand to fill the centred layout's full width.
-                    ui.allocate_ui(egui::vec2(side, side), |ui| {
-                        egui::Frame::new()
-                            .fill(egui::Color32::WHITE)
-                            .corner_radius(12.0)
-                            .inner_margin(PAD)
-                            .show(ui, |ui| {
-                                ui.add(
-                                    egui::Image::new(tex)
-                                        .fit_to_exact_size(egui::vec2(QR, QR)),
-                                );
-                            });
-                    });
-                } else {
-                    ui.colored_label(
-                        BAD,
-                        "Pairing QR unavailable — Wi-Fi pairing will not work.",
-                    );
-                }
-                if preview.is_some() && ui.small_button("Show phone camera").clicked() {
-                    self.show_qr = false;
-                }
-            });
+                self.qr_screen(ui);
             }
-
-            ui.add_space(4.0);
-
-            // ── Live state ───────────────────────────────────────────────────
-            ui.vertical_centered(|ui| {
-                if let Some(err) = self.status.fatal_error() {
-                    ui.colored_label(
-                        BAD,
-                        err,
-                    );
-                } else if self.status.running() {
-                    let n = self.status.devices();
-                    ui.label(
-                        egui::RichText::new(if n == 0 { "Waiting for your phone".to_owned() } else { format!("{n} device{} connected", if n == 1 { "" } else { "s" }) })
-                            .size(14.0)
-                            .color(if n == 0 { TEXT } else { ORANGE })
-                            .strong(),
-                    );
-                    // Connected players (player.rs, owner 2026-11-13/14): ALL on ONE line, side by side ("P1 Akhil
-                    // P2 Guest ..."). At most four phones can play, so each gets an equal share of the width; a name
-                    // that does not fit keeps as many letters as fit, followed by ".." so it is clear it was cut.
-                    // A phone that cannot send a name (USB debugging, or an older app) shows as "Phone".
-                    let players = self.status.players();
-                    if !players.is_empty() {
-                        let font = egui::FontId::proportional(12.0);
-                        let gap = 10.0;
-                        let n = players.len() as f32;
-                        let cell = ((ui.available_width() - gap * (n - 1.0)) / n).max(30.0);
-                        let width = |ui: &egui::Ui, s: &str| ui.painter().layout_no_wrap(s.to_owned(), font.clone(), INK).size().x;
-                        ui.horizontal(|ui| {
-                            ui.spacing_mut().item_spacing.x = gap;
-                            for p in &players {
-                                let tag = format!("P{} ", p.slot + 1);
-                                let name = p.name.clone().unwrap_or_else(|| "Phone".to_owned());
-                                let room = cell - width(ui, &tag);
-                                let shown = if width(ui, &name) <= room {
-                                    name
-                                } else {
-                                    let chars: Vec<char> = name.chars().collect();
-                                    (1..chars.len())
-                                        .rev()
-                                        .map(|k| format!("{}..", chars[..k].iter().collect::<String>().trim_end()))
-                                        .find(|s| width(ui, s) <= room)
-                                        .unwrap_or_else(|| "..".to_owned())
-                                };
-                                ui.allocate_ui_with_layout(
-                                    egui::vec2(cell, 16.0),
-                                    egui::Layout::top_down(egui::Align::Center),
-                                    |ui| {
-                                        let mut job = egui::text::LayoutJob::default();
-                                        job.append(&tag, 0.0, egui::TextFormat { font_id: font.clone(), color: ORANGE, ..Default::default() });
-                                        job.append(&shown, 0.0, egui::TextFormat { font_id: font.clone(), color: INK, ..Default::default() });
-                                        ui.label(job);
-                                    },
-                                );
-                            }
-                        });
-                    }
-                } else {
-                    ui.colored_label(
-                        BAD,
-                        "Server is not running — see the console for the reason.",
-                    );
-                }
-                ui.label(
-                    egui::RichText::new(format!("IP {} · Port {} · Key {}", self.lan_ip,
-                        self.qr_payload.split(',').nth(1).unwrap_or("7777"), self.pairing_key))
-                        .size(12.0)
-                        .weak(),
-                );
-                // CamOS phone webcam (src/camera/): one line, so the window keeps its size.
-                #[cfg(windows)]
-                {
-                    let cam = crate::camera::stream::status();
-                    if cam.live {
-                        ui.label(
-                            egui::RichText::new(format!("Phone camera live · {} · {}×{} · {:.0} fps", cam.device, cam.width, cam.height, cam.fps))
-                                .size(12.0)
-                                .color(ORANGE),
-                        );
-                    } else {
-                        ui.label(egui::RichText::new("Phone camera: open CamOS on your phone").size(12.0).weak());
-                    }
-                }
-            });
-
-            ui.add_space(4.0);
-            ui.separator();
-
-            // ── Updates ──────────────────────────────────────────────────────
-            ui.horizontal(|ui| {
-                let button_size = egui::vec2((ui.available_width() - 8.0) / 2.0, 32.0);
-                let checking = self.update_state == UpdateState::Checking;
-                let downloading = self.update_state == UpdateState::Downloading;
-
-                if self.update_state == UpdateState::Available {
-                    // The one main action gets the phone's main-button look: orange, dark text (same size as before).
-                    let install = egui::Button::new(egui::RichText::new("Install update").color(PAPER).strong()).fill(ORANGE);
-                    if ui.add_sized(button_size, install).clicked() {
-                        self.start_download(&ctx);
-                    }
-                } else if ui.add_enabled_ui(!checking && !downloading, |ui| {
-                    ui.add_sized(button_size, egui::Button::new("Check updates"))
-                }).inner.clicked()
-                {
-                    self.start_update_check(&ctx);
-                }
-
-                if ui.add_sized(button_size, egui::Button::new("Feedback")).clicked() {
-                    self.feedback_open = true;
-                    self.feedback_status.clear();
-                }
-            });
-            ui.vertical_centered(|ui| {
-                let color = match self.update_state {
-                    UpdateState::Failed => BAD,
-                    UpdateState::Available => GOOD,
-                    _ => ui.visuals().weak_text_color(),
-                };
-                ui.colored_label(color, egui::RichText::new(&self.update_msg).size(11.0));
-            });
-
-            // Every failure — check, download, or installer hand-off — ends here.
-            // The in-app updater can't repair itself, so the manual download page
-            // is the only route forward and must always be one click away.
-            if self.update_state == UpdateState::Failed {
-                ui.horizontal_wrapped(|ui| {
-                    ui.label(
-                        egui::RichText::new("Your internet may be fine — our service can be down.")
-                            .size(11.0)
-                            .weak(),
-                    );
-                    ui.hyperlink_to(
-                        egui::RichText::new("Download the latest version").size(11.0),
-                        http::DOWNLOAD_PAGE_URL,
-                    );
-                });
-            }
-
-            if self.update_state == UpdateState::Downloading && self.dl_total > 0 {
-                let frac = self.dl_done as f32 / self.dl_total as f32;
-                ui.add(egui::ProgressBar::new(frac).show_percentage());
-            }
-
-            ui.add_space(6.0);
+        });
+        ui.scope_builder(egui::UiBuilder::new().max_rect(footer.shrink2(egui::vec2(14.0, 4.0))), |ui| {
+            self.footer(ui, &ctx);
         });
 
         self.show_feedback_window(&ctx);
     }
+}
+
+/// How long the camera screen stays up after the picture stops, so a quick restart (new quality or shape)
+/// doesn't flash the QR screen.
+const LIVE_GRACE: Duration = Duration::from_millis(3500);
+
+impl App {
+    // ── waiting: the QR, and almost nothing else ─────────────────────────────────────────────────────────────
+    fn qr_screen(&mut self, ui: &mut egui::Ui) {
+        ui.vertical_centered(|ui| {
+            let qr = (ui.available_width() - 40.0).clamp(220.0, 320.0);
+            // Centre the group (QR + two short lines) in the window.
+            let group_h = qr + 20.0 + 14.0 + 22.0 + 6.0 + 16.0 + if self.last_live.is_some() { 40.0 } else { 0.0 };
+            ui.add_space(((ui.available_height() - group_h) / 2.0).max(14.0));
+            if let Some(tex) = &self.qr_texture {
+                // White plate hugging the code (the quiet zone is baked into the texture; see build_qr_texture).
+                const PAD: f32 = 10.0;
+                ui.allocate_ui(egui::vec2(qr + PAD * 2.0, qr + PAD * 2.0), |ui| {
+                    egui::Frame::new().fill(egui::Color32::WHITE).corner_radius(18.0).inner_margin(PAD).show(ui, |ui| {
+                        ui.add(egui::Image::new(tex).fit_to_exact_size(egui::vec2(qr, qr)));
+                    });
+                });
+            } else {
+                ui.colored_label(BAD, "Pairing QR unavailable");
+            }
+            ui.add_space(14.0);
+
+            if let Some(err) = self.status.fatal_error() {
+                ui.colored_label(BAD, egui::RichText::new(err).size(13.0));
+            } else if !self.status.running() {
+                ui.colored_label(BAD, egui::RichText::new("Server is not running").size(13.0));
+            } else {
+                let players = self.status.players();
+                if players.is_empty() {
+                    ui.label(egui::RichText::new("Scan with GamepadOS or CamOS").size(15.0).color(INK));
+                } else {
+                    players_line(ui, &players);
+                }
+            }
+            ui.add_space(6.0);
+            ui.label(egui::RichText::new(format!("{}  ·  {}", self.lan_ip, self.pairing_key)).size(12.0).color(MUTED));
+            if self.last_live.is_some() {
+                ui.add_space(8.0);
+                if pill_button(ui, "Back to camera", false).clicked() {
+                    self.show_qr = false;
+                }
+            }
+        });
+    }
+
+    // ── CamOS connected: the picture and the phone's controls ────────────────────────────────────────────────
+    fn camera_screen(&mut self, ui: &mut egui::Ui, ctx: &egui::Context, preview: Option<&crate::camera::preview::Preview>, phone: Option<&crate::camera::remote::PhoneState>) {
+        use crate::camera::remote::{self, LOOKS, cmd_action, cmd_set};
+        use serde_json::json;
+
+        ui.add_space(10.0);
+        // Top line: which phone, and a way back to the QR (to pair another phone).
+        ui.horizontal(|ui| {
+            let (dot, _) = ui.allocate_exact_size(egui::vec2(10.0, 18.0), egui::Sense::hover());
+            ui.painter().circle_filled(dot.center(), 4.0, if preview.is_some() { ORANGE } else { MUTED });
+            #[cfg(windows)]
+            let device = { let c = crate::camera::stream::status(); if c.device.is_empty() { "Phone".to_string() } else { c.device } };
+            #[cfg(not(windows))]
+            let device = "Phone".to_string();
+            ui.label(egui::RichText::new(format!("CamOS  ·  {device}")).size(13.0).color(INK));
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if icon_button(ui, Icon::Qr, false, 30.0).on_hover_text("Show the pairing QR").clicked() {
+                    self.show_qr = true;
+                }
+                let players = self.status.players();
+                if !players.is_empty() {
+                    ui.label(egui::RichText::new(format!("{} playing", players.len())).size(12.0).color(ORANGE));
+                }
+            });
+        });
+        ui.add_space(8.0);
+
+        // The picture, fitted (never cropped) in a dark rounded box.
+        let w = ui.available_width();
+        let (box_rect, _) = ui.allocate_exact_size(egui::vec2(w, (w * 9.0 / 16.0).round()), egui::Sense::hover());
+        let painter = ui.painter_at(box_rect);
+        painter.rect_filled(box_rect, 14.0, ART);
+        if let Some(pv) = preview {
+            if self.preview_tex.is_none() || self.preview_seq != pv.seq {
+                let img = egui::ColorImage::from_rgba_unmultiplied([pv.width as usize, pv.height as usize], &pv.rgba);
+                match &mut self.preview_tex {
+                    Some(t) => t.set(img, egui::TextureOptions::LINEAR),
+                    None => self.preview_tex = Some(ctx.load_texture("camos-preview", img, egui::TextureOptions::LINEAR)),
+                }
+                self.preview_seq = pv.seq;
+            }
+            if let Some(tex) = &self.preview_tex {
+                let k = (box_rect.width() / pv.width as f32).min(box_rect.height() / pv.height as f32);
+                let r = egui::Rect::from_center_size(box_rect.center(), egui::vec2(pv.width as f32 * k, pv.height as f32 * k));
+                egui::Image::new(tex).corner_radius(14.0).paint_at(ui, r);
+            }
+            // LIVE pill over the picture.
+            if let Some(p) = phone {
+                let text = format!("LIVE  {}p · {} fps", p.quality, p.fps);
+                let font = egui::FontId::proportional(11.0);
+                let g = painter.layout_no_wrap(text, font, INK);
+                let pill = egui::Rect::from_min_size(box_rect.min + egui::vec2(10.0, 10.0), g.size() + egui::vec2(26.0, 10.0));
+                painter.rect_filled(pill, 999.0, egui::Color32::from_rgba_unmultiplied(9, 6, 5, 190));
+                painter.circle_filled(pill.left_center() + egui::vec2(10.0, 0.0), 3.5, ORANGE);
+                painter.galley(pill.min + egui::vec2(18.0, 5.0), g, INK);
+            }
+        } else {
+            painter.text(box_rect.center(), egui::Align2::CENTER_CENTER, "Switching…", egui::FontId::proportional(14.0), MUTED);
+        }
+        ui.add_space(12.0);
+
+        let Some(p) = phone else {
+            // A phone app from before remote control: picture only.
+            ui.vertical_centered(|ui| {
+                ui.label(egui::RichText::new("Update CamOS on your phone for controls here").size(12.0).color(MUTED));
+            });
+            return;
+        };
+        let ask = |json: String| { remote::send(&json); };
+
+        // Main buttons, like the phone's control bar.
+        ui.horizontal(|ui| {
+            let n = 3.0 + if p.other_lens { 1.0 } else { 0.0 } + if p.flash { 1.0 } else { 0.0 };
+            let used = n * 44.0 + (n - 1.0) * 10.0 + 10.0 + 90.0;
+            ui.add_space(((ui.available_width() - used) / 2.0).max(0.0));
+            ui.spacing_mut().item_spacing.x = 10.0;
+            if p.other_lens && icon_button(ui, Icon::Switch, false, 44.0).on_hover_text("Switch camera").clicked() {
+                ask(cmd_action("flip"));
+            }
+            if p.flash && icon_button(ui, Icon::Flash, p.torch, 44.0).on_hover_text(if p.torch { "Flashlight off" } else { "Flashlight on" }).clicked() {
+                ask(cmd_set("torch", json!(!p.torch)));
+            }
+            let (icon, tip) = if p.portrait { (Icon::Wide, "Switch to a wide picture") } else { (Icon::Tall, "Switch to a tall picture") };
+            if icon_button(ui, icon, false, 44.0).on_hover_text(tip).clicked() {
+                ask(cmd_action("reshape"));
+            }
+            if icon_button(ui, Icon::Moon, false, 44.0).on_hover_text("Dim the phone screen (keeps streaming)").clicked() {
+                ask(cmd_action("dim"));
+            }
+            ui.add_space(10.0);
+            if ui.add_sized([90.0, 44.0], egui::Button::new(egui::RichText::new("Stop").color(PAPER).strong()).fill(ORANGE).corner_radius(14.0)).clicked() {
+                ask(cmd_action("stop"));
+            }
+        });
+        ui.add_space(12.0);
+
+        // Picture controls. Labels are one word; locked items (the phone's plan) show a lock and do nothing.
+        let label_w = 78.0;
+        let row = |ui: &mut egui::Ui, label: &str, add: &mut dyn FnMut(&mut egui::Ui)| {
+            ui.horizontal_top(|ui| {
+                ui.allocate_ui_with_layout(egui::vec2(label_w, 30.0), egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                    ui.label(egui::RichText::new(label).size(13.0).color(MUTED));
+                });
+                // Chips wrap onto a second line rather than running off the window.
+                ui.horizontal_wrapped(|ui| {
+                    ui.spacing_mut().item_spacing = egui::vec2(6.0, 6.0);
+                    add(ui);
+                });
+            });
+            ui.add_space(4.0);
+        };
+
+        let mut locked_tap: Option<&str> = None;
+        row(ui, "Zoom", &mut |ui| {
+            let (dec, inc) = stepper(ui, &format!("{:.1}×", p.zoom), p.zoom > p.zoom_min + 0.01, p.zoom < p.zoom_max - 0.01);
+            if dec { ask(cmd_set("zoom", json!(((p.zoom - 0.5).max(p.zoom_min) * 10.0).round() / 10.0))); }
+            if inc { ask(cmd_set("zoom", json!(((p.zoom + 0.5).min(p.zoom_max) * 10.0).round() / 10.0))); }
+            ui.add_space(14.0);
+            ui.label(egui::RichText::new("Light").size(13.0).color(MUTED));
+            let ev = p.ev as f32 * p.ev_step;
+            let (dec, inc) = stepper(ui, &format!("{}{:.1}", if ev > 0.0 { "+" } else { "" }, ev), p.ev > p.ev_min, p.ev < p.ev_max);
+            let step = if p.ev_step > 0.0 { (0.34 / p.ev_step).round().max(1.0) as i32 } else { 1 };
+            if dec { ask(cmd_set("ev", json!((p.ev - step).max(p.ev_min)))); }
+            if inc { ask(cmd_set("ev", json!((p.ev + step).min(p.ev_max)))); }
+        });
+        row(ui, "Quality", &mut |ui| {
+            for q in [480u32, 720, 1080] {
+                let locked = q == 1080 && !p.hd;
+                if chip(ui, &format!("{q}p"), p.quality == q, locked).clicked() {
+                    if locked { locked_tap = Some("1080p HD"); } else if p.quality != q { ask(cmd_set("quality", json!(q))); }
+                }
+            }
+        });
+        row(ui, "Look", &mut |ui| {
+            for (key, label) in LOOKS {
+                let locked = !p.premium && key != "none";
+                if chip(ui, label, p.look == key, locked).clicked() {
+                    if locked { locked_tap = Some("Colour looks"); } else { ask(cmd_set("look", json!(key))); }
+                }
+            }
+        });
+        row(ui, "Smoothing", &mut |ui| {
+            let now = if p.smooth < 0.2 { 0 } else if p.smooth < 0.6 { 1 } else { 2 };
+            for (i, (label, v)) in [("Off", 0.0), ("Low", 0.4), ("High", 0.8)].into_iter().enumerate() {
+                let locked = !p.premium && i > 0;
+                if chip(ui, label, now == i, locked).clicked() {
+                    if locked { locked_tap = Some("Face smoothing"); } else { ask(cmd_set("smooth", json!(v))); }
+                }
+            }
+            ui.add_space(10.0);
+            let locked = !p.premium;
+            if chip(ui, "Low light", p.low_light, locked).clicked() {
+                if locked { locked_tap = Some("Low-light boost"); } else { ask(cmd_set("lowLight", json!(!p.low_light))); }
+            }
+        });
+
+        if let Some(what) = locked_tap {
+            self.notice = Some((format!("{what} needs Premium on the phone"), std::time::Instant::now()));
+        }
+        if let Some((msg, at)) = &self.notice {
+            if at.elapsed() < Duration::from_secs(3) {
+                ui.vertical_centered(|ui| { ui.label(egui::RichText::new(msg).size(12.0).color(ORANGE)); });
+            } else {
+                self.notice = None;
+            }
+        }
+    }
+
+    // ── footer: version / update and feedback as small links ─────────────────────────────────────────────────
+    fn footer(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
+        ui.horizontal(|ui| {
+            match self.update_state {
+                UpdateState::Available => {
+                    if pill_button(ui, "Install update", true).clicked() {
+                        self.start_download(ctx);
+                    }
+                }
+                UpdateState::Downloading => {
+                    let pct = if self.dl_total > 0 { self.dl_done * 100 / self.dl_total } else { 0 };
+                    ui.label(egui::RichText::new(format!("Updating {pct}%")).size(12.0).color(MUTED));
+                }
+                UpdateState::Failed => {
+                    ui.label(egui::RichText::new("Update failed").size(12.0).color(BAD)).on_hover_text(&self.update_msg);
+                    ui.hyperlink_to(egui::RichText::new("Download").size(12.0), http::DOWNLOAD_PAGE_URL);
+                }
+                UpdateState::Checking => {
+                    ui.label(egui::RichText::new("Checking…").size(12.0).color(MUTED));
+                }
+                _ => {
+                    if link(ui, &format!("v{}", http::APP_VERSION)).on_hover_text("Check for updates").clicked() {
+                        self.start_update_check(ctx);
+                    }
+                    if self.update_state == UpdateState::UpToDate {
+                        ui.label(egui::RichText::new("up to date").size(12.0).color(MUTED));
+                    }
+                }
+            }
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if link(ui, "Feedback").clicked() {
+                    self.feedback_open = true;
+                    self.feedback_status.clear();
+                }
+            });
+        });
+    }
+}
+
+// ── small widgets in the phone app's style ───────────────────────────────────────────────────────────────────
+
+/// Connected GamepadOS players on one line: "P1 Akhil   P2 Guest".
+fn players_line(ui: &mut egui::Ui, players: &[crate::player::PlayerRow]) {
+    let font = egui::FontId::proportional(14.0);
+    let mut job = egui::text::LayoutJob::default();
+    for (i, p) in players.iter().enumerate() {
+        if i > 0 {
+            job.append("    ", 0.0, egui::TextFormat { font_id: font.clone(), color: INK, ..Default::default() });
+        }
+        let name: String = p.name.clone().unwrap_or_else(|| "Phone".to_owned()).chars().take(14).collect();
+        job.append(&format!("P{} ", p.slot + 1), 0.0, egui::TextFormat { font_id: font.clone(), color: ORANGE, ..Default::default() });
+        job.append(&name, 0.0, egui::TextFormat { font_id: font.clone(), color: INK, ..Default::default() });
+    }
+    ui.label(job);
+}
+
+/// Plain small link text (no underline until hovered).
+fn link(ui: &mut egui::Ui, text: &str) -> egui::Response {
+    let r = ui.add(egui::Label::new(egui::RichText::new(text).size(12.0).color(MUTED)).sense(egui::Sense::click()));
+    if r.hovered() {
+        ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+    }
+    r
+}
+
+/// A rounded pill button; `main` = the orange one.
+fn pill_button(ui: &mut egui::Ui, text: &str, main: bool) -> egui::Response {
+    let rt = egui::RichText::new(text).size(13.0).color(if main { PAPER } else { INK });
+    let mut b = egui::Button::new(if main { rt.strong() } else { rt }).corner_radius(999.0);
+    if main {
+        b = b.fill(ORANGE);
+    }
+    ui.add(b)
+}
+
+/// A choice chip like the phone's ChoiceBar pills. Locked: dimmed with a small padlock; still clickable so the
+/// window can say why.
+fn chip(ui: &mut egui::Ui, text: &str, selected: bool, locked: bool) -> egui::Response {
+    let font = egui::FontId::proportional(13.0);
+    let galley = ui.painter().layout_no_wrap(text.to_owned(), font, INK);
+    let lock_w = if locked { 12.0 } else { 0.0 };
+    let size = egui::vec2(galley.size().x + 20.0 + lock_w, 30.0);
+    let (rect, resp) = ui.allocate_exact_size(size, egui::Sense::click());
+    let hover = resp.hovered();
+    let (fill, stroke, ink) = if selected && !locked {
+        (ORANGE, ORANGE, PAPER)
+    } else if hover {
+        (SURFACE_2, ORANGE, INK)
+    } else {
+        (SURFACE, BORDER, if locked { MUTED } else { INK })
+    };
+    let p = ui.painter();
+    p.rect(rect, 999.0, fill, egui::Stroke::new(1.0, stroke), egui::StrokeKind::Inside);
+    p.galley(egui::pos2(rect.min.x + 10.0, rect.center().y - galley.size().y / 2.0), galley, ink);
+    if locked {
+        draw_lock(p, egui::pos2(rect.max.x - 15.0, rect.center().y), MUTED);
+    }
+    if hover {
+        ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+    }
+    resp
+}
+
+/// "−  value  +" with round buttons.
+fn stepper(ui: &mut egui::Ui, value: &str, can_dec: bool, can_inc: bool) -> (bool, bool) {
+    let dec = ui.add_enabled(can_dec, egui::Button::new(egui::RichText::new("−").size(15.0)).min_size(egui::vec2(30.0, 30.0)).corner_radius(999.0)).clicked();
+    ui.allocate_ui_with_layout(egui::vec2(44.0, 30.0), egui::Layout::centered_and_justified(egui::Direction::LeftToRight), |ui| {
+        ui.label(egui::RichText::new(value).size(13.0).color(INK));
+    });
+    let inc = ui.add_enabled(can_inc, egui::Button::new(egui::RichText::new("+").size(15.0)).min_size(egui::vec2(30.0, 30.0)).corner_radius(999.0)).clicked();
+    (dec, inc)
+}
+
+#[derive(Clone, Copy)]
+enum Icon { Switch, Flash, Wide, Tall, Moon, Qr }
+
+/// A square rounded icon button, drawn with lines (no icon font needed). `on` = highlighted (e.g. flashlight on).
+fn icon_button(ui: &mut egui::Ui, icon: Icon, on: bool, side: f32) -> egui::Response {
+    let (rect, resp) = ui.allocate_exact_size(egui::vec2(side, side), egui::Sense::click());
+    let hover = resp.hovered();
+    let fill = if on { ORANGE } else if hover { SURFACE_2 } else { SURFACE };
+    let ink = if on { PAPER } else { INK };
+    let p = ui.painter();
+    p.rect(rect, side * 0.3, fill, egui::Stroke::new(1.0, if hover && !on { ORANGE } else { BORDER }), egui::StrokeKind::Inside);
+    let c = rect.center();
+    let s = side * 0.22; // icon half-size
+    let st = egui::Stroke::new(1.8, ink);
+    match icon {
+        Icon::Switch => {
+            // Two curved arrows going round: "turn the camera around".
+            for (start, end, tip) in [(200.0f32, 340.0f32, 340.0f32), (20.0, 160.0, 160.0)] {
+                let pts: Vec<egui::Pos2> = (0..=12).map(|i| {
+                    let a = (start + (end - start) * i as f32 / 12.0).to_radians();
+                    c + egui::vec2(a.cos(), a.sin()) * s
+                }).collect();
+                p.add(egui::Shape::line(pts, st));
+                let a = tip.to_radians();
+                let at = c + egui::vec2(a.cos(), a.sin()) * s;
+                let tangent = egui::vec2(-a.sin(), a.cos());
+                let normal = egui::vec2(a.cos(), a.sin());
+                p.add(egui::Shape::convex_polygon(vec![at + tangent * 4.0, at - normal * 3.5, at + normal * 3.5], ink, egui::Stroke::NONE));
+            }
+        }
+        Icon::Flash => {
+            let pts = vec![c + egui::vec2(1.5, -s * 1.1), c + egui::vec2(-s * 0.7, s * 0.15), c + egui::vec2(-0.5, s * 0.15),
+                           c + egui::vec2(-1.5, s * 1.1), c + egui::vec2(s * 0.7, -s * 0.15), c + egui::vec2(0.5, -s * 0.15)];
+            p.add(egui::Shape::closed_line(pts, st));
+        }
+        Icon::Wide => { p.rect_stroke(egui::Rect::from_center_size(c, egui::vec2(s * 2.2, s * 1.3)), 3.0, st, egui::StrokeKind::Middle); }
+        Icon::Tall => { p.rect_stroke(egui::Rect::from_center_size(c, egui::vec2(s * 1.3, s * 2.2)), 3.0, st, egui::StrokeKind::Middle); }
+        Icon::Moon => {
+            // Filled crescent: a disc with a second disc in the button colour biting into it.
+            p.circle_filled(c, s * 0.95, ink);
+            p.circle_filled(c + egui::vec2(s * 0.5, -s * 0.35), s * 0.8, fill);
+        }
+        Icon::Qr => {
+            let q = s * 0.55;
+            for (dx, dy) in [(-1.0f32, -1.0f32), (1.0, -1.0), (-1.0, 1.0)] {
+                p.rect_stroke(egui::Rect::from_center_size(c + egui::vec2(dx, dy) * q, egui::vec2(q * 1.3, q * 1.3)), 1.5, egui::Stroke::new(1.4, ink), egui::StrokeKind::Middle);
+            }
+            p.rect_filled(egui::Rect::from_center_size(c + egui::vec2(q, q), egui::vec2(q * 0.6, q * 0.6)), 1.0, ink);
+        }
+    }
+    if hover {
+        ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+    }
+    resp
+}
+
+/// Small padlock: a rounded body and a shackle.
+fn draw_lock(p: &egui::Painter, c: egui::Pos2, color: egui::Color32) {
+    p.rect_filled(egui::Rect::from_center_size(c + egui::vec2(0.0, 2.0), egui::vec2(8.0, 6.0)), 1.5, color);
+    let pts: Vec<egui::Pos2> = (0..=10).map(|i| {
+        let a = (180.0 + 180.0 * i as f32 / 10.0f32).to_radians();
+        c + egui::vec2(0.0, -1.0) + egui::vec2(a.cos() * 2.6, a.sin() * 3.0)
+    }).collect();
+    p.add(egui::Shape::line(pts, egui::Stroke::new(1.4, color)));
 }
 
 impl App {
@@ -792,9 +989,9 @@ pub fn run(
 ) -> Result<(), String> {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
-            // Compact square companion; scrolling handles long recovery messages.
-            .with_inner_size([400.0, 400.0])
-            .with_min_inner_size([400.0, 400.0])
+            // Tall enough for the big QR and for the CamOS controls, with no scrolling (owner, 2026-11-22).
+            .with_inner_size([430.0, 600.0])
+            .with_min_inner_size([430.0, 600.0])
             .with_resizable(false)
             // with_resizable(false) alone does NOT grey out the maximize button on
             // Windows -- the caption button stays lit and clickable, and clicking it

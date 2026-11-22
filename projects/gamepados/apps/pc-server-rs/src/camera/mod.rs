@@ -17,6 +17,7 @@
 pub mod decode;
 pub mod preview;
 pub mod proto;
+pub mod remote;
 #[cfg(windows)]
 pub mod stream;
 #[cfg(windows)]
