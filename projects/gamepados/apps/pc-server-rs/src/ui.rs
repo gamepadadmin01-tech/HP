@@ -162,6 +162,8 @@ pub struct App {
     last_live: Option<std::time::Instant>,
     /// A short note under the controls ("Colour looks needs Premium on the phone").
     notice: Option<(String, std::time::Instant)>,
+    /// The window size last asked for: compact for the QR, taller for the CamOS controls.
+    win_size: egui::Vec2,
 
     tx: Sender<Msg>,
     rx: Receiver<Msg>,
@@ -200,6 +202,7 @@ impl App {
             show_qr: false,
             last_live: None,
             notice: None,
+            win_size: QR_WINDOW,
             tx,
             rx,
             update_state: UpdateState::Idle,
@@ -409,13 +412,21 @@ impl eframe::App for App {
         let body = egui::Rect::from_min_max(full.min, egui::pos2(full.max.x, full.max.y - footer_h));
         let footer = egui::Rect::from_min_max(egui::pos2(full.min.x, full.max.y - footer_h), full.max);
 
-        ui.scope_builder(egui::UiBuilder::new().max_rect(body.shrink2(egui::vec2(16.0, 0.0))), |ui| {
+        let used = ui.scope_builder(egui::UiBuilder::new().max_rect(body.shrink2(egui::vec2(16.0, 0.0))), |ui| {
             if camera_screen {
                 self.camera_screen(ui, &ctx, preview.as_ref(), phone.as_ref());
             } else {
                 self.qr_screen(ui);
             }
-        });
+        }).response.rect;
+        // The window hugs what it shows (no empty bands): measured each frame, resized when it changes by more than
+        // a few pixels — compact around the QR, taller while the CamOS controls show, a row taller when chips wrap.
+        let want = egui::vec2(QR_WINDOW.x, (used.max.y - full.min.y + 12.0 + footer_h).clamp(400.0, 820.0).round());
+        if (want.y - self.win_size.y).abs() > 3.0 {
+            self.win_size = want;
+            ctx.send_viewport_cmd(egui::ViewportCommand::MinInnerSize(want));
+            ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(want));
+        }
         ui.scope_builder(egui::UiBuilder::new().max_rect(footer.shrink2(egui::vec2(14.0, 4.0))), |ui| {
             self.footer(ui, &ctx);
         });
@@ -423,6 +434,9 @@ impl eframe::App for App {
         self.show_feedback_window(&ctx);
     }
 }
+
+/// Starting window size (logical pixels): the QR + two lines + footer. After that the window sizes itself to fit.
+const QR_WINDOW: egui::Vec2 = egui::vec2(430.0, 474.0);
 
 /// How long the camera screen stays up after the picture stops, so a quick restart (new quality or shape)
 /// doesn't flash the QR screen.
@@ -433,9 +447,7 @@ impl App {
     fn qr_screen(&mut self, ui: &mut egui::Ui) {
         ui.vertical_centered(|ui| {
             let qr = (ui.available_width() - 40.0).clamp(220.0, 320.0);
-            // Centre the group (QR + two short lines) in the window.
-            let group_h = qr + 20.0 + 14.0 + 22.0 + 6.0 + 16.0 + if self.last_live.is_some() { 40.0 } else { 0.0 };
-            ui.add_space(((ui.available_height() - group_h) / 2.0).max(14.0));
+            ui.add_space(16.0);
             if let Some(tex) = &self.qr_texture {
                 // White plate hugging the code (the quiet zone is baked into the texture; see build_qr_texture).
                 const PAD: f32 = 10.0;
@@ -990,8 +1002,8 @@ pub fn run(
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             // Tall enough for the big QR and for the CamOS controls, with no scrolling (owner, 2026-11-22).
-            .with_inner_size([430.0, 600.0])
-            .with_min_inner_size([430.0, 600.0])
+            .with_inner_size(QR_WINDOW)
+            .with_min_inner_size(QR_WINDOW)
             .with_resizable(false)
             // with_resizable(false) alone does NOT grey out the maximize button on
             // Windows -- the caption button stays lit and clickable, and clicking it

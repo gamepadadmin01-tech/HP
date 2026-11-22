@@ -35,6 +35,10 @@ static STATUS: Mutex<CamStatus> = Mutex::new(CamStatus {
     last_error: String::new(),
 });
 static BUSY: AtomicBool = AtomicBool::new(false);
+/// The phone that is streaming now (its address, and a handle to close its connection). When the SAME phone
+/// connects again while its old stream is still closing (Stop → home screen check, or a Wi-Fi blip), the old one
+/// is closed and the phone is let in, instead of being told "busy with another phone" (owner, 2026-11-22).
+static CURRENT: Mutex<Option<(std::net::IpAddr, TcpStream)>> = Mutex::new(None);
 
 pub fn status() -> CamStatus {
     STATUS.lock().map(|s| s.clone()).unwrap_or_default()
@@ -58,6 +62,22 @@ pub fn start(key: String) -> Result<(), String> {
         .spawn(move || {
             for conn in l.incoming() {
                 let Ok(mut c) = conn else { continue };
+                if BUSY.load(Ordering::SeqCst) {
+                    let ip = c.peer_addr().map(|a| a.ip()).ok();
+                    let same_phone = CURRENT.lock().ok().and_then(|g| g.as_ref().map(|(cur, _)| Some(*cur) == ip)).unwrap_or(false);
+                    if same_phone {
+                        if let Ok(g) = CURRENT.lock() {
+                            if let Some((_, old)) = g.as_ref() {
+                                let _ = old.shutdown(std::net::Shutdown::Both);
+                            }
+                        }
+                        // Give the old stream a moment to finish closing.
+                        let t0 = Instant::now();
+                        while BUSY.load(Ordering::SeqCst) && t0.elapsed() < Duration::from_millis(1500) {
+                            std::thread::sleep(Duration::from_millis(20));
+                        }
+                    }
+                }
                 if BUSY.swap(true, Ordering::SeqCst) {
                     let _ = c.write_all(&proto::server_ack(proto::STATUS_BUSY));
                     continue;
@@ -75,6 +95,9 @@ pub fn start(key: String) -> Result<(), String> {
                     }
                     preview::clear();
                     remote::detach();
+                    if let Ok(mut g) = CURRENT.lock() {
+                        *g = None;
+                    }
                     BUSY.store(false, Ordering::SeqCst);
                 });
             }
@@ -124,7 +147,13 @@ fn serve(c: &mut TcpStream, key: &str) -> Result<(), String> {
     // From here on everything sent to the phone goes through remote::write_raw (one lock), because the window can
     // send requests on the same socket at any moment.
     remote::attach(c);
+    if let (Ok(peer), Ok(handle), Ok(mut g)) = (c.peer_addr(), c.try_clone(), CURRENT.lock()) {
+        *g = Some((peer.ip(), handle));
+    }
     remote::write_raw(&[proto::REQUEST_KEYFRAME]);
+    // Key-frame asks after broken frames are limited to one a second: asking on every broken frame made the phone
+    // send full pictures back to back on weak Wi-Fi, which is what kept 1080p from ever recovering.
+    let mut last_key_ask = Instant::now();
     let (w, h) = (hello.width as u32, hello.height as u32);
     let mut hdr = [0u8; proto::FRAME_HEADER_LEN];
     let mut payload = Vec::new();
@@ -158,10 +187,17 @@ fn serve(c: &mut TcpStream, key: &str) -> Result<(), String> {
             errors += 1;
             eprintln!("camos: decode error {e} (#{errors})");
             // A broken frame poisons everything until the next key frame.
-            remote::write_raw(&[proto::REQUEST_KEYFRAME]);
+            if last_key_ask.elapsed() >= Duration::from_secs(1) {
+                remote::write_raw(&[proto::REQUEST_KEYFRAME]);
+                last_key_ask = Instant::now();
+            }
+            // Only broken frames IN A ROW end the stream (30 = about a second of nothing usable). The old total
+            // count never reset, so a long call on weak Wi-Fi eventually stopped for no current reason.
             if errors > 30 {
                 return Err(format!("decoder keeps failing: {e}"));
             }
+        } else {
+            errors = 0;
         }
         if window.elapsed() >= Duration::from_secs(1) {
             let fps = frames as f32 / window.elapsed().as_secs_f32();

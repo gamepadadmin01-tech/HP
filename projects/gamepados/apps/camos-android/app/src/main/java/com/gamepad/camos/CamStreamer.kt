@@ -133,9 +133,11 @@ class CamStreamer(
             return if (portrait) Size(h, w) else Size(w, h)
         }
 
+        /** Starting bitrate. Lower than before (1080p was 8 Mbit/s, more than many home Wi-Fi links carry steadily);
+         *  the adaptive control below lowers it further when Wi-Fi struggles and climbs back when it is healthy. */
         fun autoBitrate(quality: Int, fps: Int): Int {
-            val base = when (quality) { 480 -> 1_500_000; 1080 -> 8_000_000; else -> 4_000_000 }
-            return (base * (0.6 + 0.4 * fps / 30.0)).toInt()
+            val base = when (quality) { 480 -> 1_200_000; 1080 -> 5_000_000; else -> 3_000_000 }
+            return (base * (0.5 + 0.5 * fps / 30.0)).toInt()
         }
     }
 
@@ -166,7 +168,10 @@ class CamStreamer(
     private var preview: SurfaceTexture? = null
     private var previewW = 0
     private var previewH = 0
-    private var bitrate = 4_000_000
+    private var bitrate = 4_000_000          // the ceiling: the user's choice or the automatic starting level
+    @Volatile private var curBitrate = 0     // what the video chip is told right now (adaptive)
+    @Volatile private var lastKeyAsk = 0L
+    private var calmSince = 0L
 
     @Volatile private var sentFrames = 0
     @Volatile private var sentBytes = 0L
@@ -180,6 +185,8 @@ class CamStreamer(
         this.portrait = portrait
         out = outputSize(s.quality, portrait)
         bitrate = if (s.bitrateKbps > 0) s.bitrateKbps * 1000 else autoBitrate(s.quality, s.fps)
+        curBitrate = bitrate
+        lastKeyAsk = 0L
         waitForKey = true
         queue.clear()
         socket = null
@@ -307,7 +314,7 @@ class CamStreamer(
         run {
             val s = Socket()
             s.tcpNoDelay = true
-            s.sendBufferSize = 512 * 1024
+            s.sendBufferSize = 128 * 1024
             s.connect(InetSocketAddress(ip, PORT), 4000)
             s.soTimeout = 5000
             socket = s
@@ -363,7 +370,10 @@ class CamStreamer(
 
             onState("live", "", 0, 0)
             var window = System.nanoTime()
+            var lastAdapt = System.nanoTime()
+            calmSince = android.os.SystemClock.elapsedRealtime()
             while (running.get()) {
+                if (System.nanoTime() - lastAdapt >= 500_000_000L) { adaptBitrate(); lastAdapt = System.nanoTime() }
                 val p = queue.poll(500, TimeUnit.MILLISECONDS) ?: continue
                 outStream.writeInt(p.data.size)
                 outStream.writeLong(p.ptsUs)
@@ -454,16 +464,22 @@ class CamStreamer(
         highSpeed = false
         hsRange = null
         if (settings.fps >= 60) {
+            // 1. Regular video mode, but only at a picture size the camera can really deliver 60 times a second.
+            //    (Phones list "60 fps" for the camera as a whole; at big sizes they still give 30. Asking for 60 at
+            //    such a size is what made 60 fps "not work".)
             val regular = ch.get(CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES) ?: emptyArray()
-            if (regular.none { it.upper >= 60 && it.lower <= 60 }) {
-                highSpeedPlan(ch, max(out.width, out.height), minOf(out.width, out.height))?.let { (range, size) ->
-                    highSpeed = true
-                    hsRange = range
-                    return size
-                }
+            if (regular.any { it.upper >= 60 && it.lower <= 60 }) {
+                pickCaptureSize(ch, minFps = 60)?.let { return it }
             }
+            // 2. Android's high-speed video mode (often listed as 120 fps; the picture engine keeps every 2nd frame).
+            highSpeedPlan(ch, max(out.width, out.height), minOf(out.width, out.height))?.let { (range, size) ->
+                highSpeed = true
+                hsRange = range
+                return size
+            }
+            // 3. This camera can't do 60: stream at its best (30); the app tells the user.
         }
-        return pickCaptureSize(ch)
+        return pickCaptureSize(ch) ?: Size(max(out.width, out.height), minOf(out.width, out.height))
     }
 
     private fun highSpeedPlan(ch: CameraCharacteristics, long: Int, short: Int): Pair<Range<Int>, Size>? = try {
@@ -472,8 +488,9 @@ class CamStreamer(
         if (map == null || !caps.contains(CameraMetadata.REQUEST_AVAILABLE_CAPABILITIES_CONSTRAINED_HIGH_SPEED_VIDEO)) null
         else {
             val want = long.toFloat() / short
-            // A steady 60 is best; otherwise a range that reaches 60.
-            val ranges = map.highSpeedVideoFpsRanges.filter { it.upper == 60 }.sortedByDescending { it.lower }
+            // The slowest range that reaches 60 (60 before 120 before 240), steady ranges first.
+            val ranges = map.highSpeedVideoFpsRanges.filter { it.upper >= 60 }
+                .sortedWith(compareBy<Range<Int>> { it.upper }.thenByDescending { it.lower })
             ranges.firstNotNullOfOrNull { r ->
                 val sizes = map.getHighSpeedVideoSizesFor(r).toList()
                 val same = sizes.filter { abs(it.width.toFloat() / it.height - want) < 0.02f }
@@ -484,24 +501,38 @@ class CamStreamer(
         }
     } catch (_: Exception) { null }
 
-    /** Camera picture size (in the camera's own sideways frame): same shape as the output, at least as big. */
-    private fun pickCaptureSize(ch: CameraCharacteristics): Size {
+    /**
+     * Camera picture size (in the camera's own sideways frame): same shape as the output, at least as big. With
+     * `minFps`, only sizes the camera can deliver that often (its minimum frame time); null if there is none.
+     */
+    private fun pickCaptureSize(ch: CameraCharacteristics, minFps: Int = 0): Size? {
         val long = max(out.width, out.height)
         val short = minOf(out.width, out.height)
         val want = long.toFloat() / short
-        val sizes = ch.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)?.getOutputSizes(SurfaceTexture::class.java)
-            ?: return Size(long, short)
+        val map = ch.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP) ?: return Size(long, short)
+        var sizes = map.getOutputSizes(SurfaceTexture::class.java)?.toList() ?: return Size(long, short)
+        if (minFps > 0) {
+            val maxFrameNs = 1_000_000_000L / minFps + 500_000L   // a little slack for 59.94-style timings
+            sizes = sizes.filter { sz -> try { map.getOutputMinFrameDuration(SurfaceTexture::class.java, sz) in 1..maxFrameNs } catch (_: Exception) { false } }
+            if (sizes.isEmpty()) return null
+        }
         val sameShape = sizes.filter { abs(it.width.toFloat() / it.height - want) < 0.02f }
         return sameShape.filter { it.width >= long }.minByOrNull { it.width }
             ?: sameShape.maxByOrNull { it.width }
             ?: sizes.filter { it.width >= long }.minByOrNull { it.width * it.height }
-            ?: sizes.maxByOrNull { it.width * it.height }!!
+            ?: sizes.maxByOrNull { it.width * it.height }
     }
 
     private fun startEncoder() {
+        val c = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC)
+        val cbr = try {
+            c.codecInfo.getCapabilitiesForType(MediaFormat.MIMETYPE_VIDEO_AVC).encoderCapabilities
+                .isBitrateModeSupported(MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_CBR)
+        } catch (_: Exception) { false }
         val f = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, out.width, out.height).apply {
             setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)
-            setInteger(MediaFormat.KEY_BIT_RATE, bitrate)
+            setInteger(MediaFormat.KEY_BIT_RATE, curBitrate)
+            if (cbr) setInteger(MediaFormat.KEY_BITRATE_MODE, MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_CBR)
             setInteger(MediaFormat.KEY_FRAME_RATE, settings.fps)
             setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 2)
             setInteger(MediaFormat.KEY_PRIORITY, 0)          // real-time
@@ -509,7 +540,6 @@ class CamStreamer(
             // Keep sending frames while the picture is still, so the PC never thinks the phone has gone.
             setLong(MediaFormat.KEY_REPEAT_PREVIOUS_FRAME_AFTER, 100_000L)
         }
-        val c = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC)
         c.setCallback(object : MediaCodec.Callback() {
             override fun onInputBufferAvailable(codec: MediaCodec, index: Int) {}
             override fun onOutputBufferAvailable(codec: MediaCodec, index: Int, info: MediaCodec.BufferInfo) {
@@ -543,17 +573,48 @@ class CamStreamer(
         val data = if (key) (codecConfig ?: ByteArray(0)) + bytes else bytes
         val flags = if (key) 2 else 0
         if (!queue.offer(Packet(data, info.presentationTimeUs, flags))) {
-            // Wi-Fi cannot keep up: drop what is queued and restart from a fresh key frame rather than lag behind.
+            // Wi-Fi fell far behind: drop what is queued, halve the bitrate, and restart from a fresh full picture
+            // (at most one ask a second). Before, the full picture was sent at the same high bitrate and was itself
+            // too big, so it overflowed again: 1080p never recovered.
             queue.clear()
             waitForKey = true
+            setBitrate(curBitrate / 2)
             requestKeyFrame()
         }
     }
 
+    /** Ask the video chip for a full picture: at most one a second (the PC asks too after broken frames). */
     private fun requestKeyFrame() {
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (lastKeyAsk != 0L && now - lastKeyAsk < 1000) return
+        lastKeyAsk = now
         try {
             codec?.setParameters(Bundle().apply { putInt(MediaCodec.PARAMETER_KEY_REQUEST_SYNC_FRAME, 0) })
         } catch (_: Exception) {}
+    }
+
+    /** Change the video chip's bitrate on the fly, within [ceiling / 5 (≥ 300 kbit/s), ceiling]. */
+    private fun setBitrate(want: Int) {
+        val b = want.coerceIn(max(300_000, bitrate / 5), bitrate)
+        if (abs(b - curBitrate) < curBitrate / 30) return
+        curBitrate = b
+        try {
+            codec?.setParameters(Bundle().apply { putInt(MediaCodec.PARAMETER_KEY_VIDEO_BITRATE, b) })
+        } catch (_: Exception) {}
+    }
+
+    /**
+     * Adaptive bitrate, checked twice a second from the sending loop. A queue of waiting frames means Wi-Fi is not
+     * keeping up: step down 25 % at once. Three calm seconds in a row: step back up 10 %, never above the ceiling.
+     */
+    private fun adaptBitrate() {
+        val now = android.os.SystemClock.elapsedRealtime()
+        val backlog = queue.size
+        when {
+            backlog >= 6 -> { setBitrate(curBitrate * 3 / 4); calmSince = now }
+            backlog <= 1 -> if (now - calmSince >= 3000) { setBitrate(curBitrate * 11 / 10); calmSince = now }
+            else -> calmSince = now
+        }
     }
 
     @SuppressLint("MissingPermission")
@@ -602,7 +663,7 @@ class CamStreamer(
                     Log.w(TAG, "high-speed session refused; falling back to regular video")
                     highSpeed = false
                     hsRange = null
-                    chars?.let { ch -> val size = pickCaptureSize(ch); if (size != cap) { cap = size; gl?.setCaptureSize(size.width, size.height) } }
+                    chars?.let { ch -> val size = pickCaptureSize(ch) ?: cap; if (size != cap) { cap = size; gl?.setCaptureSize(size.width, size.height) } }
                     createSession(device)
                     return
                 }
@@ -777,10 +838,14 @@ object CameraCatalog {
                 val caps = ch.get(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES) ?: intArrayOf()
                 val map = ch.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
                 map != null && caps.contains(CameraMetadata.REQUEST_AVAILABLE_CAPABILITIES_CONSTRAINED_HIGH_SPEED_VIDEO) &&
-                    map.highSpeedVideoFpsRanges.any { r -> r.upper == 60 && map.getHighSpeedVideoSizesFor(r).any { it.width >= 1280 } }
+                    map.highSpeedVideoFpsRanges.any { r -> r.upper >= 60 && map.getHighSpeedVideoSizesFor(r).any { it.width >= 1280 } }
+            } catch (_: Exception) { false }
+            val reg60 = fpsRanges.any { it.upper >= 60 && it.lower <= 60 } && try {
+                val map = ch.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
+                map?.getOutputSizes(SurfaceTexture::class.java)?.any { it.width >= 1280 && map.getOutputMinFrameDuration(SurfaceTexture::class.java, it) in 1..17_200_000L } == true
             } catch (_: Exception) { false }
             for (f in listOf(15, 24, 30, 60))
-                if (fpsRanges.any { it.upper >= f && it.lower <= f } || (f == 60 && hs60)) fpsList.put(f)
+                if (if (f == 60) reg60 || hs60 else fpsRanges.any { it.upper >= f && it.lower <= f }) fpsList.put(f)
             val vs = ch.get(CameraCharacteristics.CONTROL_AVAILABLE_VIDEO_STABILIZATION_MODES) ?: intArrayOf()
             val ois = ch.get(CameraCharacteristics.LENS_INFO_AVAILABLE_OPTICAL_STABILIZATION) ?: intArrayOf()
             list.put(JSONObject()

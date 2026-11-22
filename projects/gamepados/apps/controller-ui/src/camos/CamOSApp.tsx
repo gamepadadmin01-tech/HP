@@ -116,6 +116,12 @@ export default function CamOSApp() {
   const [adPlaying, setAdPlaying] = useState(false);
   const toastTimer = useRef<number>(0);
   const restartAfterStop = useRef(false);
+  /** When this phone's own stream last ended, and whether the PC check after it was already retried. */
+  const streamEndedAt = useRef(0);
+  const busyRetried = useRef(false);
+  /** 60 fps chosen but the camera delivers much less: count live seconds, tell the user once. */
+  const lowFpsSeconds = useRef(0);
+  const told60 = useRef(false);
   const showToast = (m: string) => { setToast(m); clearTimeout(toastTimer.current); toastTimer.current = window.setTimeout(() => setToast(""), 4600); };
 
   const testBuild = (() => { try { return bridge()?.isTestBuild?.() ?? true; } catch { return false; } })();
@@ -158,7 +164,17 @@ export default function CamOSApp() {
     setPcStatus({ status: "checking", message: "" });
     b.check(target.ip, target.key);
   }
-  useEffect(() => { if (route === "dashboard") checkPc(); }, [route, pc?.ip, pc?.key]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (route !== "dashboard") return;
+    // Right after this phone stopped streaming, the PC may still be closing that stream for a moment: wait a
+    // little before asking, so the answer isn't "busy with another phone" about ourselves.
+    const justStopped = Date.now() - streamEndedAt.current < 2000;
+    busyRetried.current = false;
+    if (!justStopped) { checkPc(); return; }
+    setPcStatus({ status: "checking", message: "" });
+    const t = window.setTimeout(() => checkPc(), 900);
+    return () => clearTimeout(t);
+  }, [route, pc?.ip, pc?.key]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function start(target: PC | null = pc) {
     if (!target) { setRoute("connect"); return; }
@@ -264,16 +280,31 @@ export default function CamOSApp() {
     (window as any).camosOnCheck = (json: string) => {
       const r = JSON.parse(json);
       if (!pc || r.ip !== pc.ip) return;   // a late answer for a PC this phone no longer uses
+      if (r.status === "busy" && !busyRetried.current && Date.now() - streamEndedAt.current < 8000) {
+        // Almost certainly our own stream still closing on the PC: one quiet retry instead of a false alarm.
+        busyRetried.current = true;
+        setPcStatus({ status: "checking", message: "" });
+        window.setTimeout(() => checkPc(), 1200);
+        return;
+      }
       setPcStatus({ status: r.status, message: r.message });
     };
     (window as any).camosOnState = (json: string) => {
       const st = JSON.parse(json);
+      if (st.state === "stopped" || st.state === "error") { streamEndedAt.current = Date.now(); lowFpsSeconds.current = 0; }
       if (st.state === "stopped") {
         if (restartAfterStop.current) { restartAfterStop.current = false; setTimeout(() => start(), 400); return; }
         setRoute("dashboard"); return;
       }
       if (st.state === "error") { setScanning(false); setRoute((r) => (r === "live" ? "dashboard" : r)); showToast(st.message); return; }
       setLive({ state: st.state, message: st.message, fps: st.fps, kbps: st.kbps, portrait: st.portrait });
+      if (st.state === "live" && st.fps > 0) {
+        lowFpsSeconds.current = s.fps === 60 && st.fps < 45 ? lowFpsSeconds.current + 1 : 0;
+        if (lowFpsSeconds.current === 5 && !told60.current) {
+          told60.current = true;
+          showToast(`This camera gives about ${st.fps} fps here. For 60 fps try 720p or another lens.`);
+        }
+      }
     };
     (window as any).camosOnRemote = onRemote;
     (window as any).camosOnPermission = (ok: boolean) => { if (!ok) showToast("CamOS needs the camera permission to work as a webcam."); };
