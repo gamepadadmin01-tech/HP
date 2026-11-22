@@ -26,7 +26,8 @@
   font: 500 14px/1.4 var(--calm-body); color: var(--calm-ink); }
 .gp-shell.camos-toast > svg { color: var(--calm-accent); flex-shrink: 0; }
 .gp-shell .camos-toast-close { width: 30px; height: 30px; flex-shrink: 0; display: grid; place-items: center; border-radius: 999px; color: var(--calm-muted); }
-.gp-shell .camos-pc-hint { display: flex; align-items: center; justify-content: center; gap: 6px; margin-top: 6px; font-size: 13px; color: var(--calm-muted); }
+.gp-shell .camos-pc-hint { display: block; margin-top: 6px; font-size: 13px; line-height: 1.45; color: var(--calm-muted); text-align: center; }
+.gp-shell .camos-pc-hint > svg { display: inline; vertical-align: -2px; margin-right: 6px; }
 .gp-shell .camos-pc-hint b, .gp-shell .calm-step b { color: var(--calm-ink); font-weight: 600; }
 
 /* Live: the camera fills the screen behind a see-through page; status pill on top, control bar at the bottom.

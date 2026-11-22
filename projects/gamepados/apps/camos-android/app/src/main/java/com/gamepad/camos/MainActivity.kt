@@ -136,6 +136,7 @@ class MainActivity : AppCompatActivity() {
             ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.CAMERA), 1)
         }
         preferHighestRefreshRate()
+        startUsbWatch()
 
         // Back: the page decides first (close the scanner, leave Connect, stop streaming, go back to the Camera tab),
         // exactly like GamepadOS; only when it has nothing to close does Back leave the app.
@@ -162,6 +163,56 @@ class MainActivity : AppCompatActivity() {
         } catch (_: Exception) {}
     }
 
+    // ───────────────────────── USB: connect by itself ─────────────────────────
+
+    @Volatile private var usbWatch = true
+
+    /**
+     * Owner, 2026-11-22: "the phone should auto-connect after USB tethering or debugging is turned on". Every 2 s,
+     * cheaply: is there a USB-tether network (rndis/usb/ncm with an address)? Or is USB debugging on while the phone
+     * charges over USB, and does Gamepad Server's adb tunnel answer on 127.0.0.1:7780? On each change the page is
+     * told (window.camosOnUsb), and it finds and connects to the PC. The tunnel is knocked only until it answers,
+     * never while streaming, so this costs nothing in normal use.
+     */
+    private fun startUsbWatch() {
+        Thread({
+            var lastTether = false
+            var lastAdb = false
+            while (usbWatch) {
+                val tether = try {
+                    java.util.Collections.list(java.net.NetworkInterface.getNetworkInterfaces() ?: null).any { ni ->
+                        ni.isUp && (ni.name.startsWith("rndis") || ni.name.startsWith("usb") || ni.name.startsWith("ncm")) &&
+                            ni.interfaceAddresses.any { it.address is java.net.Inet4Address }
+                    }
+                } catch (_: Exception) { false }
+                val usbPower = try {
+                    registerReceiver(null, android.content.IntentFilter(android.content.Intent.ACTION_BATTERY_CHANGED))
+                        ?.getIntExtra(android.os.BatteryManager.EXTRA_PLUGGED, 0) == android.os.BatteryManager.BATTERY_PLUGGED_USB
+                } catch (_: Exception) { false }
+                val adbOn = try { android.provider.Settings.Global.getInt(contentResolver, android.provider.Settings.Global.ADB_ENABLED, 0) == 1 } catch (_: Exception) { false }
+                val adb = when {
+                    !(adbOn && usbPower) -> false
+                    lastAdb || streamer.isRunning() -> lastAdb
+                    else -> try {
+                        java.net.Socket().use { sk ->
+                            sk.connect(java.net.InetSocketAddress("127.0.0.1", CamStreamer.PORT), 300)
+                            sk.soTimeout = 800
+                            val b = ByteArray(4)
+                            java.io.DataInputStream(sk.getInputStream()).readFully(b)
+                            String(b, Charsets.US_ASCII) == "CAMS"
+                        }
+                    } catch (_: Exception) { false }
+                }
+                if (tether != lastTether || adb != lastAdb) {
+                    lastTether = tether; lastAdb = adb
+                    val json = JSONObject().put("on", tether || adb).put("via", if (adb) "adb" else if (tether) "tether" else "none")
+                    js("window.camosOnUsb && window.camosOnUsb(${JSONObject.quote(json.toString())})")
+                }
+                try { Thread.sleep(2000) } catch (_: InterruptedException) { break }
+            }
+        }, "camos-usb-watch").apply { isDaemon = true }.start()
+    }
+
     /** How the screen is turned right now: 0, 90, 180 or 270 (Android's own Surface.ROTATION_* in degrees). */
     private fun displayRotationDegrees(): Int {
         val r = try { if (Build.VERSION.SDK_INT >= 30) display?.rotation ?: 0 else @Suppress("DEPRECATION") windowManager.defaultDisplay.rotation } catch (_: Exception) { 0 }
@@ -185,6 +236,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        usbWatch = false
         streamer.stop()
         stopQr()
         releaseWifiLock()

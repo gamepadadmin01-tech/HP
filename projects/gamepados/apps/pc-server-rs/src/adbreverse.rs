@@ -46,6 +46,8 @@ pub fn find_adb() -> Option<PathBuf> {
             cands.push(dir.join("adb.exe"));
             cands.push(dir.join("platform-tools").join("adb.exe"));
             cands.push(dir.join("..").join("platform-tools").join("adb.exe"));
+            // Development builds (apps/pc-server-rs/target/release): the project's own copy in tools/.
+            cands.push(dir.join("..").join("..").join("..").join("..").join("tools").join("platform-tools").join("adb.exe"));
         }
     }
     // Where the Python server keeps its extracted copy.

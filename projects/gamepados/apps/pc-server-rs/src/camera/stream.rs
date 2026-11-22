@@ -88,6 +88,9 @@ pub fn start(key: String) -> Result<(), String> {
                     let peer = c.peer_addr().map(|a| a.to_string()).unwrap_or_default();
                     match serve(&mut c, &key) {
                         Ok(()) => println!("camos: phone {peer} stopped streaming"),
+                        // A phone that only knocks (reads our greeting, then hangs up) is the CamOS app checking
+                        // the USB-debugging tunnel: normal, not an error.
+                        Err(e) if e.starts_with("hello:") && e.contains("fill") => {}
                         Err(e) => set_error(format!("phone {peer}: {e}")),
                     }
                     if let Ok(mut s) = STATUS.lock() {

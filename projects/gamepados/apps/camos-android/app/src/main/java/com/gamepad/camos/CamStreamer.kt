@@ -102,6 +102,10 @@ class CamStreamer(
 
         /** HMAC-SHA256(key, nonce ‖ fixed[0..12] ‖ name), first 16 bytes. Mirrors proto::tag (Rust). */
         fun tag(key: String, nonce: ByteArray, fixed: ByteArray, name: ByteArray): ByteArray {
+            // No key = a phone on the USB cable, which needs none (the PC accepts that only from the cable). Android's
+            // HMAC refuses an empty key outright ("Empty key"), which used to abort every USB connection before the
+            // phone said hello; the PC showed "hello: failed to fill whole buffer", the phone "PC not answering".
+            if (key.isEmpty()) return ByteArray(16)
             val mac = Mac.getInstance("HmacSHA256")
             mac.init(SecretKeySpec(key.toByteArray(Charsets.US_ASCII), "HmacSHA256"))
             mac.update(nonce)

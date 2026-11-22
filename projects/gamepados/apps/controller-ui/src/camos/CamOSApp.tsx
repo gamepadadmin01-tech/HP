@@ -128,6 +128,9 @@ export default function CamOSApp() {
    *  when it joins another network or the router hands out a new one). */
   const refinding = useRef<{ forIp: string; message: string } | null>(null);
   const [usbSearch, setUsbSearch] = useState<"idle" | "searching" | "failed">("idle");
+  /** USB tethering or USB debugging is on (told by the native watcher): connect over the cable by itself. */
+  const [usbOn, setUsbOn] = useState(false);
+  const findUsb = () => { const b = bridge(); if (!b?.find) return; setUsbSearch("searching"); b.find(pc?.key ?? "", true); };
   const told60 = useRef(false);
   const showToast = (m: string) => { setToast(m); clearTimeout(toastTimer.current); toastTimer.current = window.setTimeout(() => setToast(""), 4600); };
 
@@ -303,6 +306,18 @@ export default function CamOSApp() {
       }
       setPcStatus({ status: r.status, message: r.message });
     };
+    (window as any).camosOnUsb = (json: string) => {
+      const r = JSON.parse(json) as { on: boolean; via: string };
+      setUsbOn(r.on);
+      if (r.on) {
+        // Cable just came up: find the PC on it and connect (no button needed). Not while streaming.
+        if (route !== "live") findUsb();
+      } else if (pc?.via === "usb") {
+        // Cable gone: forget the cable address's "USB" mark so the phone looks for the PC on Wi-Fi again.
+        setPc({ ip: pc.ip, key: pc.key });
+        refinding.current = null;
+      }
+    };
     (window as any).camosOnFind = (json: string) => {
       const r = JSON.parse(json) as { ip: string | null; name: string; via: string };
       if (r.via === "usb" || usbSearch === "searching") {
@@ -311,7 +326,11 @@ export default function CamOSApp() {
           setPc({ ip: r.ip, key: pc?.key ?? "", via: "usb" });
           setRoute("dashboard");
           showToast(`Connected to ${r.name || "your PC"} over USB.`);
-        } else setUsbSearch("failed");
+        } else {
+          setUsbSearch("failed");
+          // Cable is on but no PC answered yet (Gamepad Server not open?): try again in a few seconds.
+          if (usbOn) window.setTimeout(() => { if (route !== "live") findUsb(); }, 5000);
+        }
         return;
       }
       const waiting = refinding.current;
@@ -361,7 +380,7 @@ export default function CamOSApp() {
     {route === "dashboard" && <ShellScreenTransition key="dashboard" direction={1} className="absolute inset-0">
       <Dashboard tab={tab} setTab={setTab} page={settingsPage} setPage={setSettingsPage} pc={pc} pcStatus={pcStatus} s={s} set={set} lenses={lenses} lens={lens}
         premium={premium} setPremium={setPremium} testBuild={testBuild} adHd={adHd} hdUntil={hdUntil} hdAllowed={hdAllowed}
-        onStart={() => start()} onConnect={() => setRoute("connect")} onCheck={() => { refinding.current = null; checkPc(); }} onWatchAd={watchAd} goPremium={goPremium}
+        onStart={() => start()} onConnect={() => setRoute("connect")} onCheck={() => { refinding.current = null; if (usbOn) findUsb(); else checkPc(); }} onWatchAd={watchAd} goPremium={goPremium}
         showToast={showToast}
         onForget={() => { setPc(null); setPcStatus({ status: "unknown", message: "" }); showToast("This phone forgot the PC. Scan its QR code to pair again."); }} />
     </ShellScreenTransition>}
