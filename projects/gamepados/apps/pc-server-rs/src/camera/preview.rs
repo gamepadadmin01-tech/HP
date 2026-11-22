@@ -9,8 +9,8 @@ use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 /// Longest side of the window preview, in pixels.
-pub const MAX_SIDE: u32 = 320;
-const EVERY: Duration = Duration::from_millis(66);
+pub const MAX_SIDE: u32 = 800;   // was 320: looked blurry once scaled up in the window
+const EVERY: Duration = Duration::from_millis(15);   // up to ~60 fps (was 15 fps: looked choppy)
 
 #[derive(Clone)]
 pub struct Preview {

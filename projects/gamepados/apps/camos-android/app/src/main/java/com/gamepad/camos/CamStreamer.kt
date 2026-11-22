@@ -614,6 +614,9 @@ class CamStreamer(
             setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 2)
             setInteger(MediaFormat.KEY_PRIORITY, 0)          // real-time
             if (Build.VERSION.SDK_INT >= 30) setInteger(MediaFormat.KEY_LOW_LATENCY, 1)
+            // No reordered frames: some phone video chips hold pictures back to compress better (B-frames), which
+            // adds delay and makes the PC show frames unevenly. A webcam needs every picture out at once.
+            if (Build.VERSION.SDK_INT >= 29) setInteger(MediaFormat.KEY_MAX_B_FRAMES, 0)
             // Keep sending frames while the picture is still, so the PC never thinks the phone has gone.
             setLong(MediaFormat.KEY_REPEAT_PREVIOUS_FRAME_AFTER, 100_000L)
         }

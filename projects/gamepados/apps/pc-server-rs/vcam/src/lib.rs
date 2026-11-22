@@ -33,7 +33,7 @@
 use std::ffi::c_void;
 use std::io::Write as _;
 use std::sync::atomic::{AtomicBool, AtomicIsize, AtomicU64, Ordering};
-use std::sync::Mutex;
+use std::sync::{Condvar, Mutex};
 use std::time::{Duration, Instant};
 
 use windows::Win32::Foundation::*;
@@ -94,6 +94,18 @@ struct Frame {
 static LATEST: Mutex<Option<Frame>> = Mutex::new(None);
 static READER_STARTED: AtomicBool = AtomicBool::new(false);
 static FRAMES_IN: AtomicU64 = AtomicU64::new(0);
+/// Bumped for every new phone frame, so a waiting app request wakes the moment one arrives.
+static FRAME_SEQ: Mutex<u64> = Mutex::new(0);
+static NEW_FRAME: Condvar = Condvar::new();
+/// Smoothed time between phone frames (microseconds), to tell a phone slower than the app's rate from a faster one.
+static PHONE_INTERVAL_US: AtomicU64 = AtomicU64::new(0);
+
+/// Pacing rule. A phone at least as fast as the app's chosen rate: keep the app's steady rhythm and always hand
+/// over the newest frame (smooth, never faster than asked). A phone slower than that rate (e.g. 30 fps into a
+/// 60 fps mode): follow the phone's frames, so the app doesn't get uneven repeats.
+fn follow_phone(phone_live: bool, phone_interval: Duration, period: Duration) -> bool {
+    phone_live && phone_interval > period * 23 / 20
+}
 
 /// One background thread per process: connect to the server's pipe, read
 /// `"CAMF" | w u32 | h u32 | len u32 | NV12 bytes`, keep only the newest.
@@ -113,6 +125,7 @@ fn start_reader() {
             };
             log("connected to GamepadServer pipe");
             let mut buf: Vec<u8> = Vec::new();
+            let mut last_frame_at: Option<Instant> = None;
             loop {
                 let mut hdr = [0u8; 16];
                 if !read_exact(h, &mut hdr) || &hdr[0..4] != b"CAMF" {
@@ -137,6 +150,16 @@ fn start_reader() {
                     if let Some(o) = old {
                         buf = o.nv12;
                     }
+                }
+                let now = Instant::now();
+                if let Some(prev) = last_frame_at.replace(now) {
+                    let us = now.duration_since(prev).as_micros().min(1_000_000) as u64;
+                    let old = PHONE_INTERVAL_US.load(Ordering::Relaxed);
+                    PHONE_INTERVAL_US.store(if old == 0 { us } else { (old * 7 + us) / 8 }, Ordering::Relaxed);
+                }
+                if let Ok(mut g) = FRAME_SEQ.lock() {
+                    *g += 1;
+                    NEW_FRAME.notify_all();
                 }
             }
             unsafe {
@@ -291,6 +314,9 @@ struct StreamState {
     fps: u32,
     /// When the next picture is due — apps get 30 per second, not as many as the CPU can make.
     next_due: Option<Instant>,
+    /// Frame-driven pacing: the last phone frame handed to the app, and when.
+    last_seq: u64,
+    last_out: Option<Instant>,
 }
 
 #[implement(IMFMediaStream2, IKsControl)]
@@ -309,6 +335,7 @@ impl MediaStream {
             s.h = h;
             s.fps = fps;
             s.next_due = None;
+            s.last_out = None;
         }
         unsafe { self.queue.QueueEventParamVar(MEStreamStarted.0 as u32, &GUID::zeroed(), S_OK, start) }
     }
@@ -376,16 +403,55 @@ impl IMFMediaStream_Impl for MediaStream_Impl {
                 return Err(MF_E_MEDIA_SOURCE_WRONGSTATE.into());
             }
             s.tick += 1;
-            let now = Instant::now();
-            let due = s.next_due.unwrap_or(now);
-            // If we fell far behind (app paused reading), restart the clock instead of bursting.
-            let next = if due + Duration::from_millis(200) < now { now } else { due };
-            s.next_due = Some(next + Duration::from_nanos(1_000_000_000 / s.fps.max(1) as u64));
-            (s.w, s.h, s.tick, next, s.fps)
+            (s.w, s.h, s.tick, s.last_out, s.fps)
         };
-        let wait = due_at.saturating_duration_since(Instant::now());
-        if !wait.is_zero() {
-            std::thread::sleep(wait);
+        let period = Duration::from_nanos(1_000_000_000 / fps.max(1) as u64);
+        let phone_live = LATEST.lock().ok().and_then(|g| g.as_ref().map(|f| f.at.elapsed() < STALE_AFTER)).unwrap_or(false);
+        let phone_interval = Duration::from_micros(PHONE_INTERVAL_US.load(Ordering::Relaxed));
+        let last_seq = self.st.lock().map(|s| s.last_seq).unwrap_or(0);
+        let mut seq = last_seq;
+        if follow_phone(phone_live, phone_interval, period) {
+            // Phone slower than the app's rate: hand over each new phone frame as it arrives (never faster than
+            // the app's rate), repeating the last picture only if the phone is late.
+            if let Some(last) = due_at {
+                let wait = (last + period * 4 / 5).saturating_duration_since(Instant::now());
+                if !wait.is_zero() {
+                    std::thread::sleep(wait);
+                }
+            }
+            let deadline = due_at.map(|t| t + phone_interval * 3 / 2).unwrap_or_else(Instant::now).max(Instant::now());
+            if let Ok(mut g) = FRAME_SEQ.lock() {
+                while *g == last_seq {
+                    let now = Instant::now();
+                    if now >= deadline {
+                        break;
+                    }
+                    match NEW_FRAME.wait_timeout(g, deadline - now) {
+                        Ok((ng, _)) => g = ng,
+                        Err(_) => return Err(E_FAIL.into()),
+                    }
+                }
+                seq = *g;
+            }
+        } else {
+            // Steady rhythm at the app's rate with the newest frame (or the waiting picture when no phone).
+            let due = {
+                let mut st = self.st.lock().map_err(|_| Error::from(E_FAIL))?;
+                let now = Instant::now();
+                let due = st.next_due.unwrap_or(now);
+                let next = if due + Duration::from_millis(200) < now { now } else { due };
+                st.next_due = Some(next + period);
+                next
+            };
+            let wait = due.saturating_duration_since(Instant::now());
+            if !wait.is_zero() {
+                std::thread::sleep(wait);
+            }
+            seq = FRAME_SEQ.lock().map(|g| *g).unwrap_or(seq);
+        }
+        if let Ok(mut s) = self.st.lock() {
+            s.last_seq = seq;
+            s.last_out = Some(Instant::now());
         }
         unsafe {
             let size = w * h * 3 / 2;
@@ -548,7 +614,7 @@ impl IMFMediaSource_Impl for MediaSource_Impl {
                     source: Mutex::new(Some(me)),
                     sd: self.sd.clone(),
                     queue: unsafe { MFCreateEventQueue()? },
-                    st: Mutex::new(StreamState { state: MF_STREAM_STATE_STOPPED, shutdown: false, w, h, tick: 0, fps, next_due: None }),
+                    st: Mutex::new(StreamState { state: MF_STREAM_STATE_STOPPED, shutdown: false, w, h, tick: 0, fps, next_due: None, last_seq: 0, last_out: None }),
                 });
                 s.stream = Some(stream);
             }
@@ -873,6 +939,16 @@ mod tests {
         assert_eq!(dst[dw - 1], 16);
         assert_eq!(dst[2], 235); // fitted column starts at x = 2 (even-aligned)
         assert!(dst[dw * dh..].iter().all(|&v| v == 128));
+    }
+
+    #[test]
+    fn pacing_follows_a_slow_phone_and_keeps_rhythm_for_a_fast_one() {
+        let p30 = Duration::from_micros(33_333);
+        let p60 = Duration::from_micros(16_667);
+        assert!(!follow_phone(true, p60, p30), "60 fps phone into a 30 fps app: steady 30, newest frame");
+        assert!(!follow_phone(true, p30, p30), "same rate: steady rhythm");
+        assert!(follow_phone(true, p30, p60), "30 fps phone into a 60 fps app: follow the phone");
+        assert!(!follow_phone(false, p30, p60), "no phone: steady clock for the waiting picture");
     }
 
     #[test]

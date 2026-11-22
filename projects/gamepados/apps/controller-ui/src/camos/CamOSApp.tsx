@@ -355,7 +355,7 @@ export default function CamOSApp() {
         lowFpsSeconds.current = s.fps === 60 && st.fps < 45 ? lowFpsSeconds.current + 1 : 0;
         if (lowFpsSeconds.current === 5 && !told60.current) {
           told60.current = true;
-          showToast(`Camera is at ${st.fps} fps. In a dark room cameras slow down for light: add light, or try 720p.`);
+          showToast(`Your phone gives CamOS ${st.fps} fps at this size. Try 720p for 60, or see Settings → About → Camera report.`);
         }
       }
     };

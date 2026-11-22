@@ -168,6 +168,17 @@ pub struct App {
     win_size: egui::Vec2,
     /// The pairing QR needs redrawing (the Wi-Fi address changed).
     qr_dirty: bool,
+    /// Full-screen camera view (owner, 2026-11-22).
+    fullscreen: bool,
+    /// Which screen was drawn last frame, and since when (for the fade-in when it changes).
+    screen_kind: u8,
+    screen_since: std::time::Instant,
+    /// Window height being animated toward its target (smooth grow/shrink between screens).
+    win_h_anim: f32,
+    /// Where the QR button is, for the first-time tip that points at it.
+    qr_btn: Option<egui::Rect>,
+    /// The first-time tip ("show the QR again here") was dismissed (kept on disk).
+    tip_seen: bool,
 
     tx: Sender<Msg>,
     rx: Receiver<Msg>,
@@ -208,6 +219,12 @@ impl App {
             notice: None,
             win_size: QR_WINDOW,
             qr_dirty: false,
+            fullscreen: false,
+            screen_kind: 0,
+            screen_since: std::time::Instant::now(),
+            win_h_anim: QR_WINDOW.y,
+            qr_btn: None,
+            tip_seen: tip_file().map(|p| p.exists()).unwrap_or(false),
             tx,
             rx,
             update_state: UpdateState::Idle,
@@ -445,7 +462,23 @@ impl eframe::App for App {
             self.preview_tex = None;
         }
         let camera_screen = self.last_live.is_some() && !self.show_qr;
-        ctx.request_repaint_after(if self.last_live.is_some() { Duration::from_millis(66) } else { REPAINT_EVERY });
+        // Live: repaint at up to 60 Hz so the preview is as smooth as the phone (it was 15 Hz before).
+        ctx.request_repaint_after(if self.last_live.is_some() { Duration::from_millis(16) } else { REPAINT_EVERY });
+        if self.fullscreen && (!camera_screen || ctx.input(|i| i.key_pressed(egui::Key::Escape))) {
+            self.fullscreen = false;
+            ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(false));
+        }
+        let kind = if self.feedback_open { 2 } else if camera_screen { 1 } else { 0 };
+        if kind != self.screen_kind {
+            self.screen_kind = kind;
+            self.screen_since = std::time::Instant::now();
+        }
+        // Fade the new screen in over a quarter second (ease-out), like the phone app's screen changes.
+        let t = (self.screen_since.elapsed().as_secs_f32() / 0.25).min(1.0);
+        let fade = 1.0 - (1.0 - t) * (1.0 - t);
+        if t < 1.0 {
+            ctx.request_repaint();
+        }
 
         let full = ui.max_rect();
         let footer_h = 30.0;
@@ -453,6 +486,7 @@ impl eframe::App for App {
         let footer = egui::Rect::from_min_max(egui::pos2(full.min.x, full.max.y - footer_h), full.max);
 
         let used = ui.scope_builder(egui::UiBuilder::new().max_rect(body.shrink2(egui::vec2(16.0, 0.0))), |ui| {
+            if fade < 1.0 { ui.multiply_opacity(fade.max(0.01)); }
             if self.feedback_open {
                 self.feedback_screen(ui, &ctx);
             } else if camera_screen {
@@ -464,10 +498,26 @@ impl eframe::App for App {
         // The window hugs what it shows (no empty bands): measured each frame, resized when it changes by more than
         // a few pixels — compact around the QR, taller while the CamOS controls show, a row taller when chips wrap.
         let want = egui::vec2(QR_WINDOW.x, (used.max.y - full.min.y + 12.0 + footer_h).clamp(400.0, 820.0).round());
-        if (want.y - self.win_size.y).abs() > 3.0 {
-            self.win_size = want;
-            ctx.send_viewport_cmd(egui::ViewportCommand::MinInnerSize(want));
-            ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(want));
+        if !self.fullscreen {
+            // Grow / shrink smoothly toward the size this screen needs (about a quarter second), instead of a jump.
+            let gap = want.y - self.win_h_anim;
+            if gap.abs() > 1.0 {
+                self.win_h_anim += if gap.abs() < 4.0 { gap } else { gap * 0.28 };
+                ctx.request_repaint();
+            }
+            let now = egui::vec2(want.x, self.win_h_anim.round());
+            if (now.y - self.win_size.y).abs() >= 1.0 {
+                self.win_size = now;
+                ctx.send_viewport_cmd(egui::ViewportCommand::MinInnerSize(egui::vec2(now.x, 380.0)));
+                ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(now));
+            }
+        }
+
+        // First time the camera screen shows: a tip pointing at the QR button.
+        if camera_screen && !self.tip_seen && !self.feedback_open {
+            if let Some(btn) = self.qr_btn {
+                self.qr_tip(ui, btn);
+            }
         }
         ui.scope_builder(egui::UiBuilder::new().max_rect(footer.shrink2(egui::vec2(14.0, 4.0))), |ui| {
             self.footer(ui, &ctx);
@@ -541,8 +591,16 @@ impl App {
             let device = "Phone".to_string();
             ui.label(egui::RichText::new(format!("CamOS  ·  {device}")).size(13.0).color(INK));
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if icon_button(ui, Icon::Qr, false, 30.0).on_hover_text("Show the pairing QR").clicked() {
+                let qr = icon_button(ui, Icon::Qr, false, 30.0).on_hover_text("Show the pairing QR");
+                self.qr_btn = Some(qr.rect);
+                if qr.clicked() {
                     self.show_qr = true;
+                    self.dismiss_tip();
+                }
+                let (icon, tip) = if self.fullscreen { (Icon::Shrink, "Leave full screen (Esc)") } else { (Icon::Expand, "Full screen") };
+                if icon_button(ui, icon, self.fullscreen, 30.0).on_hover_text(tip).clicked() {
+                    self.fullscreen = !self.fullscreen;
+                    ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(self.fullscreen));
                 }
                 let players = self.status.players();
                 if !players.is_empty() {
@@ -554,7 +612,14 @@ impl App {
 
         // The picture, fitted (never cropped) in a dark rounded box.
         let w = ui.available_width();
-        let (box_rect, _) = ui.allocate_exact_size(egui::vec2(w, (w * 9.0 / 16.0).round()), egui::Sense::hover());
+        // Full screen: the picture takes all the height the controls leave (they need about 300 px).
+        let box_size = if self.fullscreen {
+            let h = (ui.available_height() - 300.0).max(200.0);
+            egui::vec2(w, h)
+        } else {
+            egui::vec2(w, (w * 9.0 / 16.0).round())
+        };
+        let (box_rect, _) = ui.allocate_exact_size(box_size, egui::Sense::hover());
         let painter = ui.painter_at(box_rect);
         painter.rect_filled(box_rect, 14.0, ART);
         if let Some(pv) = preview {
@@ -573,7 +638,12 @@ impl App {
             }
             // LIVE pill over the picture.
             if let Some(p) = phone {
-                let text = format!("LIVE  {}p · {} fps", p.quality, p.fps);
+                // The frame rate the PC actually RECEIVES (measured), not the one asked for: phone and PC agree.
+                #[cfg(windows)]
+                let got = crate::camera::stream::status().fps.round() as u32;
+                #[cfg(not(windows))]
+                let got = p.fps;
+                let text = format!("LIVE  {}p · {} fps", p.quality, if got > 0 { got } else { p.fps });
                 let font = egui::FontId::proportional(11.0);
                 let g = painter.layout_no_wrap(text, font, INK);
                 let pill = egui::Rect::from_min_size(box_rect.min + egui::vec2(10.0, 10.0), g.size() + egui::vec2(26.0, 10.0));
@@ -736,6 +806,47 @@ impl App {
     }
 }
 
+/// Where "the first-time tip was dismissed" is remembered (next to the pairing key).
+fn tip_file() -> Option<std::path::PathBuf> {
+    std::env::var_os("LOCALAPPDATA").map(|d| std::path::PathBuf::from(d).join("GamepadServer").join("tip-qr-button.seen"))
+}
+
+impl App {
+    fn dismiss_tip(&mut self) {
+        if !self.tip_seen {
+            self.tip_seen = true;
+            if let Some(p) = tip_file() {
+                let _ = std::fs::create_dir_all(p.parent().unwrap_or(std::path::Path::new(".")));
+                let _ = std::fs::write(p, b"1");
+            }
+        }
+    }
+
+    /// A small bubble under the QR button with an arrow pointing up at it: "Show the QR code again here".
+    fn qr_tip(&mut self, ui: &mut egui::Ui, btn: egui::Rect) {
+        let w = 210.0;
+        let top = btn.max.y + 10.0;
+        let right = btn.max.x + 6.0;
+        let rect = egui::Rect::from_min_max(egui::pos2(right - w, top), egui::pos2(right, top + 66.0));
+        let p = ui.ctx().layer_painter(egui::LayerId::new(egui::Order::Foreground, egui::Id::new("qr-tip")));
+        p.rect(rect, 12.0, SURFACE_2, egui::Stroke::new(1.0, ORANGE), egui::StrokeKind::Inside);
+        let tip = btn.center_bottom() + egui::vec2(0.0, 2.0);
+        p.add(egui::Shape::convex_polygon(vec![tip, egui::pos2(tip.x - 7.0, top + 0.5), egui::pos2(tip.x + 7.0, top + 0.5)], SURFACE_2, egui::Stroke::NONE));
+        p.line_segment([tip, egui::pos2(tip.x - 7.0, top)], egui::Stroke::new(1.0, ORANGE));
+        p.line_segment([tip, egui::pos2(tip.x + 7.0, top)], egui::Stroke::new(1.0, ORANGE));
+        p.text(rect.min + egui::vec2(12.0, 10.0), egui::Align2::LEFT_TOP, "Show the QR code again here", egui::FontId::proportional(13.0), INK);
+        let got = egui::Rect::from_min_size(rect.min + egui::vec2(12.0, 36.0), egui::vec2(60.0, 22.0));
+        p.text(got.left_center(), egui::Align2::LEFT_CENTER, "Got it", egui::FontId::proportional(13.0), ORANGE);
+        let r = ui.interact(rect, egui::Id::new("qr-tip-click"), egui::Sense::click());
+        if r.clicked() {
+            self.dismiss_tip();
+        }
+        if r.hovered() {
+            ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+        }
+    }
+}
+
 // ── small widgets in the phone app's style ───────────────────────────────────────────────────────────────────
 
 /// Connected GamepadOS players on one line: "P1 Akhil   P2 Guest".
@@ -811,7 +922,7 @@ fn stepper(ui: &mut egui::Ui, value: &str, can_dec: bool, can_inc: bool) -> (boo
 }
 
 #[derive(Clone, Copy)]
-enum Icon { Switch, Flash, Wide, Tall, Moon, Qr }
+enum Icon { Switch, Flash, Wide, Tall, Moon, Qr, Expand, Shrink }
 
 /// A square rounded icon button, drawn with lines (no icon font needed). `on` = highlighted (e.g. flashlight on).
 fn icon_button(ui: &mut egui::Ui, icon: Icon, on: bool, side: f32) -> egui::Response {
@@ -851,6 +962,18 @@ fn icon_button(ui: &mut egui::Ui, icon: Icon, on: bool, side: f32) -> egui::Resp
             // Filled crescent: a disc with a second disc in the button colour biting into it.
             p.circle_filled(c, s * 0.95, ink);
             p.circle_filled(c + egui::vec2(s * 0.5, -s * 0.35), s * 0.8, fill);
+        }
+        Icon::Expand | Icon::Shrink => {
+            // Four corner brackets: pointing out (enter full screen) or in (leave it).
+            let q = s * 0.85;
+            let l = s * 0.45;
+            let out = matches!(icon, Icon::Expand);
+            for (dx, dy) in [(-1.0f32, -1.0f32), (1.0, -1.0), (-1.0, 1.0), (1.0, 1.0)] {
+                // Expand: the bracket sits at the outer corner, arms pointing back in. Shrink: near the centre,
+                // arms pointing out.
+                let (k, sx, sy) = if out { (c + egui::vec2(dx * q, dy * q), -dx, -dy) } else { (c + egui::vec2(dx * q * 0.4, dy * q * 0.4), dx, dy) };
+                p.add(egui::Shape::line(vec![k + egui::vec2(sx * l, 0.0), k, k + egui::vec2(0.0, sy * l)], st));
+            }
         }
         Icon::Qr => {
             let q = s * 0.55;
