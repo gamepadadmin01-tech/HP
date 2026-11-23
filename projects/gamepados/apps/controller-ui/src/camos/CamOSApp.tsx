@@ -247,6 +247,7 @@ export default function CamOSApp() {
     zoom: Math.min(Math.max(s.zoom, lens.zoomMin), lens.zoomMax), zoomMin: lens.zoomMin, zoomMax: lens.zoomMax,
     ev: s.ev, evMin: lens.evMin, evMax: lens.evMax, evStep: lens.evStep,
     look: premium ? s.look : "none", smooth: premium ? s.smooth : 0, lowLight: premium && s.lowLight,
+    blur: premium && s.blur, autoFrame: premium && s.autoFrame,
     torch: lens.flash && s.torch, premium, hd: hdAllowed, flash: lens.flash, otherLens: !!other,
   });
   const pushState = () => { try { bridge()?.sendState?.(phoneState()); } catch { /* older native side */ } };
@@ -278,6 +279,8 @@ export default function CamOSApp() {
       else if (k === "look" && typeof v === "string" && premium && LOOKS.some((l) => l.value === v)) set({ look: v });
       else if (k === "smooth" && num !== null && premium) set({ smooth: Math.min(Math.max(num, 0), 1) });
       else if (k === "lowLight" && typeof v === "boolean" && premium) set({ lowLight: v });
+      else if (k === "blur" && typeof v === "boolean" && premium) set({ blur: v });
+      else if (k === "autoFrame" && typeof v === "boolean" && premium) set({ autoFrame: v });
       else if (k === "quality" && (num === 480 || num === 720 || num === 1080) && (num !== 1080 || hdAllowed) && num !== effQuality)
         restartWith({ quality: num as Settings["quality"] }, `Switching to ${num}p…`);
       // Anything else (locked, unknown, out of range) is ignored; the state below shows the PC the truth.

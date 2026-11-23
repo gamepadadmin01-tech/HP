@@ -31,6 +31,9 @@ pub struct PhoneState {
     pub look: String,
     pub smooth: f32,
     pub low_light: bool,
+    /// Premium: background blur and auto-framing (phone-side filters, 2026-11-23).
+    pub blur: bool,
+    pub auto_frame: bool,
     pub torch: bool,
     /// The phone's own verdicts. The window only greys controls out from these; the phone enforces them.
     pub premium: bool,
@@ -43,7 +46,7 @@ impl Default for PhoneState {
     fn default() -> Self {
         Self {
             quality: 720, fps: 30, portrait: false, front: false, zoom: 1.0, zoom_min: 1.0, zoom_max: 1.0,
-            ev: 0, ev_min: 0, ev_max: 0, ev_step: 0.0, look: "none".into(), smooth: 0.0, low_light: false,
+            ev: 0, ev_min: 0, ev_max: 0, ev_step: 0.0, look: "none".into(), smooth: 0.0, low_light: false, blur: false, auto_frame: false,
             torch: false, premium: false, hd: false, flash: false, other_lens: false,
         }
     }
@@ -76,6 +79,8 @@ pub fn parse_state(bytes: &[u8]) -> Option<PhoneState> {
         look: if LOOKS.iter().any(|(k, _)| *k == look) { look.to_string() } else { "none".into() },
         smooth: f("smooth", d.smooth).clamp(0.0, 1.0),
         low_light: b("lowLight", d.low_light),
+        blur: b("blur", d.blur),
+        auto_frame: b("autoFrame", d.auto_frame),
         torch: b("torch", d.torch),
         premium: b("premium", d.premium),
         hd: b("hd", d.hd),

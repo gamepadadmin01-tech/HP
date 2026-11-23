@@ -125,7 +125,7 @@ fn main() {
             }
             if let Some(set) = m["set"].as_object() {
                 for (k, v) in set {
-                    let locked = matches!(k.as_str(), "look" | "smooth" | "lowLight") && !prem || (k == "quality" && v.as_u64() == Some(1080) && !prem);
+                    let locked = matches!(k.as_str(), "look" | "smooth" | "lowLight" | "blur" | "autoFrame") && !prem || (k == "quality" && v.as_u64() == Some(1080) && !prem);
                     if locked { verdict = "REFUSED (plan)"; continue; }
                     st[k.as_str()] = v.clone();
                 }

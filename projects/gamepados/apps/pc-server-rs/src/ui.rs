@@ -750,6 +750,16 @@ impl App {
                 if locked { locked_tap = Some("Low-light boost"); } else { ask(cmd_set("lowLight", json!(!p.low_light))); }
             }
         });
+        // Background blur and auto-framing (2026-11-23): the phone applies them, and only with Premium.
+        row(ui, "Effects", &mut |ui| {
+            let locked = !p.premium;
+            if chip(ui, "Blur background", p.blur, locked).clicked() {
+                if locked { locked_tap = Some("Background blur"); } else { ask(cmd_set("blur", json!(!p.blur))); }
+            }
+            if chip(ui, "Auto-frame", p.auto_frame, locked).clicked() {
+                if locked { locked_tap = Some("Auto-framing"); } else { ask(cmd_set("autoFrame", json!(!p.auto_frame))); }
+            }
+        });
 
         if let Some(what) = locked_tap {
             self.notice = Some((format!("{what} needs Premium on the phone"), std::time::Instant::now()));
