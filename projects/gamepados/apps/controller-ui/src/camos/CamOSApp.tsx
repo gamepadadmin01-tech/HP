@@ -54,13 +54,15 @@ type Settings = {
   lowLight: boolean; look: string; smooth: number; autoDim: boolean;
   /** Face priority: exposure, focus and colour follow faces (where the camera has it). */
   faceExposure: boolean;
+  /** Premium: background blur (strength 0…1) and auto-framing (CamStreamer / GlPipeline / Vision.kt). */
+  blur: boolean; blurStrength: number; autoFrame: boolean;
   /** Smooth Wi-Fi mode: video over UDP like a video call (pc-server-rs/src/camera/udp.rs). The USB cable ignores it. */
   udp: boolean;
 };
 const DEFAULTS: Settings = {
   quality: 720, fps: 30, bitrate: 0, shape: "auto", cameraId: "", front: false, zoom: 1, focus: "auto", focusDistance: 0,
   stabilize: true, ev: 0, wb: "auto", antiband: "auto", nr: "normal", torch: false, mirror: true,
-  lowLight: false, look: "none", smooth: 0, autoDim: false, udp: true, faceExposure: true,
+  lowLight: false, look: "none", smooth: 0, autoDim: false, udp: true, faceExposure: true, blur: false, blurStrength: 0.6, autoFrame: false,
 };
 const HD_MINUTES = 45;
 
@@ -163,6 +165,8 @@ export default function CamOSApp() {
     watermark: !premium,
     look: premium ? st.look : "none",
     smooth: premium ? st.smooth : 0,
+    blur: premium ? st.blur : false,
+    autoFrame: premium ? st.autoFrame : false,
     lowLight: premium ? st.lowLight : false,
   });
 
@@ -642,7 +646,7 @@ function TabSettings(p: DashProps) {
         <div className="console-plan-card" data-plan="LIFETIME">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0"><p className="text-sm font-bold calm-ink">{p.premium ? "Premium is on" : "CamOS Premium · Lifetime"}</p>
-              <ul className="mt-1.5 space-y-0.5">{["1080p HD, always", "No watermark", "Filters: colour looks, face smoothing, low-light boost", "No ads", "Also unlocks GamepadOS"].map((b) =>
+              <ul className="mt-1.5 space-y-0.5">{["1080p HD, always", "No watermark", "Filters: colour looks, face smoothing, low-light boost", "Background blur and auto-framing", "No ads", "Also unlocks GamepadOS"].map((b) =>
                 <li key={b} className="text-xs calm-muted"><Check size={12} aria-hidden="true" />{b}</li>)}</ul></div>
             <p className="console-plan-price text-xl font-bold shrink-0">₹19</p>
           </div>
@@ -722,7 +726,7 @@ function TabSettings(p: DashProps) {
       </div>
       </>) },
     { id: "filters", title: "Filters", Icon: Sparkles, tone: "violet", badge: !p.premium,
-      summary: p.premium ? [lookName !== "None" ? lookName : "", s.smooth ? `Smoothing ${Math.round(s.smooth * 100)}%` : "", s.lowLight ? "Low-light boost" : ""].filter(Boolean).join(" · ") || "No filter" : "Colour looks, face smoothing, low-light boost",
+      summary: p.premium ? [lookName !== "None" ? lookName : "", s.smooth ? `Smoothing ${Math.round(s.smooth * 100)}%` : "", s.lowLight ? "Low-light boost" : "", s.blur ? "Background blur" : "", s.autoFrame ? "Auto-framing" : ""].filter(Boolean).join(" · ") || "No filter" : "Looks, smoothing, background blur, auto-framing",
       body: () => panel(<>
       <div className="calm-setting-detail camos-first"><h3>Colour look</h3>
         <ChoiceBar label="Colour look" value={p.premium ? s.look : "none"} onChoose={(v) => p.premium ? set({ look: v }) : lockedTap("Colour looks")}
@@ -731,7 +735,14 @@ function TabSettings(p: DashProps) {
       <CamRange label="Face smoothing" min={0} max={100} step={5} value={p.premium ? Math.round(s.smooth * 100) : 0} shown={!p.premium || s.smooth === 0 ? "Off" : `${Math.round(s.smooth * 100)}%`}
         detail="Softens skin, keeps eyes and outlines sharp." onChange={(v) => p.premium ? set({ smooth: v / 100 }) : lockedTap("Face smoothing")} testId="s-smooth" />
       <CalmSwitch label="Low-light boost" detail="Brightens a dark room. The camera may drop to 15 fps in the dark to gather more light." on={p.premium && s.lowLight} onChange={(v) => p.premium ? set({ lowLight: v }) : lockedTap("Low-light boost")} />
-      <div className="calm-setting-row camos-soon"><div className="calm-grow"><span className="calm-setting-label">Background blur</span><p>Blurs the room behind you. Coming in the next update.</p></div><Lock size={16} aria-hidden="true" /></div>
+      <CalmSwitch label="Background blur" detail="Blurs the room behind you and keeps you sharp. Works at 30 fps, and at 60 on phones with a normal 60 fps mode."
+        on={p.premium && s.blur} onChange={(v) => p.premium ? set({ blur: v }) : lockedTap("Background blur")} />
+      <Collapse open={p.premium && s.blur}>
+        <CamRange label="Blur strength" min={0} max={100} step={10} value={Math.round(s.blurStrength * 100)} shown={s.blurStrength < 0.35 ? "Light" : s.blurStrength > 0.7 ? "Strong" : "Medium"}
+          onChange={(v) => set({ blurStrength: v / 100 })} testId="s-blur-strength" />
+      </Collapse>
+      <CalmSwitch label="Auto-framing" detail="Zooms in gently and keeps your face centred as you move. Zooms back out when you leave."
+        on={p.premium && s.autoFrame} onChange={(v) => p.premium ? set({ autoFrame: v }) : lockedTap("Auto-framing")} />
       </>, p.premium ? "" : "camos-locked") },
     { id: "screen", title: "Phone screen", Icon: Smartphone, summary: `${s.autoDim ? "Dims after 30 s" : "Stays bright"}${lens.front || p.lenses.some((l) => l.front) ? ` · ${s.mirror ? "Mirrored" : "Not mirrored"} front preview` : ""}`,
       body: () => panel(<>
@@ -936,6 +947,8 @@ function LiveScreen({ live, s, set, lens, lenses, premium, hdAllowed, goPremium,
         </div>
         <CamRange label="Face smoothing" min={0} max={100} step={5} value={premium ? Math.round(s.smooth * 100) : 0} shown={!premium || s.smooth === 0 ? "Off" : `${Math.round(s.smooth * 100)}%`}
           onChange={(v) => premium ? set({ smooth: v / 100 }) : showToast("Face smoothing is part of Premium.")} testId="live-smooth" />
+        <CalmSwitch label="Background blur" on={premium && s.blur} onChange={(v) => premium ? set({ blur: v }) : showToast("Background blur is part of Premium.")} />
+        <CalmSwitch label="Auto-framing" on={premium && s.autoFrame} onChange={(v) => premium ? set({ autoFrame: v }) : showToast("Auto-framing is part of Premium.")} />
         {!premium && <button className="calm-text-button camos-premium-link" onClick={goPremium}><Crown size={14} aria-hidden="true" />See Premium</button>}
       </motion.div>}
     </AnimatePresence>

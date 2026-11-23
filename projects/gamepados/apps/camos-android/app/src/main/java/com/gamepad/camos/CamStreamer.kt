@@ -62,6 +62,9 @@ data class CamSettings(
     val mirror: Boolean = true,
     val udp: Boolean = true,         // smooth Wi-Fi mode (UdpLink.kt); the USB cable always uses TCP
     val faceExposure: Boolean = true, // face priority: exposure/focus/colour follow faces (where the camera has it)
+    val blur: Boolean = false,       // Premium: background blur (Vision.kt + GlPipeline)
+    val blurStrength: Float = 0.6f,  // 0 = light … 1 = strong
+    val autoFrame: Boolean = false,  // Premium: keep the face framed with a gentle zoom
 ) {
     companion object {
         fun from(json: String): CamSettings = try {
@@ -76,6 +79,8 @@ data class CamSettings(
                 smooth = o.optDouble("smooth", 0.0).toFloat(), watermark = o.optBoolean("watermark", true),
                 torch = o.optBoolean("torch", false), mirror = o.optBoolean("mirror", true),
                 udp = o.optBoolean("udp", true), faceExposure = o.optBoolean("faceExposure", true),
+                blur = o.optBoolean("blur", false), blurStrength = o.optDouble("blurStrength", 0.6).toFloat(),
+                autoFrame = o.optBoolean("autoFrame", false),
             )
         } catch (_: Exception) { CamSettings() }
 
@@ -313,6 +318,9 @@ class CamStreamer(
             "sends $sentFps fps, electronic stabilisation ${if (eisOn) "on" else "off"}, " +
             "${if (encHigh) "High profile" else "Baseline/default profile"}${if (encIr) ", intra refresh" else ""}" +
             "${if (facePriority) ", face priority" else ""}${if (videoCallTuning) ", video-call tuning" else ""}" +
+            "${if (gl?.blurActive == true) ", background blur" else if (settings.blur) ", blur waiting" else ""}" +
+            "${if (settings.autoFrame && gl != null) ", auto-framing zoom ${"%.2f".format(gl?.frameZoom ?: 1f)}x" else ""}" +
+            "${(gl?.visionCostMs ?: 0f).let { if (it > 0f) ", vision ${it.roundToInt()} ms${if (gl?.visionOnGpu == true) " on GPU" else ""}" else "" }}" +
             ", ${curBitrate / 1000} kbit/s${if (heat >= 0f) ", heat ${"%.2f".format(heat)}" else ""}"
 
     /**
@@ -928,7 +936,7 @@ class CamStreamer(
                     openCamera()
                     return@post
                 }
-                val pipe = GlPipeline(displayRotation) { fail(it) }
+                val pipe = GlPipeline(context, displayRotation) { fail(it) }
                 gl = pipe
                 applyFilters()
                 val st = pipe.start(out.width, out.height, cap.width, cap.height, encoderSurface!!)
@@ -955,6 +963,9 @@ class CamStreamer(
         g.watermark = s.watermark
         g.mirrorPreview = s.mirror
         g.fpsLimit = s.fps
+        g.blur = s.blur
+        g.blurStrength = s.blurStrength.coerceIn(0f, 1f)
+        g.autoFrame = s.autoFrame
     }
 
     private fun pickCameraId(mgr: CameraManager): String {

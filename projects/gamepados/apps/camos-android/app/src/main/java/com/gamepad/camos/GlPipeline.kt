@@ -49,12 +49,17 @@ import kotlin.math.sin
  *   3. turn the picture back by the screen's rotation (displayRotation), so it is upright however the phone is held.
  * We read the turn and the mirror from the matrix itself instead of assuming them, so odd phones still come out right.
  */
-class GlPipeline(private val displayRotation: () -> Int, private val onError: (String) -> Unit) {
+class GlPipeline(private val appContext: android.content.Context, private val displayRotation: () -> Int, private val onError: (String) -> Unit) {
 
     companion object {
         private const val TAG = "CamOS-GL"
         /** The free-plan mark is deliberately faint (owner: "as transparent as possible"). */
         private const val MARK_ALPHA = 0.28f
+        /** Auto-framing never zooms in more than this (digital zoom loses detail beyond ~2×). */
+        private const val MAX_FRAME_ZOOM = 2f
+        /** The small copy the vision thread looks at, and how often (ms). */
+        private const val SMALL_W = 256
+        private const val ANALYSE_EVERY_MS = 120L
     }
 
     // ── what the UI can change at any time (read on the GL thread every frame) ──
@@ -68,6 +73,33 @@ class GlPipeline(private val displayRotation: () -> Int, private val onError: (S
     @Volatile var fpsLimit = 30
     /** Pictures the camera has delivered so far (counted on the picture engine's thread). */
     @Volatile var camFrames = 0
+    /** Premium: blur everything that isn't a person (strength 0…1 = how soft). */
+    @Volatile var blur = false
+    @Volatile var blurStrength = 0.6f
+    /** Premium: keep the face(s) framed with a gentle zoom (up to MAX_FRAME_ZOOM). */
+    @Volatile var autoFrame = false
+
+    // ── background blur + auto-framing (owner, 2026-11-23) ──
+    private var vision: Vision? = null
+    private var lastAnalyseNs = 0L
+    private var smallFbo = 0; private var smallTex = 0; private var smallW = 0; private var smallH = 0
+    private var blurA = 0; private var blurATex = 0; private var blurB = 0; private var blurBTex = 0
+    private var blurW = 0; private var blurH = 0
+    private var compFbo = 0; private var compTex = 0
+    private var maskTex = 0; private var maskSeq = -1; private var maskW = 0; private var maskH = 0
+    private var blurProg = 0; private var compProg = 0
+    /** Auto-framing crop, in the output's clip space of the un-zoomed picture: centre (x, y) and zoom (1 = none). */
+    private var cropX = 0f; private var cropY = 0f; private var cropZ = 1f
+    private var tgtX = 0f; private var tgtY = 0f; private var tgtZ = 1f
+    private var lastFacesAt = 0L; private var lastFaceMs = 0L; private var lastFrameNs = 0L
+    /** How far the un-zoomed camera picture reaches past the output edges (≥ 1), from drawCamera. */
+    private var coverX = 1f; private var coverY = 1f
+    /** For the log: is blur actually being drawn, and the vision cost. */
+    @Volatile var blurActive = false; private set
+    val visionCostMs: Float get() = vision?.costMs ?: 0f
+    val visionOnGpu: Boolean get() = vision?.onGpu == true
+    /** Auto-framing's current zoom (1 = none), for the log. */
+    val frameZoom: Float get() = cropZ
 
     private val thread = HandlerThread("camos-gl").also { it.start() }
     private val handler = Handler(thread.looper)
@@ -180,6 +212,8 @@ class GlPipeline(private val displayRotation: () -> Int, private val onError: (S
             done.countDown()
         }
         done.await(2, TimeUnit.SECONDS)
+        vision?.close()
+        vision = null
         thread.quitSafely()
     }
 
@@ -201,17 +235,33 @@ class GlPipeline(private val displayRotation: () -> Int, private val onError: (S
             if (lastSentNs != 0L && ts - lastSentNs < interval * 3 / 4) return
             lastSentNs = ts
 
+            // Auto-framing: glide toward the latest face framing before drawing this frame.
+            val nowNs = System.nanoTime()
+            val dt = if (lastFrameNs == 0L) 0.033f else ((nowNs - lastFrameNs) / 1e9f).coerceIn(0f, 0.2f)
+            lastFrameNs = nowNs
+            updateFraming(dt)
+
             // [1] camera → finished frame (fbo)
             GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, fbo)
             GLES20.glViewport(0, 0, outW, outH)
             drawCamera()
             GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0)
 
+            // Background blur / auto-framing: hand a small copy to the vision thread now and then, and blur with
+            // the latest person mask.
+            var finished = fboTex
+            if (blur || autoFrame) maybeAnalyse(nowNs)
+            blurActive = false
+            if (blur) {
+                val m = vision?.mask
+                if (m != null) { uploadMask(m); finished = blurComposite(); blurActive = true }
+            }
+
             // [2] finished frame → video chip
             GLES20.glViewport(0, 0, outW, outH)
             GLES20.glClearColor(0f, 0f, 0f, 1f)
             GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)
-            blit(fboTex, -1f, -1f, 1f, 1f, flipX = false, flipY = false, alpha = 1f)
+            blit(finished, -1f, -1f, 1f, 1f, flipX = false, flipY = false, alpha = 1f)
             if (watermark) drawMark(-1f, -1f, 1f, 1f, outH)
             EGLExt.eglPresentationTimeANDROID(display, encSurface, ts)
             EGL14.eglSwapBuffers(display, encSurface)
@@ -226,7 +276,7 @@ class GlPipeline(private val displayRotation: () -> Int, private val onError: (S
                 val k = min(prevW.toFloat() / outW, prevH.toFloat() / outH)
                 val hx = outW * k / prevW
                 val hy = outH * k / prevH
-                blit(fboTex, -hx, -hy, hx, hy, flipX = front && mirrorPreview, flipY = false, alpha = 1f)
+                blit(finished, -hx, -hy, hx, hy, flipX = front && mirrorPreview, flipY = false, alpha = 1f)
                 if (watermark) drawMark(-hx, -hy, hx, hy, (outH * k).toInt())
                 EGL14.eglSwapBuffers(display, prevSurface)
             }
@@ -255,6 +305,8 @@ class GlPipeline(private val displayRotation: () -> Int, private val onError: (S
         val k = max(outW.toFloat() / rx, outH.toFloat() / ry)
         val sx = rx * k / outW
         val sy = ry * k / outH
+        coverX = sx; coverY = sy
+        GLES20.glUniform3f(GLES20.glGetUniformLocation(camProg, "uCrop"), cropX, cropY, cropZ)
         GLES20.glUniformMatrix2fv(GLES20.glGetUniformLocation(camProg, "uRot"), 1, false, floatArrayOf(c, s, -s, c), 0)
         GLES20.glUniform2f(GLES20.glGetUniformLocation(camProg, "uScale"), sx, sy)
         GLES20.glUniform1f(GLES20.glGetUniformLocation(camProg, "uFlipX"), if (mirrored) -1f else 1f)
@@ -308,6 +360,149 @@ class GlPipeline(private val displayRotation: () -> Int, private val onError: (S
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
         GLES20.glDisableVertexAttribArray(aPos)
         GLES20.glDisableVertexAttribArray(aTex)
+    }
+
+    // ───────────────────────── auto-framing ─────────────────────────
+
+    /**
+     * Glide the crop toward the latest face framing. Faces come from the vision thread in the small copy's
+     * coordinates (which already include the crop of that moment), so they are mapped back to the un-zoomed picture
+     * first. Head and shoulders: the face takes about 28 % of the height and sits a little above the middle. A
+     * dead zone keeps the picture still for small movements; with no face for 2.5 s it zooms back out.
+     */
+    private fun updateFraming(dt: Float) {
+        val nowMs = android.os.SystemClock.elapsedRealtime()
+        if (!autoFrame) {
+            tgtX = 0f; tgtY = 0f; tgtZ = 1f
+        } else {
+            val f = vision?.faces
+            if (f != null && f.atMs != lastFacesAt) {
+                lastFacesAt = f.atMs
+                if (f.boxes.isNotEmpty()) {
+                    val (cx0, cy0, z0) = Triple(f.crop[0], f.crop[1], f.crop[2])
+                    var minX = Float.MAX_VALUE; var maxX = -Float.MAX_VALUE; var minY = Float.MAX_VALUE; var maxY = -Float.MAX_VALUE
+                    for (b in f.boxes) {
+                        val x0 = (2f * b[0] - 1f) / z0 + cx0; val x1 = (2f * b[2] - 1f) / z0 + cx0
+                        val yTop = (1f - 2f * b[1]) / z0 + cy0; val yBot = (1f - 2f * b[3]) / z0 + cy0
+                        minX = min(minX, x0); maxX = max(maxX, x1); minY = min(minY, yBot); maxY = max(maxY, yTop)
+                    }
+                    val fw = max(0.01f, maxX - minX); val fh = max(0.01f, maxY - minY)
+                    val z = min(0.56f / fh, 1.5f / fw).coerceIn(1f, MAX_FRAME_ZOOM)
+                    val nx = (minX + maxX) / 2f
+                    val ny = (minY + maxY) / 2f - 0.15f / z
+                    if (abs(nx - tgtX) > 0.1f || abs(ny - tgtY) > 0.1f || abs(z - tgtZ) / tgtZ > 0.12f) {
+                        tgtX = nx; tgtY = ny; tgtZ = z
+                    }
+                    lastFaceMs = nowMs
+                }
+            }
+            if (nowMs - lastFaceMs > 2500) { tgtX = 0f; tgtY = 0f; tgtZ = 1f }
+        }
+        val a = 1f - kotlin.math.exp(-dt / 0.45f)
+        cropZ += (tgtZ - cropZ) * a
+        cropX += (tgtX - cropX) * a
+        cropY += (tgtY - cropY) * a
+        // Never show past the edge of the camera picture.
+        val mx = max(0f, coverX - 1f / cropZ); val my = max(0f, coverY - 1f / cropZ)
+        cropX = cropX.coerceIn(-mx, mx); cropY = cropY.coerceIn(-my, my)
+    }
+
+    // ───────────────────────── vision (blur mask + faces) ─────────────────────────
+
+    /** About 10 times a second, if the vision thread is free: draw a small upright copy and hand it over. */
+    private fun maybeAnalyse(nowNs: Long) {
+        if (nowNs - lastAnalyseNs < ANALYSE_EVERY_MS * 1_000_000L) return
+        val v = vision ?: Vision(appContext).also { vision = it }
+        if (!v.idle()) return
+        lastAnalyseNs = nowNs
+        if (smallFbo == 0) {
+            smallW = SMALL_W
+            smallH = (SMALL_W * outH / outW) and 1.inv()
+            val (f, t) = targetFbo(smallW, smallH); smallFbo = f; smallTex = t
+        }
+        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, smallFbo)
+        GLES20.glViewport(0, 0, smallW, smallH)
+        blit(fboTex, -1f, -1f, 1f, 1f, flipX = false, flipY = true, alpha = 1f)   // flipped: read back top row first
+        val buf = ByteBuffer.allocateDirect(smallW * smallH * 4).order(ByteOrder.nativeOrder())
+        GLES20.glReadPixels(0, 0, smallW, smallH, GLES20.GL_RGBA, GLES20.GL_UNSIGNED_BYTE, buf)
+        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0)
+        v.submit(buf, smallW, smallH, wantMask = blur, wantFaces = autoFrame, crop = floatArrayOf(cropX, cropY, cropZ))
+    }
+
+    private fun uploadMask(m: Vision.Mask) {
+        if (m.seq == maskSeq) return
+        maskSeq = m.seq
+        if (maskTex == 0) maskTex = genTex(GLES20.GL_TEXTURE_2D)
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, maskTex)
+        GLES20.glPixelStorei(GLES20.GL_UNPACK_ALIGNMENT, 1)
+        GLES20.glTexImage2D(GLES20.GL_TEXTURE_2D, 0, GLES20.GL_LUMINANCE, m.w, m.h, 0, GLES20.GL_LUMINANCE, GLES20.GL_UNSIGNED_BYTE, ByteBuffer.wrap(m.bytes))
+        GLES20.glPixelStorei(GLES20.GL_UNPACK_ALIGNMENT, 4)
+        maskW = m.w; maskH = m.h
+    }
+
+    /**
+     * Blur the background: shrink the finished frame to a quarter, soften it with a Gaussian blur (once or twice,
+     * by strength), then mix sharp (person) and soft (everything else) using the mask. All on the graphics chip.
+     */
+    private fun blurComposite(): Int {
+        if (blurProg == 0) {
+            blurProg = program(VS_BLIT, FS_BLUR)
+            compProg = program(VS_BLIT, FS_COMP)
+            blurW = max(2, outW / 4); blurH = max(2, outH / 4)
+            targetFbo(blurW, blurH).let { (f, t) -> blurA = f; blurATex = t }
+            targetFbo(blurW, blurH).let { (f, t) -> blurB = f; blurBTex = t }
+            targetFbo(outW, outH).let { (f, t) -> compFbo = f; compTex = t }
+        }
+        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, blurA)
+        GLES20.glViewport(0, 0, blurW, blurH)
+        blit(fboTex, -1f, -1f, 1f, 1f, flipX = false, flipY = false, alpha = 1f)
+        val spread = 1f + 1.5f * blurStrength.coerceIn(0f, 1f)
+        val passes = if (blurStrength > 0.5f) 2 else 1
+        repeat(passes) {
+            blurPass(blurATex, blurB, spread / blurW, 0f)
+            blurPass(blurBTex, blurA, 0f, spread / blurH)
+        }
+        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, compFbo)
+        GLES20.glViewport(0, 0, outW, outH)
+        GLES20.glUseProgram(compProg)
+        GLES20.glUniform4f(GLES20.glGetUniformLocation(compProg, "uRect"), -1f, -1f, 1f, 1f)
+        GLES20.glUniform2f(GLES20.glGetUniformLocation(compProg, "uFlip"), 0f, 0f)
+        bindTex(compProg, "uSharp", 0, fboTex)
+        bindTex(compProg, "uBlur", 1, blurATex)
+        bindTex(compProg, "uMask", 2, maskTex)
+        drawQuad(compProg)
+        GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
+        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0)
+        return compTex
+    }
+
+    private fun blurPass(src: Int, dst: Int, dx: Float, dy: Float) {
+        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, dst)
+        GLES20.glViewport(0, 0, blurW, blurH)
+        GLES20.glUseProgram(blurProg)
+        GLES20.glUniform4f(GLES20.glGetUniformLocation(blurProg, "uRect"), -1f, -1f, 1f, 1f)
+        GLES20.glUniform2f(GLES20.glGetUniformLocation(blurProg, "uFlip"), 0f, 0f)
+        GLES20.glUniform2f(GLES20.glGetUniformLocation(blurProg, "uStep"), dx, dy)
+        bindTex(blurProg, "uTex", 0, src)
+        drawQuad(blurProg)
+    }
+
+    private fun bindTex(prog: Int, name: String, unit: Int, tex: Int) {
+        GLES20.glActiveTexture(GLES20.GL_TEXTURE0 + unit)
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, tex)
+        GLES20.glUniform1i(GLES20.glGetUniformLocation(prog, name), unit)
+    }
+
+    /** An off-screen picture of w×h to draw into: (framebuffer, texture). */
+    private fun targetFbo(w: Int, h: Int): Pair<Int, Int> {
+        val tex = genTex(GLES20.GL_TEXTURE_2D)
+        GLES20.glTexImage2D(GLES20.GL_TEXTURE_2D, 0, GLES20.GL_RGBA, w, h, 0, GLES20.GL_RGBA, GLES20.GL_UNSIGNED_BYTE, null)
+        val f = IntArray(1)
+        GLES20.glGenFramebuffers(1, f, 0)
+        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, f[0])
+        GLES20.glFramebufferTexture2D(GLES20.GL_FRAMEBUFFER, GLES20.GL_COLOR_ATTACHMENT0, GLES20.GL_TEXTURE_2D, tex, 0)
+        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0)
+        return f[0] to tex
     }
 
     // ───────────────────────── setup helpers ─────────────────────────
@@ -409,9 +604,11 @@ uniform mat4 uSt;
 uniform mat2 uRot;
 uniform vec2 uScale;
 uniform float uFlipX;
+uniform vec3 uCrop;
 varying vec2 vTex;
 void main() {
     vec2 p = (uRot * vec2(aPos.x * uFlipX, aPos.y)) * uScale;
+    p = (p - uCrop.xy) * uCrop.z;   // auto-framing: zoom uCrop.z around (uCrop.x, uCrop.y)
     gl_Position = vec4(p, 0.0, 1.0);
     vTex = (uSt * vec4(aTex, 0.0, 1.0)).xy;
 }
@@ -481,4 +678,35 @@ varying vec2 vTex;
 uniform sampler2D uTex;
 uniform float uAlpha;
 void main() { gl_FragColor = texture2D(uTex, vTex) * uAlpha; }
+"""
+
+// A 9-tap Gaussian blur along uStep, using the graphics chip's free in-between sampling (5 reads for 9 taps).
+private const val FS_BLUR = """
+precision mediump float;
+varying vec2 vTex;
+uniform sampler2D uTex;
+uniform vec2 uStep;
+void main() {
+    vec4 c = texture2D(uTex, vTex) * 0.2270270;
+    c += (texture2D(uTex, vTex + uStep * 1.3846154) + texture2D(uTex, vTex - uStep * 1.3846154)) * 0.3162162;
+    c += (texture2D(uTex, vTex + uStep * 3.2307692) + texture2D(uTex, vTex - uStep * 3.2307692)) * 0.0702703;
+    gl_FragColor = c;
+}
+"""
+
+// Sharp where the mask says "person", soft elsewhere, with a soft edge. The mask's top row is row 0 (it came from a
+// top-first read-back), hence the flipped lookup.
+private const val FS_COMP = """
+precision mediump float;
+varying vec2 vTex;
+uniform sampler2D uSharp;
+uniform sampler2D uBlur;
+uniform sampler2D uMask;
+void main() {
+    vec3 s = texture2D(uSharp, vTex).rgb;
+    vec3 b = texture2D(uBlur, vTex).rgb;
+    float m = texture2D(uMask, vec2(vTex.x, 1.0 - vTex.y)).r;
+    float person = smoothstep(0.3, 0.8, m);
+    gl_FragColor = vec4(mix(b, s, person), 1.0);
+}
 """

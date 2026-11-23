@@ -13,8 +13,14 @@ android {
         // 26 = Android 8. Adaptive icons and every Camera2/MediaCodec feature we use exist from here.
         minSdk = 26
         targetSdk = 36
-        versionCode = 25
-        versionName = "0.6.3-test"
+        versionCode = 27
+        versionName = "0.6.5-test"
+        // Real phones only (64- and 32-bit ARM). The x86 copies of the native libraries exist only for PC
+        // emulators and doubled the app's size once TensorFlow Lite was added.
+        ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
+    }
+    androidResources {
+        noCompress += "tflite"   // the person model is memory-mapped straight from the APK
     }
 
     buildTypes {
@@ -45,4 +51,12 @@ dependencies {
     implementation("androidx.camera:camera-lifecycle:$cameraxVersion")
     implementation("androidx.camera:camera-view:$cameraxVersion")
     implementation("com.google.zxing:core:3.5.3")
+    // Premium filters (owner, 2026-11-23), both on a small copy of the picture on their own thread (Vision.kt):
+    //  - background blur: Google's MediaPipe selfie-segmenter model (assets/models, ~250 KB, Apache-2.0) run by
+    //    TensorFlow Lite (~3 MB per CPU type). ML Kit's bundled selfie segmentation was tried first: +20 MB per CPU type.
+    //  - auto-framing: ML Kit face detection from Google Play services (model lives in Play services, ~0 MB here).
+    // MediaPipe Tasks runs the model: it carries MediaPipe's own Convolution2DTransposeBias operation, which plain
+    // TensorFlow Lite refuses even with its GPU runner (tried on the owner's phone, 2026-11-23).
+    implementation("com.google.mediapipe:tasks-vision:0.10.14")
+    implementation("com.google.android.gms:play-services-mlkit-face-detection:17.1.0")
 }
