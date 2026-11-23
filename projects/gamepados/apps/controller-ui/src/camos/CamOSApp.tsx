@@ -52,13 +52,15 @@ type Settings = {
   cameraId: string; front: boolean; zoom: number; focus: "auto" | "manual"; focusDistance: number; stabilize: boolean;
   ev: number; wb: string; antiband: string; nr: string; torch: boolean; mirror: boolean;
   lowLight: boolean; look: string; smooth: number; autoDim: boolean;
+  /** Face priority: exposure, focus and colour follow faces (where the camera has it). */
+  faceExposure: boolean;
   /** Smooth Wi-Fi mode: video over UDP like a video call (pc-server-rs/src/camera/udp.rs). The USB cable ignores it. */
   udp: boolean;
 };
 const DEFAULTS: Settings = {
   quality: 720, fps: 30, bitrate: 0, shape: "auto", cameraId: "", front: false, zoom: 1, focus: "auto", focusDistance: 0,
   stabilize: true, ev: 0, wb: "auto", antiband: "auto", nr: "normal", torch: false, mirror: true,
-  lowLight: false, look: "none", smooth: 0, autoDim: false, udp: true,
+  lowLight: false, look: "none", smooth: 0, autoDim: false, udp: true, faceExposure: true,
 };
 const HD_MINUTES = 45;
 
@@ -702,6 +704,7 @@ function TabSettings(p: DashProps) {
     { id: "light", title: "Light & colour", Icon: Sun, tone: "yellow", summary: `Brightness ${fmtEv(s.ev, lens.evStep)} · ${wbName[s.wb] ?? "Auto"} white balance`,
       body: () => panel(<>
       {lens.evMax > lens.evMin && <CamRange label="Brightness" min={lens.evMin} max={lens.evMax} value={s.ev} shown={fmtEv(s.ev, lens.evStep)} onChange={(v) => set({ ev: v })} testId="s-ev" />}
+      <CalmSwitch label="Light my face" detail="The camera sets brightness and focus for your face, so you aren't dark in front of a bright window." on={s.faceExposure} onChange={(v) => set({ faceExposure: v })} />
       <div className="calm-setting-detail"><h3>White balance</h3>
         <ChoiceBar label="White balance" value={s.wb} onChoose={(v) => set({ wb: v })}
           choices={[{ value: "auto", label: "Auto" }, { value: "daylight", label: "Sunny" }, { value: "cloudy", label: "Cloudy" }, { value: "incandescent", label: "Bulb" }, { value: "fluorescent", label: "Tube light" }].map((c) => ({ ...c, testId: `s-wb-${c.value}` }))} />

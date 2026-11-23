@@ -61,6 +61,7 @@ data class CamSettings(
     val torch: Boolean = false,
     val mirror: Boolean = true,
     val udp: Boolean = true,         // smooth Wi-Fi mode (UdpLink.kt); the USB cable always uses TCP
+    val faceExposure: Boolean = true, // face priority: exposure/focus/colour follow faces (where the camera has it)
 ) {
     companion object {
         fun from(json: String): CamSettings = try {
@@ -74,7 +75,7 @@ data class CamSettings(
                 nr = o.optString("nr", "normal"), lowLight = o.optBoolean("lowLight", false), look = o.optString("look", "none"),
                 smooth = o.optDouble("smooth", 0.0).toFloat(), watermark = o.optBoolean("watermark", true),
                 torch = o.optBoolean("torch", false), mirror = o.optBoolean("mirror", true),
-                udp = o.optBoolean("udp", true),
+                udp = o.optBoolean("udp", true), faceExposure = o.optBoolean("faceExposure", true),
             )
         } catch (_: Exception) { CamSettings() }
 
@@ -265,11 +266,54 @@ class CamStreamer(
         }
     }
 
+    // ── Quality research 2026-11-23, items A1–A5 (what is active, for the PC log) ──
+    @Volatile private var encHigh = false
+    @Volatile private var encIr = false
+    @Volatile private var facePriority = false
+    @Volatile private var videoCallTuning = false
+    /** The camera refused the call tuning once: don't ask again while the app runs. */
+    @Volatile private var videoCallRefused = false
+    /** Thermal headroom 0..1 (1 = about to throttle), -1 = unknown; and the bitrate before any heat cap. */
+    @Volatile private var heat = -1f
+    private var baseBitrate = 0
+    private var lastHeatCheck = 0L
+
+    /**
+     * Heat watch (quality research A5): every 10 s ask Android how close the phone is to throttling (Android 11+).
+     * Near the limit the bitrate ceiling steps down (less work for the video chip and radio) so frames stay steady in
+     * long calls; it climbs back once the phone has cooled. Phones without the API: nothing changes.
+     */
+    private fun heatWatch() {
+        if (Build.VERSION.SDK_INT < 30) return
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (now - lastHeatCheck < 10_000) return
+        lastHeatCheck = now
+        val pm = context.getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
+        val h = try { pm.getThermalHeadroom(10) } catch (_: Exception) { Float.NaN }
+        if (h.isNaN() || h <= 0f) return
+        heat = h
+        val factor = when {
+            h >= 0.95f -> 0.5
+            h >= 0.85f -> 0.7
+            h <= 0.75f -> 1.0
+            else -> return   // in between: keep the current cap (no flapping)
+        }
+        val ceiling = (baseBitrate * factor).toInt()
+        if (ceiling != bitrate) {
+            Log.i(TAG, "heat ${"%.2f".format(h)}: bitrate ceiling ${ceiling / 1000} kbit/s")
+            bitrate = ceiling
+            if (curBitrate > bitrate) setBitrate(bitrate)
+        }
+    }
+
     /** One line for the PC's camos.log: which camera mode, size, range, and what it really gives. */
     private fun camLine(): String =
         "${if (direct) "direct high-speed" else if (highSpeed) "high-speed" else if (hfps) "MediaTek 60" else "regular"} mode ${cap.width}x${cap.height}, asked " +
             "${aeRange?.let { "${it.lower}-${it.upper}" } ?: "?"} fps (want ${settings.fps}), camera gives $camFps fps, " +
-            "sends $sentFps fps, electronic stabilisation ${if (eisOn) "on" else "off"}"
+            "sends $sentFps fps, electronic stabilisation ${if (eisOn) "on" else "off"}, " +
+            "${if (encHigh) "High profile" else "Baseline/default profile"}${if (encIr) ", intra refresh" else ""}" +
+            "${if (facePriority) ", face priority" else ""}${if (videoCallTuning) ", video-call tuning" else ""}" +
+            ", ${curBitrate / 1000} kbit/s${if (heat >= 0f) ", heat ${"%.2f".format(heat)}" else ""}"
 
     /**
      * Called once a second while streaming. Asked for 60 but the camera gives under 45 for 3 seconds in the regular
@@ -326,6 +370,9 @@ class CamStreamer(
         this.portrait = portrait
         out = outputSize(s.quality, portrait)
         bitrate = if (s.bitrateKbps > 0) s.bitrateKbps * 1000 else autoBitrate(s.quality, s.fps)
+        baseBitrate = bitrate
+        heat = -1f
+        lastHeatCheck = 0L
         curBitrate = bitrate
         lastKeyAsk = 0L
         waitForKey = true
@@ -835,6 +882,7 @@ class CamStreamer(
                     lastCamFrames = frames
                     sentFps = (sentFrames / secs).roundToInt()
                     fpsDoctor()
+                    heatWatch()
                     val t = android.os.SystemClock.elapsedRealtime()
                     if (t - lastStateResend >= 2000) { lastStateResend = t; lastUiState?.let { sendState(it) } }
                     onState("live", "", (sentFrames / secs).roundToInt(), (sentBytes * 8 / 1000 / secs).toInt())
@@ -1013,14 +1061,31 @@ class CamStreamer(
                 .isBitrateModeSupported(MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_CBR)
         } catch (_: Exception) { false }
         val encSize = if (direct) directSize else out
-        val f = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, encSize.width, encSize.height).apply {
+        // Quality research 2026-11-23 (docs/webcam/QUALITY-RESEARCH-2026-11-23.md, items A3 + A4):
+        //  - High profile where the chip offers it: sharper at the same bitrate than the Baseline many chips default
+        //    to (the PC's Windows decoder plays High). B-frames stay off.
+        //  - Intra refresh where offered: the picture is refreshed in strips over a second instead of a big full
+        //    picture every 2 s, so no bursts on weak Wi-Fi. Full pictures still come on request (start, losses).
+        val caps = try { c.codecInfo.getCapabilitiesForType(MediaFormat.MIMETYPE_VIDEO_AVC) } catch (_: Exception) { null }
+        val high = caps?.profileLevels?.filter { it.profile == MediaCodecInfo.CodecProfileLevel.AVCProfileHigh }?.maxByOrNull { it.level }
+        val canIr = try { caps?.isFeatureSupported(MediaCodecInfo.CodecCapabilities.FEATURE_IntraRefresh) == true } catch (_: Exception) { false }
+        fun format(useHigh: Boolean, useIr: Boolean) = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, encSize.width, encSize.height).apply {
             // Direct 60 fps: the camera feeds 120 pictures a second; the video chip keeps 60 of them.
             if (direct && Build.VERSION.SDK_INT >= 29) setFloat(MediaFormat.KEY_MAX_FPS_TO_ENCODER, settings.fps.toFloat())
             setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)
             setInteger(MediaFormat.KEY_BIT_RATE, curBitrate)
             if (cbr) setInteger(MediaFormat.KEY_BITRATE_MODE, MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_CBR)
             setInteger(MediaFormat.KEY_FRAME_RATE, settings.fps)
-            setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 2)
+            if (useHigh && high != null) {
+                setInteger(MediaFormat.KEY_PROFILE, MediaCodecInfo.CodecProfileLevel.AVCProfileHigh)
+                setInteger(MediaFormat.KEY_LEVEL, high.level)
+            }
+            if (useIr) {
+                setInteger(MediaFormat.KEY_INTRA_REFRESH_PERIOD, settings.fps)   // one full refresh a second
+                setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 10)                   // a spare full picture every 10 s
+            } else {
+                setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 2)
+            }
             setInteger(MediaFormat.KEY_PRIORITY, 0)          // real-time
             if (Build.VERSION.SDK_INT >= 30) setInteger(MediaFormat.KEY_LOW_LATENCY, 1)
             // No reordered frames: some phone video chips hold pictures back to compress better (B-frames), which
@@ -1029,7 +1094,7 @@ class CamStreamer(
             // Keep sending frames while the picture is still, so the PC never thinks the phone has gone.
             setLong(MediaFormat.KEY_REPEAT_PREVIOUS_FRAME_AFTER, 100_000L)
         }
-        c.setCallback(object : MediaCodec.Callback() {
+        val encCallback = object : MediaCodec.Callback() {
             override fun onInputBufferAvailable(codec: MediaCodec, index: Int) {}
             override fun onOutputBufferAvailable(codec: MediaCodec, index: Int, info: MediaCodec.BufferInfo) {
                 try {
@@ -1044,8 +1109,21 @@ class CamStreamer(
             }
             override fun onError(codec: MediaCodec, e: MediaCodec.CodecException) { fail("Video encoder error: ${e.diagnosticInfo}") }
             override fun onOutputFormatChanged(codec: MediaCodec, format: MediaFormat) {}
-        }, camHandler)
-        c.configure(f, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
+        }
+        c.setCallback(encCallback, camHandler)
+        // Try the better settings first; a chip that refuses them gets the plain ones that always worked.
+        encHigh = high != null
+        encIr = canIr
+        try {
+            c.configure(format(encHigh, encIr), null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
+        } catch (e: Exception) {
+            Log.w(TAG, "encoder refused High profile / intra refresh (${e.message}); plain settings")
+            encHigh = false
+            encIr = false
+            c.reset()
+            c.setCallback(encCallback, camHandler)
+            c.configure(format(false, false), null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
+        }
         encoderSurface = c.createInputSurface()
         c.start()
         codec = c
@@ -1161,6 +1239,14 @@ class CamStreamer(
                 requestKeyFrame()
             }
             override fun onConfigureFailed(s: CameraCaptureSession) {
+                if (videoCallTuning) {
+                    // The camera refused the call tuning: the normal session, as before.
+                    Log.w(TAG, "video-call tuning refused; normal session")
+                    videoCallTuning = false
+                    videoCallRefused = true
+                    createSession(device)
+                    return
+                }
                 if (direct && directPreview != null) {
                     // Two outputs refused: stream without the phone preview rather than not at all.
                     Log.w(TAG, "direct 60 fps with a phone preview refused; streaming without it")
@@ -1209,6 +1295,27 @@ class CamStreamer(
                 Log.w(TAG, "MediaTek 60 fps session: ${e.message}")
                 hfps = false
                 hfpsRefused = true
+            }
+        }
+        // "Video call" tuning (quality research A2, Android 13+): tell the camera this stream is a live call, so it
+        // picks the phone maker's call tuning and sensor mode (also kinder on battery). Only where the camera lists it.
+        videoCallTuning = false
+        val useCases = if (Build.VERSION.SDK_INT >= 33) chars?.get(CameraCharacteristics.SCALER_AVAILABLE_STREAM_USE_CASES) else null
+        if (!highSpeed && !hfps && !videoCallRefused && Build.VERSION.SDK_INT >= 33 &&
+            useCases?.contains(CameraMetadata.SCALER_AVAILABLE_STREAM_USE_CASES_VIDEO_CALL.toLong()) == true) {
+            try {
+                val oc = android.hardware.camera2.params.OutputConfiguration(target).apply {
+                    streamUseCase = CameraMetadata.SCALER_AVAILABLE_STREAM_USE_CASES_VIDEO_CALL.toLong()
+                }
+                val cfg = android.hardware.camera2.params.SessionConfiguration(
+                    android.hardware.camera2.params.SessionConfiguration.SESSION_REGULAR, listOf(oc), { r -> camHandler?.post(r) }, cb)
+                videoCallTuning = true
+                device.createCaptureSession(cfg)
+                return
+            } catch (e: Exception) {
+                Log.w(TAG, "video-call tuning: ${e.message}")
+                videoCallTuning = false
+                videoCallRefused = true
             }
         }
         @Suppress("DEPRECATION")
@@ -1266,6 +1373,24 @@ class CamStreamer(
                     val l = (active.width() - w) / 2; val t = (active.height() - h) / 2
                     b.set(CaptureRequest.SCALER_CROP_REGION, Rect(l, t, l + w, t + h))
                 }
+            }
+
+            // Face priority (quality research A1): the camera uses its own face detection for exposure, colour and
+            // focus, so a face against a bright window isn't left dark. Exposure/colour/focus modes stay active in
+            // this scene mode. Only where the camera lists it, never in high-speed mode.
+            val scenes = ch.get(CameraCharacteristics.CONTROL_AVAILABLE_SCENE_MODES) ?: intArrayOf()
+            val fdModes = ch.get(CameraCharacteristics.STATISTICS_INFO_AVAILABLE_FACE_DETECT_MODES) ?: intArrayOf()
+            val fd = when {
+                fdModes.contains(CameraMetadata.STATISTICS_FACE_DETECT_MODE_FULL) -> CameraMetadata.STATISTICS_FACE_DETECT_MODE_FULL
+                fdModes.contains(CameraMetadata.STATISTICS_FACE_DETECT_MODE_SIMPLE) -> CameraMetadata.STATISTICS_FACE_DETECT_MODE_SIMPLE
+                else -> CameraMetadata.STATISTICS_FACE_DETECT_MODE_OFF
+            }
+            facePriority = st.faceExposure && !highSpeed && fd != CameraMetadata.STATISTICS_FACE_DETECT_MODE_OFF &&
+                scenes.contains(CameraMetadata.CONTROL_SCENE_MODE_FACE_PRIORITY)
+            if (facePriority) {
+                b.set(CaptureRequest.CONTROL_MODE, CameraMetadata.CONTROL_MODE_USE_SCENE_MODE)
+                b.set(CaptureRequest.CONTROL_SCENE_MODE, CameraMetadata.CONTROL_SCENE_MODE_FACE_PRIORITY)
+                b.set(CaptureRequest.STATISTICS_FACE_DETECT_MODE, fd)
             }
 
             // Focus.

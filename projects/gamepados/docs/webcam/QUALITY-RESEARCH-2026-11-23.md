@@ -74,6 +74,20 @@ that only gives 30 shows 30.
 - "Tall" shape in direct 60 by eye (the lens was covered; the PC turn itself is verified with a test pattern).
 - The free plan in direct 60 on the phone itself (verified with the fake phone).
 
+## Built 2026-11-23 (CamOS 0.6.3) — A1 to A5, tested on the owner's Xiaomi
+
+| Item | On the owner's phone | Evidence (camos.log "phone camera:" line) |
+|---|---|---|
+| A1 face priority | **on** in normal mode (camera lists FACE_PRIORITY, face detect SIMPLE); off in high-speed by design | "face priority" |
+| A2 video-call tuning | **on** in normal mode (stream use case 5 listed) | "video-call tuning" |
+| A3 High profile | **on** in both modes, PC decodes it (0 decode errors) | "High profile" |
+| A4 intra refresh | not offered by this phone's encoder → normal key frames (fallback works) | absent |
+| A5 heat watch | **on**: 0.64–0.76 during tests (caps start at 0.85) | "heat 0.71" |
+
+Also verified on the real camera the same day: "Tall" in direct 60 matches the normal mode's orientation; the free
+plan at 60 fps gets the PC-stamped watermark (camera picks its 1280×720 high-speed size for 720p).
+Settings → Light & colour → "Light my face" switches A1 off.
+
 ## Recommended order
 
 A1 face priority → A3 High profile → A2 video-call tuning → A5 thermal → A4 intra refresh, then B6 background blur
