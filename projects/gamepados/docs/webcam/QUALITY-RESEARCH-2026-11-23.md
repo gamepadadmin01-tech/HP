@@ -88,6 +88,19 @@ Also verified on the real camera the same day: "Tall" in direct 60 matches the n
 plan at 60 fps gets the PC-stamped watermark (camera picks its 1280×720 high-speed size for 720p).
 Settings → Light & colour → "Light my face" switches A1 off.
 
+## Built 2026-11-23 (CamOS 0.6.5–0.6.7) — B6 background blur, B7 auto-framing (Premium)
+
+- Vision.kt on its own thread, a 256-px copy every 120 ms: MediaPipe selfie-segmenter model (assets, 250 KB) run by
+  MediaPipe Tasks on the GPU (CPU fallback); ML Kit face detection from Play services every 3rd look.
+- GlPipeline: quarter-res Gaussian blur mixed by the mask; auto-framing zoom up to 2× (Framing.kt, 7 unit tests).
+- Settings → Filters, the live panel and the PC window ("Effects" row) all have both switches.
+- Size lesson: ML Kit bundled segmentation +20 MB per CPU type; plain TensorFlow Lite can't run the model (MediaPipe
+  custom op, even with its GPU runner); MediaPipe Tasks = +14 MB arm64 / +8.5 MB armv7 (x86 dropped).
+- On the owner's phone: blur visible on the phone and the PC, 30 fps steady, ~65 ms per look off the frame path,
+  auto-framing correctly stays at 1× with nobody in view. **Not yet tested with a person in front of the camera.**
+  The patterned curtain was partly kept sharp (model false positive) — judge again with a person.
+- Not in direct-60 mode (no picture engine there), like the other filters.
+
 ## Recommended order
 
 A1 face priority → A3 High profile → A2 video-call tuning → A5 thermal → A4 intra refresh, then B6 background blur
