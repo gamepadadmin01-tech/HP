@@ -13,8 +13,8 @@ android {
         // 26 = Android 8. Adaptive icons and every Camera2/MediaCodec feature we use exist from here.
         minSdk = 26
         targetSdk = 36
-        versionCode = 27
-        versionName = "0.6.5-test"
+        versionCode = 28
+        versionName = "0.6.6-test"
         // Real phones only (64- and 32-bit ARM). The x86 copies of the native libraries exist only for PC
         // emulators and doubled the app's size once TensorFlow Lite was added.
         ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }

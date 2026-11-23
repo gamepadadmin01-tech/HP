@@ -378,21 +378,9 @@ class GlPipeline(private val appContext: android.content.Context, private val di
             val f = vision?.faces
             if (f != null && f.atMs != lastFacesAt) {
                 lastFacesAt = f.atMs
-                if (f.boxes.isNotEmpty()) {
-                    val (cx0, cy0, z0) = Triple(f.crop[0], f.crop[1], f.crop[2])
-                    var minX = Float.MAX_VALUE; var maxX = -Float.MAX_VALUE; var minY = Float.MAX_VALUE; var maxY = -Float.MAX_VALUE
-                    for (b in f.boxes) {
-                        val x0 = (2f * b[0] - 1f) / z0 + cx0; val x1 = (2f * b[2] - 1f) / z0 + cx0
-                        val yTop = (1f - 2f * b[1]) / z0 + cy0; val yBot = (1f - 2f * b[3]) / z0 + cy0
-                        minX = min(minX, x0); maxX = max(maxX, x1); minY = min(minY, yBot); maxY = max(maxY, yTop)
-                    }
-                    val fw = max(0.01f, maxX - minX); val fh = max(0.01f, maxY - minY)
-                    val z = min(0.56f / fh, 1.5f / fw).coerceIn(1f, MAX_FRAME_ZOOM)
-                    val nx = (minX + maxX) / 2f
-                    val ny = (minY + maxY) / 2f - 0.15f / z
-                    if (abs(nx - tgtX) > 0.1f || abs(ny - tgtY) > 0.1f || abs(z - tgtZ) / tgtZ > 0.12f) {
-                        tgtX = nx; tgtY = ny; tgtZ = z
-                    }
+                val t = Framing.target(f.boxes, f.crop[0], f.crop[1], f.crop[2], MAX_FRAME_ZOOM)
+                if (t != null) {
+                    if (Framing.worthMoving(floatArrayOf(tgtX, tgtY, tgtZ), t)) { tgtX = t[0]; tgtY = t[1]; tgtZ = t[2] }
                     lastFaceMs = nowMs
                 }
             }
@@ -403,8 +391,8 @@ class GlPipeline(private val appContext: android.content.Context, private val di
         cropX += (tgtX - cropX) * a
         cropY += (tgtY - cropY) * a
         // Never show past the edge of the camera picture.
-        val mx = max(0f, coverX - 1f / cropZ); val my = max(0f, coverY - 1f / cropZ)
-        cropX = cropX.coerceIn(-mx, mx); cropY = cropY.coerceIn(-my, my)
+        val c = Framing.clampCentre(cropX, cropY, cropZ, coverX, coverY)
+        cropX = c[0]; cropY = c[1]
     }
 
     // ───────────────────────── vision (blur mask + faces) ─────────────────────────
