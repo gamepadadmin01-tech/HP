@@ -310,6 +310,14 @@ export default function CamOSApp() {
         bridge()!.find!(pc.key, false);
         return;
       }
+      if ((r.status === "old" || r.status === "unreachable") && pc.via === "usb" && pc.key && refinding.current?.forIp !== pc.ip && bridge()?.find) {
+        // The USB connection is gone (cable out, tethering or USB debugging off): a refused knock there does NOT mean an
+        // old server (found 2026-11-23: it said "too old"). Look for the PC on Wi-Fi instead.
+        refinding.current = { forIp: pc.ip, message: "No USB connection to your PC. Plug the cable back in, or use the same Wi-Fi as the PC." };
+        setPcStatus({ status: "checking", message: "" });
+        bridge()!.find!(pc.key, false);
+        return;
+      }
       setPcStatus({ status: r.status, message: r.message });
     };
     (window as any).camosOnUsb = (json: string) => {
@@ -342,8 +350,9 @@ export default function CamOSApp() {
       const waiting = refinding.current;
       if (!pc || !waiting || waiting.forIp !== pc.ip) return;
       if (r.ip && r.ip !== pc.ip) {
-        setPc({ ...pc, ip: r.ip });   // the home screen re-checks at the new address by itself
-        showToast(`Found your PC at its new address (${r.ip}).`);
+        // The home screen re-checks at the new address by itself. A Wi-Fi find replaces a USB address (no "via").
+        setPc({ ip: r.ip, key: pc.key });
+        showToast(pc.via === "usb" ? `No USB connection, so CamOS uses Wi-Fi now (${r.ip}).` : `Found your PC at its new address (${r.ip}).`);
       } else {
         setPcStatus({ status: "unreachable", message: waiting.message });
       }
@@ -358,14 +367,16 @@ export default function CamOSApp() {
       if (st.state === "error") { setScanning(false); setRoute((r) => (r === "live" ? "dashboard" : r)); showToast(st.message); return; }
       // Direct 60 fps can't switch lens on the fly: the phone asks for a fresh stream.
       if (st.state === "restart") { restartAfterStop.current = true; setLive((l) => ({ ...l, state: "connecting", message: st.message })); bridge()?.stop(); return; }
-      if (st.state === "live" && st.direct && !toldDirect.current) { toldDirect.current = true; showToast("Real 60 fps (fast mode): filters and the phone preview are paused while streaming."); }
+      if (st.state === "live" && st.direct && !toldDirect.current) { toldDirect.current = true; showToast("Real 60 fps on your PC. Filters pause in this mode."); }
       if (st.state === "connecting" && !restartAfterStop.current) toldDirect.current = false;
       setLive({ state: st.state, message: st.message, fps: st.fps, kbps: st.kbps, portrait: st.portrait });
       if (st.state === "live" && st.fps > 0) {
-        lowFpsSeconds.current = s.fps === 60 && st.fps < 45 ? lowFpsSeconds.current + 1 : 0;
-        if (lowFpsSeconds.current === 5 && !told60.current) {
+        // Only when this stream really asked for 60 (a lens without 60, or 60 locked to Premium, streams 30 by design).
+        const asked60 = s.fps === 60 && lens.fps.includes(60) && (premium || !lens.direct60);
+        lowFpsSeconds.current = asked60 && st.fps < 45 ? lowFpsSeconds.current + 1 : 0;
+        if (lowFpsSeconds.current === 8 && !told60.current) {
           told60.current = true;
-          showToast(`Your phone gives CamOS ${st.fps} fps at this size. Try 720p for 60, or see Settings → About → Camera report.`);
+          showToast(`Your camera is giving ${st.fps} fps instead of 60 right now. Settings → About → Camera report shows what it offers.`);
         }
       }
     };
@@ -538,7 +549,7 @@ function TabCamera(p: DashProps & { openSettings: () => void }) {
     <Collapse open={line.tone === "warn"}>
       <div className="camos-notice" role="status">
         <p>{p.pcStatus.message}</p>
-        {(p.pcStatus.status === "old" || p.pcStatus.status === "unreachable") &&
+        {(p.pcStatus.status === "old" || (p.pcStatus.status === "unreachable" && p.pc?.via !== "usb")) &&
           <p className="camos-pc-hint"><Download size={14} aria-hidden="true" />On your PC, go to <b>gamepad.space</b> and download the PC server.</p>}
       </div>
     </Collapse>
@@ -629,7 +640,7 @@ function TabSettings(p: DashProps) {
         <div className="console-plan-card" data-plan="LIFETIME">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0"><p className="text-sm font-bold calm-ink">{p.premium ? "Premium is on" : "CamOS Premium · Lifetime"}</p>
-              <ul className="mt-1.5 space-y-0.5">{["1080p HD, always", "No watermark", "Filters: colour looks, face smoothing, low-light boost", "No ads", "Also unlocks GamepadOS"].map((b) =>
+              <ul className="mt-1.5 space-y-0.5">{["1080p HD, always", "No watermark", "Real 60 fps, even on phones that need the camera's fast mode", "Filters: colour looks, face smoothing, low-light boost", "No ads", "Also unlocks GamepadOS"].map((b) =>
                 <li key={b} className="text-xs calm-muted"><Check size={12} aria-hidden="true" />{b}</li>)}</ul></div>
             <p className="console-plan-price text-xl font-bold shrink-0">₹19</p>
           </div>
@@ -652,7 +663,7 @@ function TabSettings(p: DashProps) {
           choices={fpsChoices.map((f) => ({ value: String(f), label: f === 60 && lock60 ? <>{f} fps<span className="camos-hd"><Lock size={9} /></span></> : `${f} fps`, testId: `s-fps-${f}` }))} />
         <SwapIn swapKey={`${s.fps}-${can60}-${lock60}`}><p>{s.fps >= 60 ? (!can60 ? "This lens can't film 60 fps, so CamOS uses 30. Try another lens."
             : lock60 ? "On this phone, 60 fps uses the camera's fast mode, which is part of Premium. CamOS streams 30 for now."
-            : lens.direct60 ? "Uses the camera's fast mode for real 60 fps. Filters and the phone preview pause while streaming."
+            : lens.direct60 ? "Uses the camera's fast mode for real 60 fps on your PC. Filters pause while streaming at 60."
             : "Smoothest motion. Uses more Wi-Fi and battery.")
           : s.fps <= 15 ? "Saves Wi-Fi and battery. Motion looks choppy." : "30 fps is what most webcams use."}</p></SwapIn>
       </div>

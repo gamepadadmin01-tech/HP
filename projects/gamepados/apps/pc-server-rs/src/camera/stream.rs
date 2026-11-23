@@ -423,6 +423,10 @@ fn udp_loop(sock: std::net::UdpSocket, token: [u8; 8], phone: std::net::IpAddr, 
                     re.push(&chunk);
                     last_rx = Instant::now();
                     phone_addr = Some(from);
+                } else if let Some(spare) = udp::parse_parity(&token, &buf[..n]) {
+                    re.push_parity(&spare);
+                    last_rx = Instant::now();
+                    phone_addr = Some(from);
                 }
             }
             Ok(_) => {} // someone else: ignored
@@ -481,8 +485,9 @@ fn udp_loop(sock: std::net::UdpSocket, token: [u8; 8], phone: std::net::IpAddr, 
     };
     let sent = total_rx + total_lost;
     log(&format!(
-        "UDP: {total_rx} packets, {total_lost} lost ({:.1} %), {nacks} asks to resend, {total_skipped} pictures skipped",
-        if sent > 0 { total_lost as f64 * 100.0 / sent as f64 } else { 0.0 }
+        "UDP: {total_rx} packets, {total_lost} lost ({:.1} %), {} rebuilt from spares, {nacks} asks to resend, {total_skipped} pictures skipped",
+        if sent > 0 { total_lost as f64 * 100.0 / sent as f64 } else { 0.0 },
+        re.recovered()
     ));
     result
 }

@@ -216,6 +216,10 @@ class CamStreamer(
     /** Quarter turns clockwise the PC applies to make the picture upright. */
     private var directTurn = 0
     @Volatile private var encFrames = 0
+    /** Direct mode: the phone screen as the camera's second output (null = no preview). */
+    private var directPreview: Surface? = null
+    /** The picture size the camera sends in direct mode (for the activity to fit the preview), or null. */
+    val directPreviewSize: Size? get() = if (direct && directPreview != null) directSize else null
 
     /** Decide direct mode for this stream (network thread, before the hello). */
     private fun planDirect() {
@@ -382,7 +386,10 @@ class CamStreamer(
         applyFilters()
         val h = camHandler ?: return
         // Direct mode's size and turn belong to one lens: another lens needs a fresh stream (the UI restarts it).
-        if (direct && (s.front != old.front || s.cameraId != old.cameraId)) { onState("restart", "Switching camera…", 0, 0); return }
+        // A lens change also restarts when the frame rate changes or 60 is involved: each lens decides its own 60 fps
+        // way (direct / high-speed / normal) and the video chip was set up for the old frame rate.
+        val lensChange = s.front != old.front || s.cameraId != old.cameraId
+        if (lensChange && (direct || s.fps != old.fps || s.fps >= 60)) { onState("restart", "Switching camera…", 0, 0); return }
         if (s.front != old.front || s.cameraId != old.cameraId) h.post { closeCameraOnly(); openCamera() }
         else h.post { repeat() }
     }
@@ -614,6 +621,9 @@ class CamStreamer(
     @Volatile private var udpBlocked = false
     private var udpFrame = 0
     @Volatile private var lastDown = 0L
+    /** Spare pieces per group (0 = none); set from the PC's loss reports. */
+    @Volatile private var fecK = 0
+    private var fecCalmSince = 0L
 
     private fun closeUdp() {
         udp?.close()
@@ -630,6 +640,10 @@ class CamStreamer(
         if (total <= 0) return
         val ratio = lost.toDouble() / total
         val now = android.os.SystemClock.elapsedRealtime()
+        // Spare pieces while the air loses more than 2 %, off again after 5 quiet seconds (owner's campus Wi-Fi
+        // lost ~9 % steadily; with spares 2 of 3 lost pieces are rebuilt on the PC at once, no ask, no wait).
+        if (ratio > 0.02) { fecK = 6; fecCalmSince = now }
+        else if (fecK != 0 && ratio < 0.005 && now - fecCalmSince > 5000) fecK = 0
         when {
             skipped > 0 || ratio > 0.10 -> if (now - lastDown >= 1000) { setBitrate(curBitrate * 7 / 10); lastDown = now; calmSince = now }
             ratio > 0.03 -> if (now - lastDown >= 1000) { setBitrate(curBitrate * 85 / 100); lastDown = now; calmSince = now }
@@ -704,6 +718,7 @@ class CamStreamer(
                     ds.connect(InetSocketAddress(ip, port))
                     udp = UdpLink(ds, g.copyOfRange(7, 15)) { r, l, sk -> onUdpReport(r, l, sk) }
                     udpFrame = 0
+                    fecK = 0
                     Log.i(TAG, "smooth Wi-Fi mode: video over UDP to port $port")
                 }
             }
@@ -787,7 +802,7 @@ class CamStreamer(
                 val p = queue.poll(if (link != null) 250 else 500, TimeUnit.MILLISECONDS) ?: continue
                 if (link != null && p.flags and FLAG_STATE == 0) {
                     // Video over UDP; pieces are spread out at 4× the current bitrate.
-                    link.sendFrame(udpFrame++, p.flags and 2 != 0, p.ptsUs, p.data, curBitrate * 4)
+                    link.sendFrame(udpFrame++, p.flags and 2 != 0, p.ptsUs, p.data, curBitrate * 4, fecK)
                 } else {
                     writeSince = android.os.SystemClock.elapsedRealtime()
                     try {
@@ -846,8 +861,11 @@ class CamStreamer(
                 cap = planCapture(ch)
                 startEncoder()
                 if (direct) {
-                    // Camera → video chip, no picture engine (see planDirect).
+                    // Camera → video chip, no picture engine (see planDirect). The phone screen gets the camera
+                    // directly as a second output (Android's high-speed mode allows a preview at 30 fps there);
+                    // MainActivity fits and turns it on the screen.
                     camSurface = encoderSurface
+                    directPreview = preview?.let { st -> st.setDefaultBufferSize(directSize.width, directSize.height); Surface(st) }
                     openCamera()
                     return@post
                 }
@@ -1132,6 +1150,14 @@ class CamStreamer(
                 requestKeyFrame()
             }
             override fun onConfigureFailed(s: CameraCaptureSession) {
+                if (direct && directPreview != null) {
+                    // Two outputs refused: stream without the phone preview rather than not at all.
+                    Log.w(TAG, "direct 60 fps with a phone preview refused; streaming without it")
+                    try { directPreview?.release() } catch (_: Exception) {}
+                    directPreview = null
+                    createSession(device)
+                    return
+                }
                 if (hfps) {
                     // The MediaTek 60 fps mode was refused: forget it on this phone, carry on the normal way.
                     Log.w(TAG, "MediaTek 60 fps session refused; normal session instead")
@@ -1175,7 +1201,7 @@ class CamStreamer(
             }
         }
         @Suppress("DEPRECATION")
-        if (highSpeed) device.createConstrainedHighSpeedCaptureSession(listOf(target), cb, camHandler)
+        if (highSpeed) device.createConstrainedHighSpeedCaptureSession(listOfNotNull(target, if (direct) directPreview else null), cb, camHandler)
         else device.createCaptureSession(listOf(target), cb, camHandler)
     }
 
@@ -1204,6 +1230,7 @@ class CamStreamer(
         try {
             val b = dev.createCaptureRequest(CameraDevice.TEMPLATE_RECORD)
             camSurface?.let { b.addTarget(it) }
+            if (direct) directPreview?.let { b.addTarget(it) }
 
             // Frame rate. Low-light lets the camera slow down to 15 fps in the dark for brighter frames.
             val ranges = ch.get(CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES) ?: emptyArray()
@@ -1312,8 +1339,8 @@ class CamStreamer(
         val h = camHandler
         val t = camThread
         val oldSession = session; val oldCamera = camera; val oldCodec = codec; val oldGl = gl
-        val oldCamSurface = camSurface; val oldEncSurface = encoderSurface
-        session = null; camera = null; codec = null; gl = null; camSurface = null; encoderSurface = null
+        val oldCamSurface = camSurface; val oldEncSurface = encoderSurface; val oldPreview = directPreview
+        session = null; camera = null; codec = null; gl = null; camSurface = null; encoderSurface = null; directPreview = null
         camHandler = null; camThread = null
         val work = Runnable {
             try { oldSession?.close() } catch (_: Exception) {}
@@ -1323,6 +1350,7 @@ class CamStreamer(
             try { oldGl?.release() } catch (_: Exception) {}
             try { oldCamSurface?.release() } catch (_: Exception) {}
             try { oldEncSurface?.release() } catch (_: Exception) {}
+            try { oldPreview?.release() } catch (_: Exception) {}
             t?.quitSafely()
         }
         if (h != null) h.post(work) else work.run()

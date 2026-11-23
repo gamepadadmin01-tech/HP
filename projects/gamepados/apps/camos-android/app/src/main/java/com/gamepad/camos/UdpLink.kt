@@ -34,6 +34,7 @@ class UdpLink(
         private const val KIND_VIDEO = 1
         private const val KIND_NACK = 2
         private const val KIND_REPORT = 3
+        private const val KIND_PARITY = 4
         /** Pictures kept for resends (about a second at 60 fps; the PC gives up after 0.2 s). */
         private const val KEEP = 64
         /** Pieces sent back to back before pacing starts (a short burst is fine for any Wi-Fi). */
@@ -59,10 +60,30 @@ class UdpLink(
      * Send one picture as pieces. After a short burst the pieces are spread out at `paceBps` so a big full picture
      * doesn't arrive at the Wi-Fi router all at once (routers drop what they can't hold).
      */
-    fun sendFrame(frame: Int, key: Boolean, ptsUs: Long, data: ByteArray, paceBps: Int) {
+    fun sendFrame(frame: Int, key: Boolean, ptsUs: Long, data: ByteArray, paceBps: Int, fecK: Int = 0) {
         if (data.isEmpty()) return
         val count = (data.size + MAX_CHUNK - 1) / MAX_CHUNK
         if (count > MAX_CHUNKS) return
+        // Spare pieces (udp.rs KIND_PARITY): one XOR per group of fecK pieces, sent right after its group, so the PC
+        // can rebuild one lost piece of the group at once instead of asking for it again.
+        val spares: Array<ByteArray>? = if (fecK >= 2) Array((count + fecK - 1) / fecK) { g ->
+            val p = ByteArray(HEADER + 5 + MAX_CHUNK)
+            token.copyInto(p, 0, 0, 8)
+            p[8] = KIND_PARITY.toByte()
+            p[9] = if (key) 2 else 0
+            putInt(p, 10, frame)
+            putShort(p, 14, g)
+            putShort(p, 16, count)
+            putLong(p, 18, ptsUs)
+            putInt(p, HEADER, data.size)
+            p[HEADER + 4] = fecK.toByte()
+            for (i in g * fecK until minOf((g + 1) * fecK, count)) {
+                val off = i * MAX_CHUNK
+                val len = minOf(MAX_CHUNK, data.size - off)
+                for (j in 0 until len) p[HEADER + 5 + j] = (p[HEADER + 5 + j].toInt() xor data[off + j].toInt()).toByte()
+            }
+            p
+        } else null
         val pkts = Array(count) { i ->
             val off = i * MAX_CHUNK
             val len = minOf(MAX_CHUNK, data.size - off)
@@ -84,14 +105,20 @@ class UdpLink(
         val nsPerByte = 8e9 / max(paceBps, 4_000_000)
         val start = System.nanoTime()
         var paced = 0L
-        for ((i, p) in pkts.withIndex()) {
-            if (i >= BURST) {
+        var sent = 0
+        fun sendPaced(p: ByteArray) {
+            if (sent >= BURST) {
                 val due = start + (paced * nsPerByte).toLong()
                 val wait = due - System.nanoTime()
                 if (wait > 50_000) LockSupport.parkNanos(wait)
                 paced += p.size
             }
+            sent++
             send(p.copyOf())
+        }
+        for ((i, p) in pkts.withIndex()) {
+            sendPaced(p)
+            if (spares != null && (i % fecK == fecK - 1 || i == count - 1)) sendPaced(spares[i / fecK])
         }
     }
 

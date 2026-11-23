@@ -36,6 +36,11 @@ pub const MAX_CHUNKS: u16 = 4096;
 pub const KIND_VIDEO: u8 = 1;
 pub const KIND_NACK: u8 = 2;
 pub const KIND_REPORT: u8 = 3;
+/// A spare piece (added 2026-11-23): the XOR of a group of `k` pieces of one picture, so one lost piece of the
+/// group can be rebuilt at once, with no ask and no wait. Same header as a video piece with `idx` = group number;
+/// data = total picture length (u32) + k (u8) + the XOR (padded to MAX_CHUNK). The phone sends these only while the
+/// PC reports losses (about 1 spare per 6 pieces), like video calls do on a lossy network.
+pub const KIND_PARITY: u8 = 4;
 /// In a NACK, "the whole frame is missing" (no piece of it arrived, so we don't know how many there are).
 pub const NACK_WHOLE: u8 = 255;
 /// Most piece numbers in one NACK packet.
@@ -45,9 +50,11 @@ pub const FLAG_KEY: u8 = 2;
 /// First ask, once a loss is evident (a little slack for packets that arrive slightly out of order).
 pub const NACK_AFTER: Duration = Duration::from_millis(8);
 /// Ask again this often while still missing.
-pub const NACK_EVERY: Duration = Duration::from_millis(50);
+pub const NACK_EVERY: Duration = Duration::from_millis(40);
 /// Then give up on that picture and wait for a full one.
-pub const GIVE_UP: Duration = Duration::from_millis(220);
+/// (Was 220 ms. On the owner's campus Wi-Fi a resent piece sometimes took over 0.3 s, so pictures were skipped that a
+/// little more patience would have saved; a skip costs a full picture, which is worse than a short wait.)
+pub const GIVE_UP: Duration = Duration::from_millis(350);
 /// Pictures held while waiting (memory bound: ~4 s at 60 fps).
 const MAX_PENDING: usize = 240;
 
@@ -101,6 +108,73 @@ pub fn build_video(token: &[u8; 8], c: &Chunk) -> Vec<u8> {
     v.extend_from_slice(&c.seq.to_be_bytes());
     v.extend_from_slice(c.data);
     v
+}
+
+/// A spare piece: group `group` of `k` pieces of `frame`, XOR of their (padded) bytes.
+#[derive(Debug, PartialEq)]
+pub struct Parity<'a> {
+    pub flags: u8,
+    pub frame: u32,
+    pub group: u16,
+    pub count: u16,
+    pub pts_us: u64,
+    pub seq: u32,
+    /// The whole picture's length (gives the last piece's length when that is the one rebuilt).
+    pub total: u32,
+    pub k: u8,
+    pub xor: &'a [u8],
+}
+
+pub fn parse_parity<'a>(token: &[u8; 8], pkt: &'a [u8]) -> Option<Parity<'a>> {
+    if pkt.len() < HEADER_LEN + 6 || pkt.len() > HEADER_LEN + 5 + MAX_CHUNK || !token_ok(token, pkt) || pkt[8] != KIND_PARITY {
+        return None;
+    }
+    let u16_at = |i: usize| u16::from_be_bytes([pkt[i], pkt[i + 1]]);
+    let u32_at = |i: usize| u32::from_be_bytes(pkt[i..i + 4].try_into().expect("4 bytes"));
+    let p = Parity {
+        flags: pkt[9],
+        frame: u32_at(10),
+        group: u16_at(14),
+        count: u16_at(16),
+        pts_us: u64::from_be_bytes(pkt[18..26].try_into().expect("8 bytes")),
+        seq: u32_at(26),
+        total: u32_at(HEADER_LEN),
+        k: pkt[HEADER_LEN + 4],
+        xor: &pkt[HEADER_LEN + 5..],
+    };
+    let k = p.k as usize;
+    if p.count == 0 || p.count > MAX_CHUNKS || k < 2 || p.group as usize * k >= p.count as usize || p.total as usize > p.count as usize * MAX_CHUNK {
+        return None;
+    }
+    Some(p)
+}
+
+/// A spare piece (the phone builds the same bytes; used by tests and the desktop test phone).
+pub fn build_parity(token: &[u8; 8], p: &Parity) -> Vec<u8> {
+    let mut v = Vec::with_capacity(HEADER_LEN + 5 + p.xor.len());
+    v.extend_from_slice(token);
+    v.push(KIND_PARITY);
+    v.push(p.flags);
+    v.extend_from_slice(&p.frame.to_be_bytes());
+    v.extend_from_slice(&p.group.to_be_bytes());
+    v.extend_from_slice(&p.count.to_be_bytes());
+    v.extend_from_slice(&p.pts_us.to_be_bytes());
+    v.extend_from_slice(&p.seq.to_be_bytes());
+    v.extend_from_slice(&p.total.to_be_bytes());
+    v.push(p.k);
+    v.extend_from_slice(p.xor);
+    v
+}
+
+/// The XOR of pieces (each padded to MAX_CHUNK with zeros): what a spare piece carries.
+pub fn xor_pieces<'a>(pieces: impl Iterator<Item = &'a [u8]>) -> Vec<u8> {
+    let mut x = vec![0u8; MAX_CHUNK];
+    for p in pieces {
+        for (a, b) in x.iter_mut().zip(p) {
+            *a ^= b;
+        }
+    }
+    x
 }
 
 /// "Please send these pieces of `frame` again" (empty = the whole frame).
@@ -185,9 +259,48 @@ struct Partial {
     have: u16,
     /// Highest piece number seen: pieces are sent in order, so a hole below it is a loss.
     max_idx: u16,
+    /// Spare pieces received: (group, total picture length, group size k, XOR).
+    parity: Vec<(u16, u32, u8, Vec<u8>)>,
 }
 
 impl Partial {
+    fn new(flags: u8, pts_us: u64, count: u16) -> Self {
+        Partial { flags, pts_us, chunks: vec![None; count as usize], have: 0, max_idx: 0, parity: Vec::new() }
+    }
+
+    /// Rebuild every piece that is the only one missing from a group with a spare. Returns how many.
+    fn recover(&mut self) -> u16 {
+        let count = self.chunks.len();
+        let mut rebuilt = 0;
+        for (g, total, k, xor) in &self.parity {
+            let (k, g) = (*k as usize, *g as usize);
+            let range = g * k..((g + 1) * k).min(count);
+            let missing: Vec<usize> = range.clone().filter(|&i| self.chunks[i].is_none()).collect();
+            if missing.len() != 1 {
+                continue;
+            }
+            let lost = missing[0];
+            let mut buf = xor.clone();
+            buf.resize(MAX_CHUNK, 0);
+            for i in range.filter(|&i| i != lost) {
+                if let Some(c) = &self.chunks[i] {
+                    for (a, b) in buf.iter_mut().zip(c) {
+                        *a ^= b;
+                    }
+                }
+            }
+            let len = if lost == count - 1 { (*total as usize).saturating_sub((count - 1) * MAX_CHUNK) } else { MAX_CHUNK };
+            if len == 0 || len > MAX_CHUNK {
+                continue;
+            }
+            buf.truncate(len);
+            self.chunks[lost] = Some(buf);
+            self.have += 1;
+            rebuilt += 1;
+        }
+        rebuilt
+    }
+
     fn complete(&self) -> bool {
         self.have as usize == self.chunks.len()
     }
@@ -220,6 +333,7 @@ pub struct Reassembler {
     first_seq: Option<u32>,
     highest_seq: Option<u32>,
     skipped: u16,
+    recovered: u16,
 }
 
 impl Default for Reassembler {
@@ -240,30 +354,37 @@ impl Reassembler {
             first_seq: None,
             highest_seq: None,
             skipped: 0,
+            recovered: 0,
+        }
+    }
+
+    /// Count a packet for the report; false if it belongs to a picture already handed over or skipped.
+    fn note(&mut self, seq: u32, frame: u32) -> bool {
+        self.received = self.received.wrapping_add(1);
+        if self.first_seq.is_none() {
+            self.first_seq = Some(seq);
+        }
+        if self.highest_seq.is_none_or(|h| (seq.wrapping_sub(h) as i32) > 0) {
+            self.highest_seq = Some(seq);
+        }
+        match self.next {
+            // A late resend of a picture already handed over or skipped, or garbage.
+            Some(n) => (0..100_000).contains(&(frame.wrapping_sub(n) as i32)),
+            None => true,
+        }
+    }
+
+    fn trim(&mut self) {
+        while self.pending.len() > MAX_PENDING {
+            self.pending.pop_first();
         }
     }
 
     pub fn push(&mut self, c: &Chunk) {
-        self.received = self.received.wrapping_add(1);
-        if self.first_seq.is_none() {
-            self.first_seq = Some(c.seq);
+        if !self.note(c.seq, c.frame) {
+            return;
         }
-        if self.highest_seq.is_none_or(|h| (c.seq.wrapping_sub(h) as i32) > 0) {
-            self.highest_seq = Some(c.seq);
-        }
-        if let Some(n) = self.next {
-            let ahead = c.frame.wrapping_sub(n) as i32;
-            if !(0..100_000).contains(&ahead) {
-                return; // a late resend of a picture already handed over or skipped, or garbage
-            }
-        }
-        let p = self.pending.entry(c.frame).or_insert_with(|| Partial {
-            flags: c.flags,
-            pts_us: c.pts_us,
-            chunks: vec![None; c.count as usize],
-            have: 0,
-            max_idx: 0,
-        });
+        let p = self.pending.entry(c.frame).or_insert_with(|| Partial::new(c.flags, c.pts_us, c.count));
         if p.chunks.len() != c.count as usize {
             return;
         }
@@ -273,9 +394,32 @@ impl Reassembler {
             p.have += 1;
         }
         p.max_idx = p.max_idx.max(c.idx);
-        while self.pending.len() > MAX_PENDING {
-            self.pending.pop_first();
+        if !p.parity.is_empty() {
+            self.recovered = self.recovered.saturating_add(p.recover());
         }
+        self.trim();
+    }
+
+    /// A spare piece: keep it, and rebuild a lost piece of its group if exactly one is missing.
+    pub fn push_parity(&mut self, s: &Parity) {
+        if !self.note(s.seq, s.frame) {
+            return;
+        }
+        let p = self.pending.entry(s.frame).or_insert_with(|| Partial::new(s.flags, s.pts_us, s.count));
+        if p.chunks.len() != s.count as usize || p.parity.iter().any(|(g, ..)| *g == s.group) {
+            return;
+        }
+        p.parity.push((s.group, s.total, s.k, s.xor.to_vec()));
+        // The spare is sent right after its group, so every piece of the group was sent before it.
+        let last_of_group = ((s.group as usize + 1) * s.k as usize).min(s.count as usize) - 1;
+        p.max_idx = p.max_idx.max(last_of_group as u16);
+        self.recovered = self.recovered.saturating_add(p.recover());
+        self.trim();
+    }
+
+    /// Pieces rebuilt from spares so far (for the PC log).
+    pub fn recovered(&self) -> u32 {
+        self.recovered as u32
     }
 
     /// Everything that can be done now: complete pictures in order, asks for missing pieces, give-ups.
@@ -519,6 +663,74 @@ mod tests {
         r.poll(t0); // noticed
         let ev = r.poll(t0 + Duration::from_millis(10));
         assert!(ev.contains(&Event::Nack { frame: 1, missing: vec![] }), "{ev:?}");
+    }
+
+    /// A picture as the phone sends it with spares: data packets, and one spare per group of `k`.
+    fn with_spares(frame: u32, data: &[u8], k: usize, seq: &mut u32) -> (Vec<Vec<u8>>, Vec<Vec<u8>>) {
+        let count = data.len().div_ceil(MAX_CHUNK) as u16;
+        let pieces: Vec<&[u8]> = data.chunks(MAX_CHUNK).collect();
+        let mut pkts = Vec::new();
+        for (i, d) in pieces.iter().enumerate() {
+            pkts.push(build_video(&T, &Chunk { flags: FLAG_KEY, frame, idx: i as u16, count, pts_us: 0, seq: *seq, data: d }));
+            *seq += 1;
+        }
+        let mut spares = Vec::new();
+        for (g, group) in pieces.chunks(k).enumerate() {
+            let xor = xor_pieces(group.iter().copied());
+            spares.push(build_parity(&T, &Parity { flags: FLAG_KEY, frame, group: g as u16, count, pts_us: 0, seq: *seq, total: data.len() as u32, k: k as u8, xor: &xor }));
+            *seq += 1;
+        }
+        (pkts, spares)
+    }
+
+    fn feed_any(r: &mut Reassembler, pkts: &[Vec<u8>]) {
+        for p in pkts {
+            if let Some(c) = parse_video(&T, p) {
+                r.push(&c);
+            } else if let Some(s) = parse_parity(&T, p) {
+                r.push_parity(&s);
+            } else {
+                panic!("not a valid packet");
+            }
+        }
+    }
+
+    #[test]
+    fn a_spare_piece_rebuilds_a_lost_one_at_once() {
+        let data: Vec<u8> = (0..(6 * MAX_CHUNK + 300)).map(|i| (i % 253) as u8).collect();
+        let mut seq = 0;
+        let (pkts, spares) = with_spares(0, &data, 6, &mut seq); // 7 pieces: group 0 = 0..6, group 1 = the short last one
+        let mut r = Reassembler::new();
+        // Piece 2 and the short last piece 6 are lost; each is the only one missing from its group.
+        let kept: Vec<Vec<u8>> = pkts.iter().enumerate().filter(|(i, _)| *i != 2 && *i != 6).map(|(_, p)| p.clone()).collect();
+        feed_any(&mut r, &kept);
+        feed_any(&mut r, &spares);
+        let ev = r.poll(Instant::now());
+        match &ev[..] {
+            [Event::Frame { data: got, .. }] => assert_eq!(got, &data, "rebuilt picture must be exact"),
+            other => panic!("expected the picture at once, got {other:?}"),
+        }
+        assert_eq!(r.recovered(), 2);
+    }
+
+    #[test]
+    fn two_lost_in_one_group_are_asked_for_not_guessed() {
+        let data: Vec<u8> = (0..(6 * MAX_CHUNK)).map(|i| (i % 251) as u8).collect();
+        let mut seq = 0;
+        let (pkts, spares) = with_spares(0, &data, 6, &mut seq);
+        let mut r = Reassembler::new();
+        let kept: Vec<Vec<u8>> = pkts.iter().enumerate().filter(|(i, _)| *i != 1 && *i != 4).map(|(_, p)| p.clone()).collect();
+        feed_any(&mut r, &kept);
+        feed_any(&mut r, &spares);
+        let t0 = Instant::now();
+        assert!(frames(&r.poll(t0)).is_empty());
+        let ev = r.poll(t0 + Duration::from_millis(10));
+        assert!(ev.iter().any(|e| matches!(e, Event::Nack { missing, .. } if missing == &vec![1, 4])), "{ev:?}");
+        assert_eq!(r.recovered(), 0);
+        // A broken spare is refused.
+        let mut bad = spares[0].clone();
+        bad[HEADER_LEN + 4] = 1; // k = 1
+        assert!(parse_parity(&T, &bad).is_none());
     }
 
     #[test]

@@ -258,8 +258,41 @@ class MainActivity : AppCompatActivity() {
 
     // ───────────────────────── streaming ─────────────────────────
 
+    /** Direct 60 fps: the camera draws straight into cameraView, so fit and turn it here (the picture engine does
+     *  this itself otherwise). The camera hands it over turned for the phone held upright: a tall picture. */
+    private var directFitted = false
+    private fun fitDirectPreview() {
+        val size = streamer.directPreviewSize ?: return
+        val vw = cameraView.width.toFloat(); val vh = cameraView.height.toFloat()
+        if (vw <= 0f || vh <= 0f) return
+        val rot = displayRotationDegrees()
+        val m = android.graphics.Matrix()
+        val cx = vw / 2f; val cy = vh / 2f
+        val bw = size.height.toFloat(); val bh = size.width.toFloat()   // tall
+        if (rot == 90 || rot == 270) {
+            val view = android.graphics.RectF(0f, 0f, vw, vh)
+            val buf = android.graphics.RectF(0f, 0f, bw, bh)
+            buf.offset(cx - buf.centerX(), cy - buf.centerY())
+            m.setRectToRect(view, buf, android.graphics.Matrix.ScaleToFit.FILL)
+            val scale = minOf(vh / bw, vw / bh)   // whole picture visible, like the picture engine's preview
+            m.postScale(scale, scale, cx, cy)
+            m.postRotate((rot - 180).toFloat(), cx, cy)
+        } else {
+            val bufAspect = bw / bh; val viewAspect = vw / vh
+            if (viewAspect > bufAspect) m.setScale(bufAspect / viewAspect, 1f, cx, cy) else m.setScale(1f, viewAspect / bufAspect, cx, cy)
+            if (rot == 180) m.postRotate(180f, cx, cy)
+        }
+        cameraView.setTransform(m)
+        directFitted = true
+    }
+
     private fun onStreamState(state: String, message: String, fps: Int, kbps: Int) {
+        if (state == "live" && !directFitted) fitDirectPreview()
         if (state == "error" || state == "stopped") {
+            // Back to the picture engine: undo the direct-mode fit AND the camera's buffer size (1920×1080), or the
+            // engine's next preview is drawn into a wrongly sized buffer (shifted, with a black bar).
+            if (directFitted) { cameraView.setTransform(null); directFitted = false }
+            if (cameraView.width > 0) cameraView.surfaceTexture?.setDefaultBufferSize(cameraView.width, cameraView.height)
             cameraView.visibility = View.INVISIBLE
             // Free rotation again once the camera is off (owner: the app turns normally before Start).
             requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_FULL_USER

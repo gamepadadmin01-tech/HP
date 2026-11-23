@@ -255,5 +255,18 @@ impl UdpSender {
         })).collect();
         self.recent.lock().unwrap()[frame as usize % 64] = Some((frame, pkts.clone()));
         for p in pkts { self.send_raw(p); }
+        // Spare pieces (CAMOS_FEC=k): one XOR per group of k, sent after the picture, like the phone does.
+        let k: usize = std::env::var("CAMOS_FEC").ok().and_then(|v| v.parse().ok()).unwrap_or(0);
+        if k >= 2 {
+            let pieces: Vec<&[u8]> = au.chunks(udp::MAX_CHUNK).collect();
+            for (g, group) in pieces.chunks(k).enumerate() {
+                let xor = udp::xor_pieces(group.iter().copied());
+                let p = udp::build_parity(&self.token, &udp::Parity {
+                    flags: if key { udp::FLAG_KEY } else { 0 }, frame, group: g as u16, count, pts_us, seq: 0,
+                    total: au.len() as u32, k: k as u8, xor: &xor,
+                });
+                self.send_raw(p);
+            }
+        }
     }
 }
