@@ -53,6 +53,78 @@ fn turn_plane<const N: usize>(src: &[u8], w: usize, h: usize, dst: &mut [u8], q:
     }
 }
 
+/// Shrink an NV12 picture to fit inside `max_w`×`max_h`, keeping its shape (direct 60 fps on the free plan: the
+/// camera sends 1080p, the free plan streams 720p). Each output pixel averages the 2×2 nearest source pixels, which
+/// is smooth enough for a 1.5× shrink. Returns the input unchanged if it already fits.
+pub fn fit_nv12(w: u32, h: u32, src: Vec<u8>, max_w: u32, max_h: u32) -> (u32, u32, Vec<u8>) {
+    if w <= max_w && h <= max_h || w < 2 || h < 2 || src.len() < (w * h * 3 / 2) as usize {
+        return (w, h, src);
+    }
+    let scale = (max_w as f32 / w as f32).min(max_h as f32 / h as f32);
+    let ow = (((w as f32 * scale) as u32) & !1).max(2);
+    let oh = (((h as f32 * scale) as u32) & !1).max(2);
+    let (w, h, ow, oh) = (w as usize, h as usize, ow as usize, oh as usize);
+    let mut out = vec![0u8; ow * oh * 3 / 2];
+    let (y_src, uv_src) = src.split_at(w * h);
+    let (y_dst, uv_dst) = out.split_at_mut(ow * oh);
+    for y in 0..oh {
+        let sy = (y * h / oh).min(h - 2);
+        for x in 0..ow {
+            let sx = (x * w / ow).min(w - 2);
+            let i = sy * w + sx;
+            y_dst[y * ow + x] = ((y_src[i] as u32 + y_src[i + 1] as u32 + y_src[i + w] as u32 + y_src[i + w + 1] as u32 + 2) / 4) as u8;
+        }
+    }
+    let (cw, ch, ocw, och) = (w / 2, h / 2, ow / 2, oh / 2);
+    for y in 0..och {
+        let sy = y * ch / och;
+        for x in 0..ocw {
+            let sx = x * cw / ocw;
+            let s = (sy * cw + sx) * 2;
+            let d = (y * ocw + x) * 2;
+            uv_dst[d] = uv_src[s];
+            uv_dst[d + 1] = uv_src[s + 1];
+        }
+    }
+    (ow as u32, oh as u32, out)
+}
+
+/// The "CamOS" mark, pre-rendered (Segoe UI Bold, white on black): 2-byte width, 2-byte height, then 1 byte per pixel.
+static MARK: &[u8] = include_bytes!("../../assets/watermark-camos.gray");
+
+/// Stamp the free plan's watermark into an NV12 picture, the same as the phone draws it (GlPipeline.drawMark): bold
+/// white "CamOS", 4.5 % of the picture height, bottom-right, margin 0.6 × its height, 28 % strength.
+pub fn watermark_nv12(w: u32, h: u32, buf: &mut [u8]) {
+    let (w, h) = (w as usize, h as usize);
+    if buf.len() < w * h || MARK.len() < 4 {
+        return;
+    }
+    let mw = u16::from_le_bytes([MARK[0], MARK[1]]) as usize;
+    let mh = u16::from_le_bytes([MARK[2], MARK[3]]) as usize;
+    let mask = &MARK[4..];
+    if mask.len() < mw * mh || mw == 0 || mh == 0 {
+        return;
+    }
+    let th = ((h as f32 * 0.045).round() as usize).max(8);
+    let tw = th * mw / mh;
+    let margin = (th as f32 * 0.6) as usize;
+    if tw + margin >= w || th + margin >= h {
+        return;
+    }
+    let (x0, y0) = (w - margin - tw, h - margin - th);
+    for y in 0..th {
+        let my = y * mh / th;
+        for x in 0..tw {
+            let a = mask[my * mw + x * mw / tw] as u32 * 28 / 100; // 0..71 of 255
+            if a == 0 {
+                continue;
+            }
+            let p = &mut buf[(y0 + y) * w + x0 + x];
+            *p = ((*p as u32 * (255 - a) + 235 * a) / 255) as u8;
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -114,6 +186,32 @@ mod tests {
             std::hint::black_box(turn_nv12(1920, 1080, &src, 1, false));
         }
         println!("1080p quarter turn: {:.2} ms each", t.elapsed().as_secs_f64() * 1000.0 / 60.0);
+    }
+
+    #[test]
+    fn fitting_shrinks_1080p_to_720p_and_keeps_tall_pictures_tall() {
+        let src = vec![100u8; 1920 * 1080 * 3 / 2];
+        let (w, h, out) = fit_nv12(1920, 1080, src, 1280, 720);
+        assert_eq!((w, h), (1280, 720));
+        assert_eq!(out.len(), 1280 * 720 * 3 / 2);
+        assert!(out.iter().all(|&b| b == 100), "a flat picture stays flat");
+        let (w, h, _) = fit_nv12(1080, 1920, vec![0u8; 1080 * 1920 * 3 / 2], 720, 1280);
+        assert_eq!((w, h), (720, 1280));
+        let small = vec![7u8; 640 * 360 * 3 / 2];
+        assert_eq!(fit_nv12(640, 360, small.clone(), 1280, 720), (640, 360, small), "already small: untouched");
+    }
+
+    #[test]
+    fn the_watermark_brightens_only_the_bottom_right_corner() {
+        let (w, h) = (1280usize, 720usize);
+        let mut buf = vec![16u8; w * h * 3 / 2]; // black
+        watermark_nv12(w as u32, h as u32, &mut buf);
+        let changed: Vec<(usize, usize)> = (0..h).flat_map(|y| (0..w).map(move |x| (x, y))).filter(|&(x, y)| buf[y * w + x] != 16).collect();
+        assert!(!changed.is_empty(), "the mark must show");
+        assert!(changed.iter().all(|&(x, y)| x > w * 3 / 4 && y > h * 9 / 10), "only in the corner");
+        let brightest = changed.iter().map(|&(x, y)| buf[y * w + x]).max().unwrap();
+        assert!(brightest > 60 && brightest < 90, "faint, like the phone's 28 %: {brightest}");
+        assert!(buf[w * h..].iter().all(|&b| b == 16), "colour untouched");
     }
 
     #[test]

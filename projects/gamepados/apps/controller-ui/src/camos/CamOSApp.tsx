@@ -42,8 +42,8 @@ type LiveState = { state: "connecting" | "live"; message: string; fps: number; k
 type PcStatus = { status: "unknown" | "checking" | "ready" | "old" | "unreachable" | "badkey" | "busy" | "error"; message: string };
 type Lens = { id: string; front: boolean; label: string; zoomMin: number; zoomMax: number; evMin: number; evMax: number; evStep: number;
   flash: boolean; manualFocus: boolean; stabilize: boolean; fps: number[];
-  /** 60 fps only exists in the camera's fast (high-speed) mode, which skips the picture engine: Premium only
-   *  (no watermark to draw), filters pause while it runs (owner, 2026-11-23). */
+  /** 60 fps only exists in the camera's fast (high-speed) mode, which skips the picture engine: filters pause while
+   *  it runs; on the free plan the PC stamps the watermark (owner, 2026-11-23: every phone that can film 60 shows 60). */
   direct60?: boolean };
 
 /** Everything the user can set. Mirrors CamSettings in CamStreamer.kt (same names). */
@@ -155,7 +155,7 @@ export default function CamOSApp() {
   const nativeSettings = (st: Settings = s) => JSON.stringify({
     ...st,
     quality: st.quality === 1080 && !hdAllowed ? 720 : st.quality,
-    fps: st.fps <= 30 ? st.fps : lens.fps.includes(60) && (premium || !lens.direct60) ? 60 : 30,
+    fps: st.fps <= 30 ? st.fps : lens.fps.includes(60) ? 60 : 30,
     cameraId: lens.id,
     front: lens.front,
     watermark: !premium,
@@ -237,7 +237,7 @@ export default function CamOSApp() {
   const portraitNow = live.portrait ?? s.shape === "portrait";
   const effQuality = s.quality === 1080 && !hdAllowed ? 720 : s.quality;
   const phoneState = () => JSON.stringify({
-    quality: effQuality, fps: s.fps <= 30 ? s.fps : lens.fps.includes(60) && (premium || !lens.direct60) ? 60 : 30, portrait: portraitNow, front: lens.front,
+    quality: effQuality, fps: s.fps <= 30 ? s.fps : lens.fps.includes(60) ? 60 : 30, portrait: portraitNow, front: lens.front,
     zoom: Math.min(Math.max(s.zoom, lens.zoomMin), lens.zoomMax), zoomMin: lens.zoomMin, zoomMax: lens.zoomMax,
     ev: s.ev, evMin: lens.evMin, evMax: lens.evMax, evStep: lens.evStep,
     look: premium ? s.look : "none", smooth: premium ? s.smooth : 0, lowLight: premium && s.lowLight,
@@ -372,7 +372,7 @@ export default function CamOSApp() {
       setLive({ state: st.state, message: st.message, fps: st.fps, kbps: st.kbps, portrait: st.portrait, height: st.height });
       if (st.state === "live" && st.fps > 0) {
         // Only when this stream really asked for 60 (a lens without 60, or 60 locked to Premium, streams 30 by design).
-        const asked60 = s.fps === 60 && lens.fps.includes(60) && (premium || !lens.direct60);
+        const asked60 = s.fps === 60 && lens.fps.includes(60);
         lowFpsSeconds.current = asked60 && st.fps < 45 ? lowFpsSeconds.current + 1 : 0;
         if (lowFpsSeconds.current === 8 && !told60.current) {
           told60.current = true;
@@ -620,7 +620,7 @@ function TabSettings(p: DashProps) {
   const version = (() => { try { return bridge()?.version() ?? "browser preview"; } catch { return ""; } })();
   const fpsChoices = [15, 24, 30, 60] as const;
   const can60 = lens.fps.includes(60);
-  const lock60 = can60 && !!lens.direct60 && !p.premium;
+  const lock60 = false;   // 60 fps is for every plan wherever the camera can film it (owner, 2026-11-23)
   const fpsNow = s.fps === 60 && !can60 ? 30 : s.fps;
   const lockedTap = (what: string) => { p.showToast(`${what} is part of Premium.`); p.goPremium(); };
   const chooseQuality = (v: string) => {
@@ -640,7 +640,7 @@ function TabSettings(p: DashProps) {
         <div className="console-plan-card" data-plan="LIFETIME">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0"><p className="text-sm font-bold calm-ink">{p.premium ? "Premium is on" : "CamOS Premium · Lifetime"}</p>
-              <ul className="mt-1.5 space-y-0.5">{["1080p HD, always", "No watermark", "Real 60 fps, even on phones that need the camera's fast mode", "Filters: colour looks, face smoothing, low-light boost", "No ads", "Also unlocks GamepadOS"].map((b) =>
+              <ul className="mt-1.5 space-y-0.5">{["1080p HD, always", "No watermark", "Filters: colour looks, face smoothing, low-light boost", "No ads", "Also unlocks GamepadOS"].map((b) =>
                 <li key={b} className="text-xs calm-muted"><Check size={12} aria-hidden="true" />{b}</li>)}</ul></div>
             <p className="console-plan-price text-xl font-bold shrink-0">₹19</p>
           </div>
@@ -662,7 +662,6 @@ function TabSettings(p: DashProps) {
         <ChoiceBar label="Frame rate" value={String(s.fps)} onChoose={(v) => (v === "60" && lock60 ? lockedTap("60 fps on this phone") : set({ fps: Number(v) as Settings["fps"] }))}
           choices={fpsChoices.map((f) => ({ value: String(f), label: f === 60 && lock60 ? <>{f} fps<span className="camos-hd"><Lock size={9} /></span></> : `${f} fps`, testId: `s-fps-${f}` }))} />
         <SwapIn swapKey={`${s.fps}-${can60}-${lock60}`}><p>{s.fps >= 60 ? (!can60 ? "This lens can't film 60 fps, so CamOS uses 30. Try another lens."
-            : lock60 ? "On this phone, 60 fps uses the camera's fast mode, which is part of Premium. CamOS streams 30 for now."
             : lens.direct60 ? "Uses the camera's fast mode for real 60 fps on your PC. Filters pause while streaming at 60."
             : "Smoothest motion. Uses more Wi-Fi and battery.")
           : s.fps <= 15 ? "Saves Wi-Fi and battery. Motion looks choppy." : "30 fps is what most webcams use."}</p></SwapIn>

@@ -73,7 +73,8 @@ fn main() {
     s.read_exact(&mut hello).expect("server hello");
     assert_eq!(&hello[0..4], b"CAMS");
     let nonce: [u8; 16] = hello[5..21].try_into().unwrap();
-    let h = proto::ClientHello { width, height, fps: fps as u8, name: "Fake phone (test)".into(), check: false, udp: want_udp, rotate: std::env::var("CAMOS_ROTATE").ok().and_then(|v| v.parse().ok()).unwrap_or(0), mirror: false };
+    let h = proto::ClientHello { width, height, fps: fps as u8, name: "Fake phone (test)".into(), check: false, udp: want_udp, rotate: std::env::var("CAMOS_ROTATE").ok().and_then(|v| v.parse().ok()).unwrap_or(0), mirror: false,
+        mark: std::env::var("CAMOS_MARK").is_ok(), fit: std::env::var("CAMOS_FIT").ok().and_then(|v| v.parse().ok()).unwrap_or(0) };
     s.write_all(&proto::build_client_hello(&key, &nonce, &h)).unwrap();
     let mut ack = [0u8; 5];
     s.read_exact(&mut ack).unwrap();

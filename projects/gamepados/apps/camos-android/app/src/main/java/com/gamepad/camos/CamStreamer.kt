@@ -136,7 +136,8 @@ class CamStreamer(
 
         /** flags bit 0 = "check only" (is this PC ready? no video follows); bit 1 = "I can send the video over UDP". */
         /** bits 2-3 = quarter turns the PC applies to make the picture upright (direct 60 fps mode). */
-        fun buildHello(key: String, nonce: ByteArray, w: Int, h: Int, fps: Int, deviceName: String, checkOnly: Boolean = false, udp: Boolean = false, rotate: Int = 0): ByteArray {
+        /** bit 5 = PC stamps the free-plan watermark; bits 6-7 = PC fits into 720p (1) / 480p (2). Direct mode only. */
+        fun buildHello(key: String, nonce: ByteArray, w: Int, h: Int, fps: Int, deviceName: String, checkOnly: Boolean = false, udp: Boolean = false, rotate: Int = 0, mark: Boolean = false, fit: Int = 0): ByteArray {
             val name = deviceName.toByteArray(Charsets.UTF_8).let { if (it.size > 40) it.copyOf(40) else it }
             val fixed = ByteArray(28)
             "CAMC".toByteArray(Charsets.US_ASCII).copyInto(fixed, 0)
@@ -144,7 +145,8 @@ class CamStreamer(
             fixed[5] = (w shr 8).toByte(); fixed[6] = w.toByte()
             fixed[7] = (h shr 8).toByte(); fixed[8] = h.toByte()
             fixed[9] = fps.toByte()
-            fixed[10] = ((if (checkOnly) 1 else 0) or (if (udp) 2 else 0) or ((rotate and 3) shl 2)).toByte()
+            fixed[10] = ((if (checkOnly) 1 else 0) or (if (udp) 2 else 0) or ((rotate and 3) shl 2) or
+                (if (mark) 32 else 0) or ((fit and 3) shl 6)).toByte()
             fixed[11] = name.size.toByte()
             tag(key, nonce, fixed, name).copyInto(fixed, 12)
             return fixed + name
@@ -218,15 +220,18 @@ class CamStreamer(
     @Volatile private var encFrames = 0
     /** Direct mode: the phone screen as the camera's second output (null = no preview). */
     private var directPreview: Surface? = null
-    /** The short side of the picture really sent (direct mode always sends the camera's 1080p), for the live label. */
-    val sentShortSide: Int get() = if (direct) minOf(directSize.width, directSize.height) else minOf(out.width, out.height)
+    /** The short side of the picture apps on the PC get, for the live label. (Direct mode sends the camera's 1080p and
+     *  the PC fits it to the chosen size, so this is the chosen size in both modes.) */
+    val sentShortSide: Int get() = minOf(out.width, out.height)
     /** The picture size the camera sends in direct mode (for the activity to fit the preview), or null. */
     val directPreviewSize: Size? get() = if (direct && directPreview != null) directSize else null
 
     /** Decide direct mode for this stream (network thread, before the hello). */
     private fun planDirect() {
         direct = false
-        if (settings.fps < 60 || settings.watermark || Build.VERSION.SDK_INT < 29) return
+        // Every plan (owner, 2026-11-23: "phones that support 60 fps show 60, phones with 30 cannot"). On the free
+        // plan the PC stamps the watermark and shrinks to the plan's size (directMark / directFit in the hello).
+        if (settings.fps < 60 || Build.VERSION.SDK_INT < 29) return
         try {
             val mgr = context.getSystemService(Context.CAMERA_SERVICE) as CameraManager
             val ch = mgr.getCameraCharacteristics(pickCameraId(mgr))
@@ -281,8 +286,8 @@ class CamStreamer(
             lowCamSeconds = Int.MIN_VALUE / 2   // don't keep checking
             return
         }
-        if (!settings.watermark && Build.VERSION.SDK_INT >= 29) {
-            // Premium: the high-speed mode only gives the picture engine 30 too, so go direct. That is decided
+        if (Build.VERSION.SDK_INT >= 29) {
+            // The high-speed mode only gives the picture engine 30 too, so go direct (every plan). That is decided
             // before the hello, hence a fresh stream; remember this camera + size so it starts direct next time.
             Log.i(TAG, "camera gives $camFps fps in the regular mode at 60: restarting in direct 60 fps mode")
             regularShortAt60 += directKey()
@@ -696,8 +701,12 @@ class CamStreamer(
             // Direct 60 fps is decided once, before the camera starts (a reconnect keeps it).
             if (camThread == null) planDirect()
             val (hw, hh) = if (direct) directSize.width to directSize.height else out.width to out.height
+            // Direct mode can't draw or shrink on the phone: the free plan asks the PC to stamp the watermark and fit
+            // the camera's 1080p into the chosen (plan-allowed) size.
+            val shortSide = minOf(out.width, out.height)
+            val fit = if (!direct) 0 else if (shortSide <= 480) 2 else if (shortSide < 1080) 1 else 0
             outStream.write(buildHello(key, hello.copyOfRange(5, 21), hw, hh, settings.fps, deviceName(), udp = wantUdp,
-                rotate = if (direct) directTurn else 0))
+                rotate = if (direct) directTurn else 0, mark = direct && settings.watermark, fit = fit))
             outStream.flush()
             val ack = ByteArray(5)
             input.readFully(ack)

@@ -225,9 +225,12 @@ fn serve(c: &mut TcpStream, key: &str) -> Result<(), String> {
         hello.width, hello.height, hello.fps,
         if cable { " over the USB cable" } else if udp.is_some() { " over Wi-Fi (UDP)" } else { " over Wi-Fi (TCP)" }));
     // Direct 60 fps (Premium): the picture arrives as the camera sensor sees it and is turned upright here.
-    let turning = (hello.rotate, hello.mirror);
-    if turning != (0, false) {
-        log(&format!("direct mode: turning the picture {}° clockwise{}", hello.rotate as u32 * 90, if hello.mirror { ", mirrored" } else { "" }));
+    let turning = Post { quarters: hello.rotate, mirror: hello.mirror, mark: hello.mark, fit: hello.fit };
+    if !turning.is_nothing() {
+        log(&format!("direct mode: turning the picture {}° clockwise{}{}{}", hello.rotate as u32 * 90,
+            if hello.mirror { ", mirrored" } else { "" },
+            if hello.mark { ", free-plan watermark stamped here" } else { "" },
+            match hello.fit { 1 => ", fitted to 720p", 2 => ", fitted to 480p", _ => "" }));
     }
     let (up_w, up_h) = if hello.rotate % 2 == 1 { (hello.height, hello.width) } else { (hello.width, hello.height) };
     if let Ok(mut s) = STATUS.lock() {
@@ -295,28 +298,55 @@ struct Sink {
     window: Instant,
     errors: u32,
     last_key_ask: Instant,
-    /// Quarter turns + mirror to make the picture upright (direct 60 fps mode; (0, false) = nothing to do).
-    turning: (u8, bool),
+    /// What the PC does to each picture in direct 60 fps mode (nothing otherwise).
+    turning: Post,
+}
+
+/// Direct 60 fps: the phone can't touch the picture, so the PC turns it upright and, on the free plan, shrinks it to
+/// the plan's size and stamps the watermark (proto.rs hello flags; turn.rs).
+#[derive(Clone, Copy)]
+struct Post {
+    quarters: u8,
+    mirror: bool,
+    mark: bool,
+    fit: u8,
+}
+
+impl Post {
+    fn is_nothing(&self) -> bool {
+        self.quarters == 0 && !self.mirror && !self.mark && self.fit == 0
+    }
+
+    fn apply(&self, w: u32, h: u32, nv12: Vec<u8>) -> (u32, u32, Vec<u8>) {
+        let (w, h, nv12) = if self.quarters != 0 || self.mirror {
+            match turn::turn_nv12(w, h, &nv12, self.quarters, self.mirror) {
+                Some(t) => t,
+                None => (w, h, nv12),
+            }
+        } else {
+            (w, h, nv12)
+        };
+        let (bw, bh) = match self.fit { 1 => (1280, 720), 2 => (854, 480), _ => (u32::MAX, u32::MAX) };
+        let (bw, bh) = if h > w { (bh, bw) } else { (bw, bh) };
+        let (w, h, mut nv12) = turn::fit_nv12(w, h, nv12, bw, bh);
+        if self.mark {
+            turn::watermark_nv12(w, h, &mut nv12);
+        }
+        (w, h, nv12)
+    }
 }
 
 impl Sink {
-    fn new(turning: (u8, bool)) -> Self {
+    fn new(turning: Post) -> Self {
         Sink { frames: 0, window: Instant::now(), errors: 0, last_key_ask: Instant::now(), turning }
     }
 
     fn decode(&mut self, dec: &mut H264Decoder, data: &[u8], pts_us: u64, w: u32, h: u32) -> Result<(), String> {
         let frames = &mut self.frames;
-        let (quarters, mirror) = self.turning;
+        let post = self.turning;
         let mut on_frame = |fw: u32, fh: u32, nv12: Vec<u8>| {
             *frames += 1;
-            let (fw, fh, nv12) = if (quarters, mirror) == (0, false) {
-                (fw, fh, nv12)
-            } else {
-                match turn::turn_nv12(fw, fh, &nv12, quarters, mirror) {
-                    Some(t) => t,
-                    None => (fw, fh, nv12),
-                }
-            };
+            let (fw, fh, nv12) = if post.is_nothing() { (fw, fh, nv12) } else { post.apply(fw, fh, nv12) };
             preview::offer(fw, fh, &nv12);
             vcam::publish(fw, fh, nv12);
         };
@@ -358,7 +388,7 @@ impl Sink {
 }
 
 /// The TCP side: video frames (TCP mode, `video` = decoder + size), the phone's state, "still here" pings.
-fn control_loop(c: &mut TcpStream, started: Instant, mut video: Option<(&mut H264Decoder, u32, u32)>, turning: (u8, bool)) -> Result<(), String> {
+fn control_loop(c: &mut TcpStream, started: Instant, mut video: Option<(&mut H264Decoder, u32, u32)>, turning: Post) -> Result<(), String> {
     let mut sink = Sink::new(turning);
     let mut hdr = [0u8; proto::FRAME_HEADER_LEN];
     let mut payload = Vec::new();
@@ -402,7 +432,7 @@ fn control_loop(c: &mut TcpStream, started: Instant, mut video: Option<(&mut H26
 /// the phone twice a second, decode. Ends when told to, or after 5 s without video (then it also closes the TCP
 /// connection so the phone reconnects).
 #[allow(clippy::too_many_arguments)]
-fn udp_loop(sock: std::net::UdpSocket, token: [u8; 8], phone: std::net::IpAddr, w: u32, h: u32, stop: &AtomicBool, tcp: TcpStream, turning: (u8, bool)) -> Result<(), String> {
+fn udp_loop(sock: std::net::UdpSocket, token: [u8; 8], phone: std::net::IpAddr, w: u32, h: u32, stop: &AtomicBool, tcp: TcpStream, turning: Post) -> Result<(), String> {
     crate::winperf::raise_receive_thread();
     let mut dec = H264Decoder::new().map_err(|e| format!("H.264 decoder: {e}"))?;
     let mut re = udp::Reassembler::new();
