@@ -104,6 +104,22 @@ class CamStreamer(
         const val FLAG_PING = 16
         private const val TAG = "CamOS"
 
+        /**
+         * MediaTek 60 fps for the normal session. OFF: tested 2026-11-23 on the owner's Xiaomi 2311DRK48I — the
+         * session took hfpsMode=1 and a 60-60 range, but the camera still gave 30 to an app (its own camera app
+         * likely adds a recording surface or private keys). Direct 60 fps is the working path there. Turn on to
+         * try other MediaTek phones; the fps doctor still falls back to direct mode if it gives 30.
+         */
+        const val TRY_MTK60 = false
+
+        /** MediaTek's vendor keys for its 60 fps mode (null where the class refuses to make them). */
+        val HFPS_MODE: CaptureRequest.Key<Int>? = try {
+            CaptureRequest.Key("com.mediatek.streamingfeature.hfpsMode", Int::class.javaPrimitiveType!!)
+        } catch (_: Throwable) { null }
+        val HFPS_MAX: CameraCharacteristics.Key<IntArray>? = try {
+            CameraCharacteristics.Key("com.mediatek.streamingfeature.availableHfpsMaxResolutions", IntArray::class.java)
+        } catch (_: Throwable) { null }
+
         /** HMAC-SHA256(key, nonce ‖ fixed[0..12] ‖ name), first 16 bytes. Mirrors proto::tag (Rust). */
         fun tag(key: String, nonce: ByteArray, fixed: ByteArray, name: ByteArray): ByteArray {
             // No key = a phone on the USB cable, which needs none (the PC accepts that only from the cable). Android's
@@ -209,7 +225,8 @@ class CamStreamer(
             val mgr = context.getSystemService(Context.CAMERA_SERVICE) as CameraManager
             val ch = mgr.getCameraCharacteristics(pickCameraId(mgr))
             val regular = ch.get(CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES) ?: emptyArray()
-            val regular60 = regular.any { it.upper >= 60 && it.lower <= 60 } && pickCaptureSize(ch, minFps = 60) != null
+            val regular60 = hfpsSupports(ch, max(out.width, out.height), minOf(out.width, out.height)) ||
+                regular.any { it.upper >= 60 && it.lower <= 60 } && pickCaptureSize(ch, minFps = 60) != null
             // The normal way gives 60 here (and wasn't measured short before): keep the picture engine.
             if (regular60 && !preferHighSpeed && directKey() !in regularShortAt60) return
             val (range, size) = highSpeedPlan(ch, max(out.width, out.height), minOf(out.width, out.height)) ?: return
@@ -239,7 +256,7 @@ class CamStreamer(
 
     /** One line for the PC's camos.log: which camera mode, size, range, and what it really gives. */
     private fun camLine(): String =
-        "${if (direct) "direct high-speed" else if (highSpeed) "high-speed" else "regular"} mode ${cap.width}x${cap.height}, asked " +
+        "${if (direct) "direct high-speed" else if (highSpeed) "high-speed" else if (hfps) "MediaTek 60" else "regular"} mode ${cap.width}x${cap.height}, asked " +
             "${aeRange?.let { "${it.lower}-${it.upper}" } ?: "?"} fps (want ${settings.fps}), camera gives $camFps fps, " +
             "sends $sentFps fps, electronic stabilisation ${if (eisOn) "on" else "off"}"
 
@@ -313,7 +330,8 @@ class CamStreamer(
         queue.clear()
         socket = null
         onState("connecting", "Connecting to $ip…", 0, 0)
-        Thread({ networkMain(ip, key) }, "camos-net").start()
+        val my = generation.incrementAndGet()
+        Thread({ networkMain(ip, key, my) }, "camos-net").start()
     }
 
     fun stop() {
@@ -499,19 +517,25 @@ class CamStreamer(
      * the connection is re-made, so a drop is a short freeze on the PC instead of being thrown back to the home
      * screen. Gives up after 30 seconds without a connection.
      */
-    private fun networkMain(ip: String, key: String) {
+    private fun networkMain(ip: String, key: String, my: Int) {
         var wasLive = false
         var busyRetried = false
         var downSince = 0L
-        while (running.get()) {
+        // `my` = which Start this thread belongs to. After a quick Stop → Start (a restart) an old thread could wake
+        // up, see "running" again and reconnect alongside the new stream, the two knocking each other off the PC
+        // every second (seen on the owner's phone 2026-11-23). An out-of-date thread leaves without touching
+        // anything shared.
+        val mine = { running.get() && generation.get() == my }
+        while (mine()) {
             try {
-                connectAndStream(ip, key) { wasLive = true; downSince = 0L }
+                connectAndStream(ip, key, mine) { wasLive = true; downSince = 0L }
                 return   // returns normally only after stop()
             } catch (e: Exception) {
+                if (generation.get() != my) return
                 linked = false
                 closeUdp()
                 try { socket?.close() } catch (_: Exception) {}
-                if (!running.get()) return
+                if (!mine()) return
                 if (e is UdpBlockedException) {
                     // Not a drop: switch to the normal (TCP) way at once, no 30-second countdown.
                     onState("connecting", "This Wi-Fi blocks smooth mode. Switching to normal mode…", 0, 0)
@@ -536,6 +560,9 @@ class CamStreamer(
             }
         }
     }
+
+    /** Bumped on every Start (see networkMain). */
+    private val generation = java.util.concurrent.atomic.AtomicInteger(0)
 
     private fun firstConnectMessage(e: Exception): String {
         val network = e is java.net.SocketTimeoutException || e is java.net.ConnectException || e is java.net.NoRouteToHostException
@@ -624,7 +651,7 @@ class CamStreamer(
         return true
     }
 
-    private fun connectAndStream(ip: String, key: String, onLive: () -> Unit) {
+    private fun connectAndStream(ip: String, key: String, mine: () -> Boolean, onLive: () -> Unit) {
         run {
             val s = Socket()
             s.tcpNoDelay = true
@@ -632,6 +659,7 @@ class CamStreamer(
             bindToPcNetwork(s, ip)
             s.connect(InetSocketAddress(ip, PORT), 4000)
             s.soTimeout = 5000
+            if (!mine()) { s.close(); return }   // a newer Start took over while we were connecting
             socket = s
             val input = DataInputStream(s.getInputStream())
             val outStream = DataOutputStream(BufferedOutputStream(s.getOutputStream(), 256 * 1024))
@@ -737,7 +765,7 @@ class CamStreamer(
             var window = System.nanoTime()
             var lastAdapt = System.nanoTime()
             calmSince = android.os.SystemClock.elapsedRealtime()
-            while (running.get()) {
+            while (mine()) {
                 if (s.isClosed) throw java.net.SocketException("connection closed")
                 if (System.nanoTime() - lastAdapt >= 500_000_000L) { adaptBitrate(); lastAdapt = System.nanoTime() }
                 if (link != null) {
@@ -876,6 +904,13 @@ class CamStreamer(
         }
         highSpeed = false
         hsRange = null
+        hfps = false
+        if (settings.fps >= 60 && !preferHighSpeed && directKey() !in regularShortAt60 &&
+            hfpsSupports(ch, max(out.width, out.height), minOf(out.width, out.height))) {
+            // 0. MediaTek's 60 fps mode for the normal session: everything stays (filters, watermark, preview).
+            hfps = true
+            return pickCaptureSize(ch) ?: Size(max(out.width, out.height), minOf(out.width, out.height))
+        }
         if (settings.fps >= 60) {
             // 1. Regular video mode, but only at a picture size the camera can really deliver 60 times a second.
             //    (Phones list "60 fps" for the camera as a whole; at big sizes they still give 30. Asking for 60 at
@@ -1065,9 +1100,11 @@ class CamStreamer(
         if (size != cap) { cap = size; gl?.setCaptureSize(size.width, size.height) }
         gl?.sensorOrientation = ch.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 90
         gl?.front = ch.get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_FRONT
+        val my = generation.get()
         mgr.openCamera(id, object : CameraDevice.StateCallback() {
             override fun onOpened(device: CameraDevice) {
-                if (!running.get()) { device.close(); return }
+                // A camera opened for an earlier Start (quick restart) is not ours to keep.
+                if (!running.get() || generation.get() != my) { device.close(); return }
                 camera = device
                 createSession(device)
             }
@@ -1089,11 +1126,20 @@ class CamStreamer(
         val target = camSurface ?: return
         val cb = object : CameraCaptureSession.StateCallback() {
             override fun onConfigured(s: CameraCaptureSession) {
+                if (camera !== device) { try { s.close() } catch (_: Exception) {}; return }   // from an earlier Start
                 session = s
                 repeat()
                 requestKeyFrame()
             }
             override fun onConfigureFailed(s: CameraCaptureSession) {
+                if (hfps) {
+                    // The MediaTek 60 fps mode was refused: forget it on this phone, carry on the normal way.
+                    Log.w(TAG, "MediaTek 60 fps session refused; normal session instead")
+                    hfps = false
+                    hfpsRefused = true
+                    createSession(device)
+                    return
+                }
                 if (highSpeed) {
                     // This phone said it could film 60 fps in high-speed mode but refused: carry on at 30.
                     Log.w(TAG, "high-speed session refused; falling back to regular video")
@@ -1106,9 +1152,47 @@ class CamStreamer(
                 fail("This camera can't stream at this size. Try a lower quality or another lens.")
             }
         }
+        val modeKey = HFPS_MODE
+        if (hfps && modeKey != null && Build.VERSION.SDK_INT >= 28) {
+            // MediaTek 60 fps: the mode and the 60 fps range are "session parameters" there, so they go in when the
+            // session is made (and again in every request, see repeat()).
+            try {
+                val params = device.createCaptureRequest(CameraDevice.TEMPLATE_RECORD).apply {
+                    set(modeKey, 1)
+                    set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, Range(60, 60))
+                }.build()
+                val cfg = android.hardware.camera2.params.SessionConfiguration(
+                    android.hardware.camera2.params.SessionConfiguration.SESSION_REGULAR,
+                    listOf(android.hardware.camera2.params.OutputConfiguration(target)),
+                    { r -> camHandler?.post(r) }, cb)
+                cfg.sessionParameters = params
+                device.createCaptureSession(cfg)
+                return
+            } catch (e: Exception) {
+                Log.w(TAG, "MediaTek 60 fps session: ${e.message}")
+                hfps = false
+                hfpsRefused = true
+            }
+        }
         @Suppress("DEPRECATION")
         if (highSpeed) device.createConstrainedHighSpeedCaptureSession(listOf(target), cb, camHandler)
         else device.createCaptureSession(listOf(target), cb, camHandler)
+    }
+
+    // ── MediaTek 60 fps (found 2026-11-23 on the owner's Xiaomi 2311DRK48I via `dumpsys media.camera`) ──
+    // MediaTek phones list only 30 fps for apps, but their camera has a "high fps" mode for the normal session
+    // (com.mediatek.streamingfeature.hfpsMode, up to the size in availableHfpsMaxResolutions, e.g. 1920×1080 at
+    // 60). It goes through the picture engine like 30 fps does: filters, watermark and the phone preview all stay.
+    /** This stream's camera runs in the MediaTek 60 fps mode. */
+    @Volatile private var hfps = false
+    /** The phone refused it once: don't try again while the app runs. */
+    @Volatile private var hfpsRefused = false
+
+    /** Does this camera's MediaTek 60 fps mode reach `long`×`short` at 60? */
+    private fun hfpsSupports(ch: CameraCharacteristics, long: Int, short: Int): Boolean {
+        if (!TRY_MTK60 || hfpsRefused || HFPS_MODE == null || Build.VERSION.SDK_INT < 28) return false
+        val m = try { ch.get(HFPS_MAX) } catch (_: Exception) { null } ?: return false
+        return m.size >= 3 && m[2] >= 60 && max(m[0], m[1]) >= long && minOf(m[0], m[1]) >= short
     }
 
     /** Apply every camera setting to the running camera. Called on the camera thread. */
@@ -1128,7 +1212,8 @@ class CamStreamer(
                 ?: ranges.firstOrNull { it.lower == want && it.upper == want }
                 ?: ranges.filter { it.upper >= want }.minByOrNull { abs(it.upper - want) * 10 + abs(it.lower - want) }
                 ?: ranges.maxByOrNull { it.upper }
-            (if (highSpeed) hsRange else range)?.let { b.set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, it); aeRange = it }
+            (if (hfps) Range(60, 60) else if (highSpeed) hsRange else range)?.let { b.set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, it); aeRange = it }
+            if (hfps) HFPS_MODE?.let { b.set(it, 1) }
 
             // Zoom.
             if (Build.VERSION.SDK_INT >= 30 && ch.get(CameraCharacteristics.CONTROL_ZOOM_RATIO_RANGE) != null) {
@@ -1221,21 +1306,24 @@ class CamStreamer(
     }
 
     private fun closeAll() {
+        // Take this stream's objects NOW and clear the fields, then release them on the old camera thread. Before,
+        // the fields were cleared only when that cleanup ran, so a quick Stop → Start could find the old camera
+        // thread still set (and not start its own camera) and then lose its new camera to the old cleanup.
         val h = camHandler
+        val t = camThread
+        val oldSession = session; val oldCamera = camera; val oldCodec = codec; val oldGl = gl
+        val oldCamSurface = camSurface; val oldEncSurface = encoderSurface
+        session = null; camera = null; codec = null; gl = null; camSurface = null; encoderSurface = null
+        camHandler = null; camThread = null
         val work = Runnable {
-            closeCameraOnly()
-            try { codec?.stop() } catch (_: Exception) {}
-            try { codec?.release() } catch (_: Exception) {}
-            codec = null
-            try { gl?.release() } catch (_: Exception) {}
-            gl = null
-            try { camSurface?.release() } catch (_: Exception) {}
-            camSurface = null
-            try { encoderSurface?.release() } catch (_: Exception) {}
-            encoderSurface = null
-            camThread?.quitSafely()
-            camThread = null
-            camHandler = null
+            try { oldSession?.close() } catch (_: Exception) {}
+            try { oldCamera?.close() } catch (_: Exception) {}
+            try { oldCodec?.stop() } catch (_: Exception) {}
+            try { oldCodec?.release() } catch (_: Exception) {}
+            try { oldGl?.release() } catch (_: Exception) {}
+            try { oldCamSurface?.release() } catch (_: Exception) {}
+            try { oldEncSurface?.release() } catch (_: Exception) {}
+            t?.quitSafely()
         }
         if (h != null) h.post(work) else work.run()
     }
@@ -1280,7 +1368,12 @@ object CameraCatalog {
                 map != null && caps.contains(CameraMetadata.REQUEST_AVAILABLE_CAPABILITIES_CONSTRAINED_HIGH_SPEED_VIDEO) &&
                     map.highSpeedVideoFpsRanges.any { r -> r.upper >= 60 && map.getHighSpeedVideoSizesFor(r).any { it.width >= 1280 } }
             } catch (_: Exception) { false }
-            val reg60 = fpsRanges.any { it.upper >= 60 && it.lower <= 60 } && try {
+            // MediaTek's 60 fps mode counts as the normal way (it keeps the picture engine).
+            val mtk60 = try {
+                val m = CamStreamer.HFPS_MAX?.let { ch.get(it) }
+                CamStreamer.TRY_MTK60 && CamStreamer.HFPS_MODE != null && Build.VERSION.SDK_INT >= 28 && m != null && m.size >= 3 && m[2] >= 60 && max(m[0], m[1]) >= 1280
+            } catch (_: Exception) { false }
+            val reg60 = mtk60 || fpsRanges.any { it.upper >= 60 && it.lower <= 60 } && try {
                 val map = ch.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
                 map?.getOutputSizes(SurfaceTexture::class.java)?.any { it.width >= 1280 && map.getOutputMinFrameDuration(SurfaceTexture::class.java, it) in 1..17_200_000L } == true
             } catch (_: Exception) { false }
