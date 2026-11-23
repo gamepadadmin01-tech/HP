@@ -38,7 +38,7 @@ const bridge = (): Bridge | undefined => (window as any).CamOSBridge;
 type PC = { ip: string; key: string; via?: "usb" | "wifi" };
 type Route = "dashboard" | "connect" | "live";
 type Tab = "home" | "system";
-type LiveState = { state: "connecting" | "live"; message: string; fps: number; kbps: number; portrait?: boolean };
+type LiveState = { state: "connecting" | "live"; message: string; fps: number; kbps: number; portrait?: boolean; height?: number };
 type PcStatus = { status: "unknown" | "checking" | "ready" | "old" | "unreachable" | "badkey" | "busy" | "error"; message: string };
 type Lens = { id: string; front: boolean; label: string; zoomMin: number; zoomMax: number; evMin: number; evMax: number; evStep: number;
   flash: boolean; manualFocus: boolean; stabilize: boolean; fps: number[];
@@ -369,7 +369,7 @@ export default function CamOSApp() {
       if (st.state === "restart") { restartAfterStop.current = true; setLive((l) => ({ ...l, state: "connecting", message: st.message })); bridge()?.stop(); return; }
       if (st.state === "live" && st.direct && !toldDirect.current) { toldDirect.current = true; showToast("Real 60 fps on your PC. Filters pause in this mode."); }
       if (st.state === "connecting" && !restartAfterStop.current) toldDirect.current = false;
-      setLive({ state: st.state, message: st.message, fps: st.fps, kbps: st.kbps, portrait: st.portrait });
+      setLive({ state: st.state, message: st.message, fps: st.fps, kbps: st.kbps, portrait: st.portrait, height: st.height });
       if (st.state === "live" && st.fps > 0) {
         // Only when this stream really asked for 60 (a lens without 60, or 60 locked to Premium, streams 30 by design).
         const asked60 = s.fps === 60 && lens.fps.includes(60) && (premium || !lens.direct60);
@@ -920,7 +920,7 @@ function LiveScreen({ live, s, set, lens, lenses, premium, hdAllowed, goPremium,
     <motion.div className="camos-pill" data-state={live.state} {...cardIn} transition={SPRING}>
       <span className="camos-dot" aria-hidden="true" />
       <SwapIn swapKey={isLive ? "live" : "wait"} className="camos-pill-text">
-        {isLive ? <>Live · {q}p · {live.fps || "…"} fps{live.kbps ? ` · ${(live.kbps / 1000).toFixed(1)} Mbit/s` : ""}</> : live.message || "Connecting…"}
+        {isLive ? <>Live · {live.height || q}p · {live.fps || "…"} fps{live.kbps ? ` · ${(live.kbps / 1000).toFixed(1)} Mbit/s` : ""}</> : live.message || "Connecting…"}
       </SwapIn>
     </motion.div>
 

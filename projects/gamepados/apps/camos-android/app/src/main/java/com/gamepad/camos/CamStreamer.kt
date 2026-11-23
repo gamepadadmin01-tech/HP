@@ -218,6 +218,8 @@ class CamStreamer(
     @Volatile private var encFrames = 0
     /** Direct mode: the phone screen as the camera's second output (null = no preview). */
     private var directPreview: Surface? = null
+    /** The short side of the picture really sent (direct mode always sends the camera's 1080p), for the live label. */
+    val sentShortSide: Int get() = if (direct) minOf(directSize.width, directSize.height) else minOf(out.width, out.height)
     /** The picture size the camera sends in direct mode (for the activity to fit the preview), or null. */
     val directPreviewSize: Size? get() = if (direct && directPreview != null) directSize else null
 
