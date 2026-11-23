@@ -42,6 +42,14 @@ Latest test APK: `test-builds/camos/CamOS-0.6.0-test-DO-NOT-UPLOAD.apk` (install
   "IIITS_Student_EXT" (10.0.97.x), which cannot reach the PC on "IIITS_Student" (10.0.5.x, ping 0/5). Wi-Fi was
   turned off again afterwards. Test this when both are on the same network (or the phone's hotspot).
 
+## Later the same night (0.6.1)
+
+- The live label shows the quality really sent (direct mode always sends the camera's 1080p, even with 720p chosen).
+- "Tall" shape in direct 60: the PC turns the picture 90° clockwise. Verified with the fake phone's test pattern
+  through "CamOS Camera" (red stripe left → top). On the real phone the lens was covered, so not checked by eye.
+- Incident: a tap/swipe meant for CamOS landed while a call was ringing and may have answered it. All later phone
+  automation first checks that no call is ringing/active and that CamOS is the app in front (scratchpad `safe.sh`).
+
 ## Left for the owner
 
 - Wi-Fi smooth mode on the real phone (see above).
