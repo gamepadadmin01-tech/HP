@@ -1227,7 +1227,7 @@ class CamStreamer(
                 createSession(device)
             }
             override fun onDisconnected(device: CameraDevice) {
-                // Android takes the camera away when CamOS goes to the background (no foreground service yet).
+                // Android can still take the camera away (another app opens it, or CamService couldn't start).
                 // The stream keeps its connection; resumeCamera() opens the camera again when the app is back.
                 device.close()
                 if (camera == device) { camera = null; session = null }

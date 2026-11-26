@@ -7,6 +7,11 @@
     <!-- To send the stream over the network the PC is on (Wi-Fi / USB cable), not mobile data. No pop-up. -->
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- Keep streaming with the screen off / another app in front (CamService.kt). Play asks for a declaration of
+         the camera foreground-service use on the listing: "the phone is the PC's webcam while streaming". -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <uses-feature android:name="android.hardware.camera.any" android:required="true" />
 
@@ -32,5 +37,10 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <service
+            android:name=".CamService"
+            android:exported="false"
+            android:foregroundServiceType="camera" />
     </application>
 </manifest>

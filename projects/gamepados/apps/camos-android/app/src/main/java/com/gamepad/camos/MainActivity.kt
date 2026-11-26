@@ -61,6 +61,8 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var root: FrameLayout
     private lateinit var cameraView: TextureView
+    /** A preview texture kept alive for the camera while CamOS was in the background in direct mode. */
+    private var orphanPreview: SurfaceTexture? = null
     private lateinit var qrView: PreviewView
     private lateinit var webView: WebView
     private lateinit var dimCover: View
@@ -90,7 +92,13 @@ class MainActivity : AppCompatActivity() {
             surfaceTextureListener = object : TextureView.SurfaceTextureListener {
                 override fun onSurfaceTextureAvailable(s: SurfaceTexture, w: Int, h: Int) { streamer.setPreview(s, w, h) }
                 override fun onSurfaceTextureSizeChanged(s: SurfaceTexture, w: Int, h: Int) { streamer.previewResized(w, h) }
-                override fun onSurfaceTextureDestroyed(s: SurfaceTexture): Boolean { streamer.setPreview(null, 0, 0); return true }
+                override fun onSurfaceTextureDestroyed(s: SurfaceTexture): Boolean {
+                    streamer.setPreview(null, 0, 0)
+                    // Direct 60 fps: the camera itself draws into this preview; releasing it while streaming in the
+                    // background would break the camera session. Keep it until the stream ends.
+                    if (streamer.direct && streamer.isRunning()) { orphanPreview = s; return false }
+                    return true
+                }
                 override fun onSurfaceTextureUpdated(s: SurfaceTexture) {}
             }
         }
@@ -105,6 +113,8 @@ class MainActivity : AppCompatActivity() {
         }
 
         streamer = CamStreamer(this, ::displayRotationDegrees) { state, message, fps, kbps -> runOnUiThread { onStreamState(state, message, fps, kbps) } }
+        // The streaming notification's Stop button.
+        CamService.onStopPressed = { runOnUiThread { streamer.stop() } }
         // Requests from the PC window go to the page, which checks them against this phone's plan before applying.
         streamer.onRemote = { json -> js("window.camosOnRemote && window.camosOnRemote(${JSONObject.quote(json)})") }
 
@@ -238,6 +248,7 @@ class MainActivity : AppCompatActivity() {
     override fun onDestroy() {
         usbWatch = false
         streamer.stop()
+        CamService.stop(this)
         stopQr()
         releaseWifiLock()
         super.onDestroy()
@@ -300,6 +311,9 @@ class MainActivity : AppCompatActivity() {
             window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
             setDim(false)
             releaseWifiLock()
+            CamService.stop(this)
+            orphanPreview?.let { o -> if (o !== cameraView.surfaceTexture) o.release() }
+            orphanPreview = null
         }
         val json = JSONObject().put("state", state).put("message", message).put("fps", fps).put("kbps", kbps)
             .put("front", streamer.facingFront).put("portrait", streamer.portrait).put("direct", streamer.direct).put("height", streamer.sentShortSide)
@@ -327,6 +341,14 @@ class MainActivity : AppCompatActivity() {
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         acquireWifiLock()
         streamer.start(ip, key, s, portrait)
+        // Keep the camera when the screen goes off or another app comes in front (CamService.kt). Its notification
+        // needs Android 13's notification permission; asked once, the stream works either way.
+        if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+            && !getPreferences(MODE_PRIVATE).getBoolean("askedNotify", false)) {
+            getPreferences(MODE_PRIVATE).edit().putBoolean("askedNotify", true).apply()
+            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.POST_NOTIFICATIONS), 2)
+        }
+        CamService.start(this)
     }
 
     private fun setDim(on: Boolean) {
