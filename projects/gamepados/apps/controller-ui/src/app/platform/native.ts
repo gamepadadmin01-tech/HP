@@ -215,7 +215,9 @@ export function testRumble(): boolean {
   const b = bridge();
   if (!b || typeof b.triggerRumble !== "function") return false;
   try {
-    b.triggerRumble(1, 1, 400);
+    // 255 = full strength: the bridge reads 0..255 like a game's rumble packet. It was (1, 1), i.e. 1 out of 255,
+    // so "Test rumble" was nearly impossible to feel on every phone (customer reports, 2026-11-26).
+    b.triggerRumble(255, 255, 400);
     return true;
   } catch {
     return false;
