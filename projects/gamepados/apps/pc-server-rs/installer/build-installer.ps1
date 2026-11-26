@@ -81,9 +81,15 @@ cargo build --release
 if ($LASTEXITCODE -ne 0) { Pop-Location; Write-Error "cargo build failed"; exit 1 }
 Pop-Location
 
+Write-Host "== cargo build --release (CamOS camera DLL) =="
+# "CamOS Camera" lives in its own crate (vcam/): Windows' camera service loads it as camos_vcam.dll.
+cargo build --release --manifest-path "$root\vcam\Cargo.toml"
+if ($LASTEXITCODE -ne 0) { Write-Error "camos_vcam build failed"; exit 1 }
+
 Write-Host "== staging =="
 New-Item -ItemType Directory -Force "$here\staging" | Out-Null
 Copy-Item "$root\target\release\pc-server-rs.exe" "$here\staging\GamepadServer.exe" -Force
+Copy-Item "$root\vcam\target\release\camos_vcam.dll" "$here\staging\camos_vcam.dll" -Force
 
 # ── Code signing ────────────────────────────────────────────────────────────
 # WHY THIS MATTERS MORE THAN IT LOOKS: Windows 11's Smart App Control refuses to
@@ -124,6 +130,8 @@ function Invoke-Sign([string]$file, [string]$label) {
 
 Write-Host "== signing =="
 $signedExe = Invoke-Sign "$here\staging\GamepadServer.exe" "GamepadServer.exe"
+# The camera DLL runs inside a Windows service: sign it too, or Smart App Control can refuse to load it.
+$null = Invoke-Sign "$here\staging\camos_vcam.dll" "camos_vcam.dll"
 if (-not $signedExe) {
   Write-Host "  NOT SIGNED - no GPOS_SIGN_PFX/GPOS_SIGN_THUMBPRINT set."
   Write-Host "  Windows 11 Smart App Control will BLOCK this build on machines where it is on."

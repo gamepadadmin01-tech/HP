@@ -97,6 +97,11 @@ Source: "..\..\..\tools\platform-tools\AdbWinUsbApi.dll"; DestDir: "{app}"; Flag
 ; difference between a dead end and a one-click fix when Windows drops or
 ; blocks the driver some time after install.
 Source: "drivers\ViGEmBus_1.22.0_x64_x86_arm64.exe"; DestDir: "{app}"; Flags: ignoreversion
+; CamOS (phone webcam, 2026-11): "CamOS Camera" is a camera source that Windows' camera service (Frame Server)
+; loads from this DLL. regserver = registered on install, unregistered on uninstall (64-bit regsvr32 in 64-bit
+; mode). Frame Server can hold the old copy open: PrepareToInstall stops it first, and restartreplace swaps the
+; file at the next restart if it is still busy. Harmless on Windows 10 (the server only offers the camera on 11).
+Source: "staging\camos_vcam.dll"; DestDir: "{app}"; Flags: ignoreversion regserver restartreplace uninsrestartdelete
 
 [Icons]
 Name: "{group}\{#AppName}"; Filename: "{app}\{#ExeName}"
@@ -126,6 +131,31 @@ Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""Gamepad Server (TCP)"""; Flags: runhidden; RunOnceId: "DelFwTCP"
 
 [Code]
+// ── CamOS camera DLL: free it before replacing it ───────────────────────────
+// Windows' camera service ("Frame Server") loads camos_vcam.dll and can keep it open while any app has used a
+// camera. Stopping the service lets the new copy be written now instead of after a restart. It starts again by
+// itself the next time an app opens a camera. Errors are ignored: restartreplace is the fallback.
+procedure StopFrameServer();
+var
+  rc: Integer;
+begin
+  Exec(ExpandConstant('{sys}\sc.exe'), 'stop FrameServerMonitor', '', SW_HIDE, ewWaitUntilTerminated, rc);
+  Exec(ExpandConstant('{sys}\sc.exe'), 'stop FrameServer', '', SW_HIDE, ewWaitUntilTerminated, rc);
+  Sleep(1500);
+end;
+
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+begin
+  StopFrameServer();
+  Result := '';
+end;
+
+function InitializeUninstall(): Boolean;
+begin
+  StopFrameServer();
+  Result := True;
+end;
+
 // ── ViGEmBus: install it, then PROVE it is there ────────────────────────────
 // Without the driver there is no virtual gamepad and the server refuses to
 // start, so this is not an optional extra — it is the product working or not.
