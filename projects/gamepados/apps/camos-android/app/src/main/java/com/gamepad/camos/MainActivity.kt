@@ -68,6 +68,15 @@ class MainActivity : AppCompatActivity() {
     private lateinit var dimCover: View
 
     private lateinit var streamer: CamStreamer
+    /** Google Play purchases (Get Premium). Created on first use; answers go to window.camosOnPurchase. */
+    private val billing by lazy {
+        CamBilling(this) { json -> js("window.camosOnPurchase && window.camosOnPurchase(${JSONObject.quote(json.toString())})") }
+    }
+    private var billingUsed = false
+    /** "Watch an ad → 45 min HD". Answers go to window.camosOnAd. */
+    private val ads by lazy {
+        CamAds(this) { json -> js("window.camosOnAd && window.camosOnAd(${JSONObject.quote(json.toString())})") }
+    }
     private var wifiLock: android.net.wifi.WifiManager.WifiLock? = null
 
     private val qrExecutor = Executors.newSingleThreadExecutor()
@@ -249,6 +258,7 @@ class MainActivity : AppCompatActivity() {
         usbWatch = false
         streamer.stop()
         CamService.stop(this)
+        if (billingUsed) billing.close()
         stopQr()
         releaseWifiLock()
         super.onDestroy()
@@ -473,5 +483,16 @@ class MainActivity : AppCompatActivity() {
         @JavascriptInterface fun version(): String = BuildConfig.VERSION_NAME
         /** Test builds can pretend to be Premium or pretend an ad was watched, so every screen can be tried. */
         @JavascriptInterface fun isTestBuild(): Boolean = BuildConfig.DEBUG
+        /** Get Premium: Google Play's purchase sheet for camos_lifetime, stamped with this account. */
+        @JavascriptInterface fun startPlayPurchase(userId: String) { billingUsed = true; billing.buy(userId) }
+        /** Anything this phone already bought, handed back to the page (restored: true). */
+        @JavascriptInterface fun restorePurchases() { billingUsed = true; billing.restore() }
+        @JavascriptInterface fun acknowledgeIfServerCredited(purchaseToken: String) { billingUsed = true; billing.acknowledge(purchaseToken) }
+        /** Play a rewarded ad (Google's consent form first, where the law needs it). */
+        @JavascriptInterface fun showRewardedAd() = ads.show()
+        /** Load an ad while the HD card is on screen, so the tap is instant (only after consent was given once). */
+        @JavascriptInterface fun preloadRewardedAd() = ads.preload()
+        @JavascriptInterface fun adPrivacyOptionsRequired(): Boolean = ads.privacyOptionsRequired()
+        @JavascriptInterface fun showAdPrivacyOptions() = ads.showPrivacyOptions()
     }
 }

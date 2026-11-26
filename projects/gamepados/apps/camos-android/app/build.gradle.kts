@@ -2,6 +2,18 @@ plugins {
     id("com.android.application")
 }
 
+// ── AdMob ("Watch an ad → 45 min HD", CamAds.kt) ──────────────────────────────
+// Google's published TEST ids until CamOS has its own AdMob app and rewarded unit (the owner creates them in AdMob,
+// then pastes them below). Debug builds always use the test ids; so does a release while the live ones are blank.
+// Never watch or tap LIVE ads on our own phones (invalid traffic: AdMob limited GamepadOS for it on 2026-10-23);
+// `-PtestAds=true` keeps the test ids in a release build meant for our own phone. Not secrets: they ship in the APK.
+val admobTestAppId = "ca-app-pub-3940256099942544~3347511713"
+val admobTestRewardedId = "ca-app-pub-3940256099942544/5224354917"
+val admobLiveAppId = ""        // ca-app-pub-5878015482565093~NNNNNNNNNN  (AdMob > Apps > CamOS > App settings)
+val admobLiveRewardedId = ""   // ca-app-pub-5878015482565093/NNNNNNNNNN  (AdMob > CamOS > Ad units > Rewarded)
+val admobLive = admobLiveAppId.isNotBlank() && admobLiveRewardedId.isNotBlank() &&
+    (findProperty("testAds") ?: "false").toString() != "true"
+
 android {
     namespace = "com.gamepad.camos"
     compileSdk = 36
@@ -13,11 +25,14 @@ android {
         // 26 = Android 8. Adaptive icons and every Camera2/MediaCodec feature we use exist from here.
         minSdk = 26
         targetSdk = 36
-        versionCode = 30
-        versionName = "0.6.8-test"
+        versionCode = 31
+        versionName = "0.6.9-test"
         // Real phones only (64- and 32-bit ARM). The x86 copies of the native libraries exist only for PC
         // emulators and doubled the app's size once TensorFlow Lite was added.
         ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
+
+        buildConfigField("String", "ADMOB_REWARDED_ID", "\"$admobTestRewardedId\"")
+        manifestPlaceholders["admobAppId"] = admobTestAppId
     }
     androidResources {
         noCompress += "tflite"   // the person model is memory-mapped straight from the APK
@@ -26,6 +41,12 @@ android {
     buildTypes {
         getByName("release") {
             isMinifyEnabled = false
+            if (admobLive) {
+                buildConfigField("String", "ADMOB_REWARDED_ID", "\"$admobLiveRewardedId\"")
+                manifestPlaceholders["admobAppId"] = admobLiveAppId
+            } else {
+                logger.warn("CamOS release uses Google's TEST ads: no live AdMob ids yet (build.gradle.kts, top).")
+            }
         }
     }
     compileOptions {
@@ -59,4 +80,12 @@ dependencies {
     // TensorFlow Lite refuses even with its GPU runner (tried on the owner's phone, 2026-11-23).
     implementation("com.google.mediapipe:tasks-vision:0.10.14")
     implementation("com.google.android.gms:play-services-mlkit-face-detection:17.1.0")
+    // Get Premium through Google Play (CamBilling.kt), the same library and version as GamepadOS's Play build.
+    // Adds the BILLING permission by itself.
+    implementation("com.android.billingclient:billing-ktx:9.1.0")
+    // "Watch an ad → 45 min HD" (CamAds.kt) + Google's consent form, the same versions as GamepadOS.
+    implementation("com.google.android.gms:play-services-ads:25.5.0")
+    implementation("com.google.android.ump:user-messaging-platform:4.0.0")
+    // The ads library asks for an old WorkManager whose rules broke GamepadOS's first shrunk build; use the current one.
+    implementation("androidx.work:work-runtime:2.12.0")
 }

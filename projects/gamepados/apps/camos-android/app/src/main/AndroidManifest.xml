@@ -24,6 +24,12 @@
         android:theme="@style/Theme.CamOS"
         android:usesCleartextTraffic="false">
 
+        <!-- AdMob app id ("Watch an ad → 45 min HD"). The ads library refuses to start without it. Google's test id
+             until CamOS has its own AdMob app (build.gradle.kts). -->
+        <meta-data
+            android:name="com.google.android.gms.ads.APPLICATION_ID"
+            android:value="${admobAppId}" />
+
         <!-- Turns with the phone like any app (owner, 2026-11-21). While streaming, MainActivity holds the screen still
              in the picture shape chosen in Settings; the picture engine (GlPipeline) turns the camera upright. -->
         <activity

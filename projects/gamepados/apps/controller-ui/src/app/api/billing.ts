@@ -222,11 +222,12 @@ export function verifyRazorpay(token: string, planCode: PlanCode, result: Razorp
 
 /** A Google Play purchase token, for the SERVER to check with Google. The plan is decided from what
  *  Google says was bought, never from anything sent here. `pending`: the payment has not cleared. */
-export function verifyGoogle(token: string, purchaseToken: string) {
+/** `app`: which of our Play apps made the purchase (CamOS sends "camos"; GamepadOS sends nothing, the default). */
+export function verifyGoogle(token: string, purchaseToken: string, app?: "camos") {
   return request<{
     success: true; pending?: boolean; message?: string; alreadyCredited?: boolean; acknowledged?: boolean;
     plan?: PlanCode; endsAt?: string | null;
-  }>("/api/billing/google/purchase", { body: { purchaseToken }, token });
+  }>("/api/billing/google/purchase", { body: app ? { purchaseToken, app } : { purchaseToken }, token });
 }
 
 /** A Google Play purchase that did not finish, with what Google told the app (code, sub-reason, Play country, time

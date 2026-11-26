@@ -25,7 +25,10 @@ type Mode = "signin" | "create" | "verify" | "forgot" | "reset";
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 const MIN_PASSWORD = 8;
 
-export function AccountAuth({ standalone = false }: { standalone?: boolean } = {}) {
+/** `copy`: another app (CamOS) shows the same form with its own heading words; GamepadOS passes nothing. */
+export type AuthCopy = { eyebrow?: string; signin?: string; create?: string };
+
+export function AccountAuth({ standalone = false, copy = {} }: { standalone?: boolean; copy?: AuthCopy } = {}) {
   const reduced = useReducedMotion();
   const formId = React.useId();
   const [mode, setMode] = useState<Mode>("signin");
@@ -144,14 +147,14 @@ export function AccountAuth({ standalone = false }: { standalone?: boolean } = {
     : "Choose a new password";
 
   const blurb =
-    mode === "signin" ? "Sign in to keep your controller layouts safe."
-    : mode === "create" ? "Save your layouts and get them back on any phone."
+    mode === "signin" ? copy.signin ?? "Sign in to keep your controller layouts safe."
+    : mode === "create" ? copy.create ?? "Save your layouts and get them back on any phone."
     : mode === "verify" ? `Enter the 6-digit code sent to ${email.trim() || "your email"}.`
     : mode === "forgot" ? "We'll email you a code to set a new password."
     : "Enter the code from your email and a new password.";
 
   return <motion.section key={mode} className="calm-auth" data-testid={`auth-${mode}-form`} initial={{ opacity: 0, x: reduced ? 0 : 8 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: reduced ? 0 : .18 }}>
-    <div className="calm-auth-heading">{!standalone && <span className="console-eyebrow">YOUR PLAYER PROFILE</span>}<h2 data-testid="auth-heading">{title}</h2><p>{blurb}</p></div>
+    <div className="calm-auth-heading">{!standalone && <span className="console-eyebrow">{copy.eyebrow ?? "YOUR PLAYER PROFILE"}</span>}<h2 data-testid="auth-heading">{title}</h2><p>{blurb}</p></div>
     {mode !== "signin" && mode !== "create" && <button data-testid="auth-back-signin-button" className="calm-text-button" onClick={() => go("signin")}><ArrowLeft size={17} aria-hidden="true" />Back to sign in</button>}
     <form onSubmit={submit} className="calm-auth-form">
       {error && <Banner tone="error">{error}</Banner>}

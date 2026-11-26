@@ -1,0 +1,2 @@
+# build-installer.ps1 copies the freshly built, signed GamepadServer.exe and camos_vcam.dll here on every build.
+staging/

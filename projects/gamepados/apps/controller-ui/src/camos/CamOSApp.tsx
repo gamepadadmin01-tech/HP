@@ -3,13 +3,17 @@ import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import {
   ArrowLeft, ArrowRight, Camera, Check, ChevronRight, Crown, Download, Flashlight, FlashlightOff, Info, Lock, Monitor, Moon,
   MonitorSmartphone, Palette, Play, QrCode, RefreshCw, ScanLine, Settings as SettingsIcon, SlidersHorizontal, Smartphone, Sparkles, RectangleHorizontal, RectangleVertical,
-  Square, Sun, SwitchCamera, Timer, Usb, Video, Wifi, X,
+  Square, Sun, SwitchCamera, Timer, Usb, UserRound, Video, Wifi, X,
 } from "lucide-react";
 import { ChoiceBar, Collapse, SwapIn } from "../app/components/Motion";
 import { ShellMotion } from "../app/components/ShellMotion";
 import { ShellScreenTransition } from "../app/components/ShellScreenTransition";
 import { CalmSwitch } from "../app/components/CalmSettings";
 import { FADE, SPRING, backdropIn, cardIn, toastIn } from "../app/motion";
+import { AccountAuth } from "../app/components/AccountAuth";
+import { useAccount, type Account } from "./useAccount";
+import { verifyGoogle } from "../app/api/billing";
+import { getSession } from "../app/store/account";
 
 // ─── CamOS ──────────────────────────────────────────────────────────────────────────────────────────────────────
 // Phone as a webcam for Windows, built from GamepadOS's OWN pieces (shell, tabs, settings rows, plan cards, Connect
@@ -22,6 +26,15 @@ import { FADE, SPRING, backdropIn, cardIn, toastIn } from "../app/motion";
 
 type Bridge = {
   startScan(): void; stopScan(): void;
+  /** Play builds only (CamBilling.kt): opens Google Play's sheet for camos_lifetime; the answer comes back through
+   *  window.camosOnPurchase. `userId` stamps the purchase with this account (as GamepadOS does). */
+  startPlayPurchase?(userId: string): void;
+  /** Ask Google Play for anything already bought; each arrives at window.camosOnPurchase with `restored: true`. */
+  restorePurchases?(): void;
+  /** "Watch an ad → 45 min HD" (AdMob). The answer arrives at window.camosOnAd. */
+  showRewardedAd?(): void; preloadRewardedAd?(): void;
+  adPrivacyOptionsRequired?(): boolean; showAdPrivacyOptions?(): void;
+  acknowledgeIfServerCredited?(purchaseToken: string): void;
   start(ip: string, key: string, settings: string): void;
   update(settings: string): void;
   stop(): void; dim(on: boolean): void;
@@ -119,13 +132,16 @@ export default function CamOSApp() {
   const [settings, setSettingsRaw] = useSaved<Settings>("camos.settings", DEFAULTS);
   const s: Settings = { ...DEFAULTS, ...settings };
   const set = (patch: Partial<Settings>) => setSettingsRaw((old) => ({ ...DEFAULTS, ...old, ...patch }));
-  const [premium, setPremium] = useSaved<boolean>("camos.premiumTest", false);
+  const [premiumTest, setPremiumTest] = useSaved<boolean>("camos.premiumTest", false);
   const [hdUntil, setHdUntil] = useSaved<number>("camos.hdUntil", 0);
   const [now, setNow] = useState(Date.now());
   const [pcStatus, setPcStatus] = useState<PcStatus>({ status: "unknown", message: "" });
   const [live, setLive] = useState<LiveState>({ state: "connecting", message: "", fps: 0, kbps: 0 });
   const [toast, setToast] = useState("");
   const [adPlaying, setAdPlaying] = useState(false);
+  /** A real ad was asked for and hasn't opened yet (loading, or Google's consent form). */
+  const [adLoading, setAdLoading] = useState(false);
+  const [buying, setBuying] = useState(false);
   const toastTimer = useRef<number>(0);
   const restartAfterStop = useRef(false);
   /** When this phone's own stream last ended, and whether the PC check after it was already retried. */
@@ -145,6 +161,19 @@ export default function CamOSApp() {
   const showToast = (m: string) => { setToast(m); clearTimeout(toastTimer.current); toastTimer.current = window.setTimeout(() => setToast(""), 4600); };
 
   const testBuild = (() => { try { return bridge()?.isTestBuild?.() ?? true; } catch { return false; } })();
+  // Premium = the signed-in account owns Lifetime (bought in CamOS, GamepadOS or on the website; the server decides).
+  // Test builds also have a "pretend Premium" switch so every Premium screen can be tried.
+  const account = useAccount();
+  const premium = (testBuild && premiumTest) || account.lifetime;
+  // A purchase can finish while CamOS is closed, or the server's answer can get lost: once per sign-in, when the
+  // server says "no Lifetime", ask Google Play what this phone already bought (each answer goes to camosOnPurchase).
+  const restoredFor = useRef<string | null>(null);
+  useEffect(() => {
+    const token = account.session?.token;
+    if (!token || account.lifetime || account.checking || restoredFor.current === token) return;
+    const t = setTimeout(() => { restoredFor.current = token; try { bridge()?.restorePurchases?.(); } catch { /* not the Play build */ } }, 1500);
+    return () => clearTimeout(t);
+  }, [account.session?.token, account.lifetime, account.checking]);
   const lenses: Lens[] = useMemo(() => {
     try { const b = bridge(); const l = b ? JSON.parse(b.cameras()) as Lens[] : PREVIEW_LENSES; return l.length ? l : PREVIEW_LENSES; } catch { return PREVIEW_LENSES; }
   }, []);
@@ -289,10 +318,23 @@ export default function CamOSApp() {
   }
 
   function watchAd() {
-    if (premium) return;
+    if (premium || adLoading) return;
+    const b = bridge();
+    if (b?.showRewardedAd) { setAdLoading(true); b.showRewardedAd(); return; }
+    // The browser preview has no ads: a pretend one, so the screens can be tried.
     if (!testBuild) { showToast("Ads arrive with the Play Store release."); return; }
     setAdPlaying(true);
   }
+
+  function unlockHd() {
+    setHdUntil(Date.now() + HD_MINUTES * 60_000); setNow(Date.now()); set({ quality: 1080 });
+    showToast(`HD unlocked for ${HD_MINUTES} minutes. 1080p is on.`);
+  }
+
+  // Load an ad while the HD offer is on screen, so the tap is instant. The phone only does this once the player has
+  // answered Google's consent form on an earlier tap, so opening the app never pops a form.
+  const offerShown = route === "dashboard" && !premium && !adHd;
+  useEffect(() => { if (offerShown) { try { bridge()?.preloadRewardedAd?.(); } catch { /* no ads here */ } } }, [offerShown]);
 
   useEffect(() => {
     (window as any).camosOnQR = (text: string) => {
@@ -390,6 +432,35 @@ export default function CamOSApp() {
       }
     };
     (window as any).camosOnRemote = onRemote;
+    // Google Play's answer to Get Premium. The server checks the purchase with Google and unlocks the account;
+    // the phone never unlocks anything by itself.
+    (window as any).camosOnPurchase = async (json: string) => {
+      // `restored`: Google Play handing back something bought earlier (CamOS asks on opening). Stays quiet unless
+      // it actually turns Premium on: a purchase made with another account must not nag on every launch.
+      const r = JSON.parse(json) as { state: "purchased" | "pending" | "cancelled" | "error"; purchaseToken?: string; message?: string; restored?: boolean };
+      if (!r.restored) setBuying(false);
+      if (r.state === "cancelled") return;
+      if (r.state === "error") { if (!r.restored) showToast(r.message || "Google Play couldn't finish the purchase."); return; }
+      const session = getSession();   // the store, not this render's copy: the answer can arrive after a sign-in
+      if (!session || !r.purchaseToken) return;
+      if (r.state === "pending") { if (!r.restored) showToast("Your payment is still being processed. Premium turns on when it completes."); return; }
+      try {
+        const v = await verifyGoogle(session.token, r.purchaseToken, "camos");
+        if (v.pending) { if (!r.restored) showToast(v.message || "Your payment is still being processed."); return; }
+        bridge()?.acknowledgeIfServerCredited?.(r.purchaseToken);   // safety net; the server acknowledges first
+        await account.refresh();
+        showToast(r.restored ? "Premium is on." : "Premium is on. Thank you!");
+      } catch (e) {
+        if (!r.restored) showToast((e as Error).message || "Couldn't confirm the purchase. CamOS will try again next time it opens.");
+      }
+    };
+    (window as any).camosOnAd = (json: string) => {
+      const r = JSON.parse(json) as { status: "rewarded" | "closed" | "failed"; message?: string };
+      setAdLoading(false);
+      if (r.status === "rewarded") unlockHd();
+      else if (r.status === "closed") showToast("Watch the whole ad to unlock HD.");
+      else showToast(r.message || "No ad is available right now. Try again in a minute.");
+    };
     (window as any).camosOnPermission = (ok: boolean) => { if (!ok) showToast("CamOS needs the camera permission to work as a webcam."); };
     // Android back button: the native side asks us first (true = handled here).
     (window as any).camosBack = () => {
@@ -405,12 +476,26 @@ export default function CamOSApp() {
 
   const goPremium = () => { setTab("system"); setSettingsPage("premium"); };
 
+  /** Get Premium: sign in first (the purchase belongs to the account, so it works in both apps), then Google Play. */
+  function buyLifetime() {
+    if (!account.session) {
+      setTab("system"); setSettingsPage("account");
+      showToast("Sign in first, so Premium works in CamOS and GamepadOS.");
+      return;
+    }
+    const b = bridge();
+    if (!b?.startPlayPurchase) { showToast("Buying arrives with the Play Store release."); return; }
+    setBuying(true);
+    b.startPlayPurchase(account.session.user.id);
+  }
+
   return <>
   <AnimatePresence mode="wait" initial={false}>
     {route === "dashboard" && <ShellScreenTransition key="dashboard" direction={1} className="absolute inset-0">
       <Dashboard tab={tab} setTab={setTab} page={settingsPage} setPage={setSettingsPage} pc={pc} pcStatus={pcStatus} s={s} set={set} lenses={lenses} lens={lens}
-        premium={premium} setPremium={setPremium} testBuild={testBuild} adHd={adHd} hdUntil={hdUntil} hdAllowed={hdAllowed}
-        onStart={() => start()} onConnect={() => setRoute("connect")} onCheck={() => { refinding.current = null; if (usbOn) findUsb(); else checkPc(); }} onWatchAd={watchAd} goPremium={goPremium}
+        premium={premium} setPremium={setPremiumTest} testBuild={testBuild} adHd={adHd} hdUntil={hdUntil} hdAllowed={hdAllowed} account={account}
+        onBuy={buyLifetime}
+        onStart={() => start()} onConnect={() => setRoute("connect")} onCheck={() => { refinding.current = null; if (usbOn) findUsb(); else checkPc(); }} onWatchAd={watchAd} adLoading={adLoading} goPremium={goPremium}
         showToast={showToast}
         onForget={() => { setPc(null); setPcStatus({ status: "unknown", message: "" }); showToast("This phone forgot the PC. Scan its QR code to pair again."); }} />
     </ShellScreenTransition>}
@@ -426,7 +511,7 @@ export default function CamOSApp() {
     </ShellScreenTransition>}
   </AnimatePresence>
   <AnimatePresence>
-    {adPlaying && <TestAd key="ad" onDone={() => { setAdPlaying(false); const until = Date.now() + HD_MINUTES * 60_000; setHdUntil(until); setNow(Date.now()); set({ quality: 1080 }); showToast(`HD unlocked for ${HD_MINUTES} minutes. 1080p is on.`); }}
+    {adPlaying && <TestAd key="ad" onDone={() => { setAdPlaying(false); unlockHd(); }}
       onCancel={() => setAdPlaying(false)} />}
   </AnimatePresence>
   <Toast message={toast} onClose={() => setToast("")} />
@@ -469,8 +554,9 @@ function TestAd({ onDone, onCancel }: { onDone: () => void; onCancel: () => void
 type DashProps = {
   tab: Tab; setTab: (t: Tab) => void; page: SettingsPage; setPage: (p: SettingsPage) => void; pc: PC | null; pcStatus: PcStatus; s: Settings; set: (p: Partial<Settings>) => void;
   lenses: Lens[]; lens: Lens; premium: boolean; setPremium: (v: boolean) => void; testBuild: boolean;
+  account: Account; onBuy: () => void;
   adHd: boolean; hdUntil: number; hdAllowed: boolean;
-  onStart: () => void; onConnect: () => void; onCheck: () => void; onWatchAd: () => void; goPremium: () => void;
+  onStart: () => void; onConnect: () => void; onCheck: () => void; onWatchAd: () => void; adLoading: boolean; goPremium: () => void;
   onForget: () => void; showToast: (m: string) => void;
 };
 
@@ -548,8 +634,8 @@ function TabCamera(p: DashProps & { openSettings: () => void }) {
       {p.pc
         ? <button className="console-connect-button" data-testid="camos-start" onClick={p.onStart}><Video size={20} aria-hidden="true" /><span>Start camera</span></button>
         : <button className="console-connect-button" data-testid="camos-connect" onClick={p.onConnect}><Monitor size={20} aria-hidden="true" /><span>Connect to PC</span></button>}
-      <p className="camos-status" data-tone={line.tone}><span className="camos-status-dot" aria-hidden="true" />
-        <SwapIn swapKey={line.text}><span>{line.text}</span></SwapIn></p>
+      <div className="camos-status" data-tone={line.tone} role="status"><span className="camos-status-dot" aria-hidden="true" />
+        <SwapIn swapKey={line.text}><span>{line.text}</span></SwapIn></div>
       {p.pc && <p className="camos-status-actions">
         {p.pcStatus.status !== "checking" && <button className="camos-link" onClick={p.onCheck}>Check again</button>}
         <button className="camos-link" onClick={p.onConnect}>{p.pcStatus.status === "badkey" ? "Scan again" : "Change PC"}</button>
@@ -584,7 +670,7 @@ function TabCamera(p: DashProps & { openSettings: () => void }) {
               <p className="text-sm font-bold calm-ink">1080p HD for {HD_MINUTES} min</p>
               <p className="console-plan-price text-xl font-bold shrink-0">Free</p>
             </div>
-            <button className="console-plan-buy mt-3 w-full py-3 rounded-xl text-sm font-semibold transition-colors" data-testid="camos-watch-ad" onClick={p.onWatchAd}><Play size={14} aria-hidden="true" /> Watch an ad</button>
+            <button className="console-plan-buy mt-3 w-full py-3 rounded-xl text-sm font-semibold transition-colors" data-testid="camos-watch-ad" onClick={p.onWatchAd} disabled={p.adLoading}><Play size={14} aria-hidden="true" /> {p.adLoading ? "Loading the ad…" : "Watch an ad"}</button>
             <button className="camos-link camos-premium-link" onClick={p.goPremium}><Crown size={14} aria-hidden="true" />Or go Premium</button>
           </div>}
     </SwapIn>
@@ -618,7 +704,7 @@ function CameraReport() {
 
 const premiumBadge = <span className="camos-badge"><Crown size={11} aria-hidden="true" />Premium</span>;
 
-export type SettingsPage = "menu" | "premium" | "video" | "camera" | "light" | "filters" | "screen" | "pc" | "about";
+export type SettingsPage = "menu" | "account" | "premium" | "video" | "camera" | "light" | "filters" | "screen" | "pc" | "about";
 
 /** Settings = a short list of categories (GamepadOS's chevron rows); each opens its own page (owner, 2026-11-21:
  *  "divide the settings based on the category and type, so that users can handle easily"). */
@@ -627,6 +713,8 @@ function TabSettings(p: DashProps) {
   useEffect(() => { firstPaint.current = false; }, []);
   const { s, set, lens } = p;
   const version = (() => { try { return bridge()?.version() ?? "browser preview"; } catch { return ""; } })();
+  // EEA/UK: Google requires a way back to the ad consent form. Elsewhere the row isn't shown.
+  const adPrivacy = (() => { try { return bridge()?.adPrivacyOptionsRequired?.() ?? false; } catch { return false; } })();
   const fpsChoices = [15, 24, 30, 60] as const;
   const can60 = lens.fps.includes(60);
   const lock60 = false;   // 60 fps is for every plan wherever the camera can film it (owner, 2026-11-23)
@@ -643,6 +731,17 @@ function TabSettings(p: DashProps) {
   const q = s.quality === 1080 && !p.hdAllowed ? 720 : s.quality;
 
   const pages: { id: Exclude<SettingsPage, "menu">; title: string; Icon: typeof Video; tone?: string; summary: string; badge?: boolean; body: () => React.ReactNode }[] = [
+    { id: "account", title: "Account", Icon: UserRound, summary: p.account.session ? `${p.account.session.user.email}${p.account.lifetime ? " · Lifetime" : ""}` : "Sign in to use your Premium",
+      body: () => p.account.session
+        ? <div className="space-y-2">{panel(<>
+            <div className="calm-setting-detail camos-first"><h3>{p.account.session.user.displayName || "Signed in"}</h3>
+              <p>{p.account.session.user.email}</p>
+              <p>{p.account.lifetime ? "Lifetime is active on this account: Premium in CamOS and GamepadOS." : "No Lifetime on this account yet."}</p>
+            </div>
+            <button className="calm-text-button" onClick={() => p.account.refresh()} disabled={p.account.checking}>{p.account.checking ? "Checking…" : "Check again"}</button>
+            <button className="calm-text-button" onClick={() => p.account.signOut()}>Sign out</button>
+          </>)}</div>
+        : <div className="space-y-2"><AccountAuth copy={{ eyebrow: "YOUR GAMEPADOS ACCOUNT", signin: "The same account as GamepadOS. One Lifetime purchase covers both apps.", create: "One account for CamOS and GamepadOS. Premium bought in either app works in both." }} /></div> },
     { id: "premium", title: "Premium", Icon: Crown, summary: p.premium ? "Active · HD, no watermark, filters" : "₹19 Lifetime · HD, no watermark, filters",
       body: () => <div className="space-y-2">
       <div className="space-y-2">
@@ -653,9 +752,9 @@ function TabSettings(p: DashProps) {
                 <li key={b} className="text-xs calm-muted"><Check size={12} aria-hidden="true" />{b}</li>)}</ul></div>
             <p className="console-plan-price text-xl font-bold shrink-0">₹19</p>
           </div>
-          <button className="console-plan-buy mt-3 w-full py-3 rounded-xl text-sm font-semibold transition-colors disabled:opacity-60" disabled>{p.premium ? "Active" : "Get Premium"}</button>
+          <button className="console-plan-buy mt-3 w-full py-3 rounded-xl text-sm font-semibold transition-colors disabled:opacity-60" disabled={p.premium} onClick={p.onBuy}>{p.premium ? "Active" : p.account.session ? "Get Premium" : "Sign in to get Premium"}</button>
         </div>
-        {!p.premium && <p className="calm-inline-note">Buying arrives with the Play Store release. One purchase covers both CamOS and GamepadOS.</p>}
+        {!p.premium && <p className="calm-inline-note">One purchase covers both CamOS and GamepadOS. Already bought it? Sign in with that account.</p>}
         {p.testBuild && <div className="calm-settings-panel"><CalmSwitch label="Test build: pretend Premium" detail="Only in test builds, so every Premium screen and filter can be tried." on={p.premium} onChange={p.setPremium} /></div>}
       </div>
       </div> },
@@ -762,6 +861,9 @@ function TabSettings(p: DashProps) {
     { id: "about", title: "About", Icon: Info, summary: `Version ${version}`,
       body: () => panel(<>
       <div className="calm-setting-row"><div className="calm-grow"><span className="calm-setting-label">CamOS</span><p>Version {version}. Made by the GamepadOS team.</p></div></div>
+      {adPrivacy && <div className="calm-setting-row"><div className="calm-grow"><span className="calm-setting-label">Ad privacy choices</span>
+        <p>Change what you allowed on Google's ad form.</p></div>
+        <button className="calm-text-button" onClick={() => bridge()?.showAdPrivacyOptions?.()}>Open</button></div>}
       <CameraReport />
       </>) },
   ];
