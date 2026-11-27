@@ -420,5 +420,7 @@
  "Buy for {price}": "{price}에 구매",
  "Your play time is used up. Watch an ad for {n} minutes more, or get Lifetime.": "플레이 시간을 다 썼습니다. 광고를 보고 {n}분 더 하거나 평생 이용권을 받으세요.",
  "Optional. Each ad adds {n} minutes that never expire.": "선택 사항입니다. 광고 한 번마다 만료되지 않는 {n}분이 추가됩니다.",
- "New password (8+ characters)": "새 비밀번호(8자 이상)"
+ "New password (8+ characters)": "새 비밀번호(8자 이상)",
+ "Vibration strength": "진동 세기",
+ "Rumble strength": "게임 진동 세기"
 }

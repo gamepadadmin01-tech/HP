@@ -317,11 +317,32 @@ class MainActivity : AppCompatActivity(), android.hardware.SensorEventListener {
         if (android.os.Build.VERSION.SDK_INT >= 26) v.vibrate(effect)
     }
 
+    // App vibration strength (2.1.2, owner 2026-11-27): a 10-point slider; point 7 (the default) = factor 1.2 = 20%
+    // stronger than 2.1.1. Kept here (and saved) because the native touch engine buzzes without asking the page.
+    @Volatile internal var hapticFactor: Float = 1.2f
+    internal fun setHapticLevel(level: Int) {
+        val l = level.coerceIn(1, 10)
+        hapticFactor = 0.3f + (l - 1) * 0.15f
+        getSharedPreferences("gamepad_prefs", Context.MODE_PRIVATE).edit().putInt("hapticLevel", l).apply()
+    }
+    internal fun loadHapticLevel() {
+        val l = getSharedPreferences("gamepad_prefs", Context.MODE_PRIVATE).getInt("hapticLevel", 7).coerceIn(1, 10)
+        hapticFactor = 0.3f + (l - 1) * 0.15f
+    }
+
     internal fun playHapticEvent(event: String) {
         runOnUiThread {
             try {
                 val v = vib()
                 if (!v.hasVibrator()) return@runOnUiThread
+                // Strength from the slider: amplitude 204 × factor (245 at the default point); past the motor's
+                // maximum (255) the extra becomes a slightly longer tick, up to 1.4×. On/off motors: longer pulses.
+                val f = hapticFactor
+                val want = 204f * f
+                val amp = want.coerceAtMost(255f).toInt().coerceAtLeast(1)
+                val longer = if (want > 255f) (want / 255f).coerceAtMost(1.4f) else 1f
+                fun ms(base: Int) = (base * longer).toLong().coerceAtLeast(1)
+                fun pulse(base: Int) = (base * f).toLong().coerceIn(3, 26)
                 // DEVICE MAXIMUM MINUS 20% (owner, 2026-11-11; was "80%" of the softer preset click since 2026-11-08).
                 // Still a short button TICK, never a buzz (owner's haptic rule). Per kind of motor:
                 //   1. motors with amplitude control      -> a one-shot at 204 of 255 (80% of the motor's maximum),
@@ -334,9 +355,9 @@ class MainActivity : AppCompatActivity(), android.hardware.SensorEventListener {
                 val trigger = event == "triggerPull"
                 if (android.os.Build.VERSION.SDK_INT >= 26 && v.hasAmplitudeControl()) {
                     val effect = when {
-                        release -> android.os.VibrationEffect.createOneShot(9, 204)
-                        trigger -> android.os.VibrationEffect.createOneShot(16, 204)
-                        else    -> android.os.VibrationEffect.createOneShot(14, 204)
+                        release -> android.os.VibrationEffect.createOneShot(ms(9), amp)
+                        trigger -> android.os.VibrationEffect.createOneShot(ms(16), amp)
+                        else    -> android.os.VibrationEffect.createOneShot(ms(14), amp)
                     }
                     vibrateTouch(v, effect)
                 } else if (android.os.Build.VERSION.SDK_INT >= 30 && v.areAllPrimitivesSupported(
@@ -344,17 +365,17 @@ class MainActivity : AppCompatActivity(), android.hardware.SensorEventListener {
                         android.os.VibrationEffect.Composition.PRIMITIVE_TICK)) {
                     val prim = if (release) android.os.VibrationEffect.Composition.PRIMITIVE_TICK
                                else android.os.VibrationEffect.Composition.PRIMITIVE_CLICK
-                    vibrateTouch(v, android.os.VibrationEffect.startComposition().addPrimitive(prim, 0.8f).compose())
+                    vibrateTouch(v, android.os.VibrationEffect.startComposition().addPrimitive(prim, (0.8f * f).coerceIn(0.05f, 1f)).compose())
                 } else if (android.os.Build.VERSION.SDK_INT >= 26) {
                     val effect = when {
-                        release -> android.os.VibrationEffect.createOneShot(8, android.os.VibrationEffect.DEFAULT_AMPLITUDE)
-                        trigger -> android.os.VibrationEffect.createOneShot(13, android.os.VibrationEffect.DEFAULT_AMPLITUDE)
-                        else    -> android.os.VibrationEffect.createWaveform(longArrayOf(0, 13, 30, 13), -1)   // full strength was 16 ms pulses
+                        release -> android.os.VibrationEffect.createOneShot(pulse(8), android.os.VibrationEffect.DEFAULT_AMPLITUDE)
+                        trigger -> android.os.VibrationEffect.createOneShot(pulse(13), android.os.VibrationEffect.DEFAULT_AMPLITUDE)
+                        else    -> android.os.VibrationEffect.createWaveform(longArrayOf(0, pulse(13), 30, pulse(13)), -1)   // full strength was 16 ms pulses
                     }
                     vibrateTouch(v, effect)
                 } else {
                     // API 24-25: plain on/off vibration at about 80% (full was 22 ms / 255 and 14 ms / 150).
-                    doVibrate(if (release) 11 else 18, if (release) 120 else 204)
+                    doVibrate(pulse(if (release) 11 else 18).toInt(), ((if (release) 120 else 204) * f).toInt().coerceIn(1, 255))
                 }
             } catch (e: Exception) { e.printStackTrace() }
         }
@@ -523,6 +544,7 @@ class MainActivity : AppCompatActivity(), android.hardware.SensorEventListener {
         mainHandler.postDelayed({ settleLaunch() }, 6000)          // whatever happens to the splash
 
         super.onCreate(savedInstanceState)
+        loadHapticLevel()   // App vibration strength saved by the Settings slider (2.1.2)
 
         // Cutout handling. Android 15 (SDK 35) DEPRECATED the DEFAULT/SHORT_EDGES/
         // NEVER modes — apps targeting 35 get ALWAYS behaviour regardless, and Play
@@ -1319,6 +1341,11 @@ class MainActivity : AppCompatActivity(), android.hardware.SensorEventListener {
                 @android.webkit.JavascriptInterface
                 fun triggerHaptic(durationMs: Int) {
                     runOnUiThread { doVibrate(durationMs, -1) }   // -1 => DEFAULT_AMPLITUDE
+                }
+
+                @android.webkit.JavascriptInterface
+                fun setHapticStrength(level: Int) {
+                    setHapticLevel(level)   // 1..10 from the Settings slider (2.1.2)
                 }
 
                 @android.webkit.JavascriptInterface

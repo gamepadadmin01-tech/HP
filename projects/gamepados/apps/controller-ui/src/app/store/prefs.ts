@@ -101,6 +101,40 @@ export function saveRumbleOn(on: boolean): void {
   writeBool(KEYS.rumbleOn, on);
 }
 
+// ─── Vibration strength (2.1.2, owner 2026-11-27) ─────────────────────────────
+// Two 10-point sliders under "App vibration" and "Game rumble". Point 7 is the default and is 20% stronger than
+// 2.1.1; points 8-10 go stronger still (weak motors), 1-6 lighter. Each point is a strength factor:
+//   1 → 0.30 · 2 → 0.45 · … · 7 → 1.20 · … · 10 → 1.65   (0.15 per point)
+export const VIBE_LEVEL_DEFAULT = 7;
+export const clampVibeLevel = (n: number) => Math.min(10, Math.max(1, Math.round(Number.isFinite(n) ? n : VIBE_LEVEL_DEFAULT)));
+export const vibeFactor = (level: number) => 0.3 + (clampVibeLevel(level) - 1) * 0.15;
+
+// Cached: the rumble factor is read for every rumble packet during play, so it must not touch storage each time.
+let hapticLevelCache: number | null = null;
+let rumbleLevelCache: number | null = null;
+export function loadHapticLevel(): number {
+  if (hapticLevelCache === null) hapticLevelCache = clampVibeLevel(readNumber(KEYS.hapticLevel, VIBE_LEVEL_DEFAULT));
+  return hapticLevelCache;
+}
+export function saveHapticLevel(level: number): void {
+  hapticLevelCache = clampVibeLevel(level);
+  writeNumber(KEYS.hapticLevel, hapticLevelCache);
+}
+export function loadRumbleLevel(): number {
+  if (rumbleLevelCache === null) rumbleLevelCache = clampVibeLevel(readNumber(KEYS.rumbleLevel, VIBE_LEVEL_DEFAULT));
+  return rumbleLevelCache;
+}
+export function saveRumbleLevel(level: number): void {
+  rumbleLevelCache = clampVibeLevel(level);
+  writeNumber(KEYS.rumbleLevel, rumbleLevelCache);
+}
+/** The game's rumble (0..255) at the player's chosen strength: [strength to play 1..255, how much longer to play].
+ *  Above 255 the motor cannot go harder, so the extra strength becomes a longer pulse (up to 1.4×). */
+export function scaleRumble(strength: number): [number, number] {
+  const want = strength * vibeFactor(loadRumbleLevel());
+  return [Math.max(1, Math.min(255, Math.round(want))), want > 255 ? Math.min(1.4, want / 255) : 1];
+}
+
 // ─── Transport ────────────────────────────────────────────────────────────────
 
 export type WiredPref = "auto" | "tether" | "usbdebug";

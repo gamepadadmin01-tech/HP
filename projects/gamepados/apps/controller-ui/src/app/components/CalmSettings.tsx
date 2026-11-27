@@ -1,6 +1,7 @@
 import React, { useEffect, useId, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { WHEEL_RANGES } from "../store/prefs";
+import { WHEEL_RANGES, vibeFactor } from "../store/prefs";
+import { previewHaptic, previewRumble, pushHapticLevel } from "../platform/native";
 import { Gauge, Vibrate, Cpu, Crosshair, Globe, ChevronRight, Check } from "lucide-react";
 import { stickFeel, setRightGain, RIGHT_GAIN_MIN, RIGHT_GAIN_MAX } from "../stickFeel";
 import { Collapse } from "./Motion";
@@ -23,6 +24,8 @@ export interface CalmSettingsProps {
   gyroThrottle: boolean; setGyroThrottle: (v: boolean) => void;
   gyroIdleDetect: boolean; setGyroIdleDetect: (v: boolean) => void;
   rumbleOn: boolean; setRumbleOn: (v: boolean) => void;
+  hapticLevel: number; setHapticLevel: (v: number) => void;
+  rumbleLevel: number; setRumbleLevel: (v: number) => void;
 }
 
 const testId = (en: string) => en.toLowerCase().replace(/\s+/g, '-');
@@ -42,6 +45,30 @@ function Range({label, detail, min, max, value, onChange, step = 1, unit = "°"}
   return <div className="calm-range"><div><label htmlFor={id}>{t(label)}</label><output htmlFor={id}>{value}{unit}</output></div>
     <input data-testid={`${testId(label)}-slider`} id={id} type="range" min={min} max={max} step={step} value={value} aria-describedby={detail ? `${id}-detail` : undefined} aria-valuetext={unit === "°" ? t("{n} degrees", { n: value }) : `${value}${unit}`} style={{ "--pct": `${((value - min) / (max - min)) * 100}%` } as React.CSSProperties} onChange={e=>onChange(Number(e.target.value))} />
     {detail && <p id={`${id}-detail`}>{t(detail)}</p>}</div>;
+}
+
+/** A 10-point strength slider (2.1.2: App vibration and Game rumble). The orange knob GLIDES to a tapped point (one
+ *  element moved with transform, like the choice pills) and follows the finger exactly while dragging. A real range
+ *  input sits on top, invisible, so dragging, keys and screen readers work as usual. `onPreview` lets the player feel
+ *  each point as they reach it. Point 7 (the default) has a small mark. */
+function LevelSlider({ label, value, onChange, onPreview }: { label: string; value: number; onChange: (n: number) => void; onPreview?: (n: number) => void }) {
+  const id = useId();
+  const [dragging, setDragging] = useState(false);
+  const f = (value - 1) / 9;
+  return <div className="calm-range calm-level">
+    <div><label htmlFor={id}>{t(label)}</label><output htmlFor={id}>{value}<span className="calm-level-of">/10</span></output></div>
+    <div className={`calm-level-track${dragging ? " is-dragging" : ""}`} style={{ "--f": f } as React.CSSProperties}>
+      <div className="calm-level-rail">
+        <div className="calm-level-fill" />
+        {Array.from({ length: 10 }, (_, i) => <span key={i} className={`calm-level-dot${i + 1 <= value ? " is-on" : ""}${i + 1 === 7 ? " is-default" : ""}`} style={{ left: `${(i / 9) * 100}%` }} />)}
+        <div className="calm-level-knob-path"><div className="calm-level-knob" /></div>
+      </div>
+      <input id={id} type="range" min={1} max={10} step={1} value={value} data-testid={`${testId(label)}-slider`}
+        aria-valuetext={`${value} / 10`}
+        onPointerDown={() => setDragging(true)} onPointerUp={() => setDragging(false)} onPointerCancel={() => setDragging(false)} onBlur={() => setDragging(false)}
+        onChange={(e) => { const v = Number(e.target.value); if (v !== value) { onChange(v); onPreview?.(v); } }} />
+    </div>
+  </div>;
 }
 
 /** Right stick sensitivity (a customer asked for it). Talks to the shared stick-feel store directly, so the
@@ -119,7 +146,13 @@ export function CalmSettings(p:CalmSettingsProps) {
     </div></section>
     <section data-tone="violet" className="calm-settings-section"><h2><Vibrate size={15} />{t("Feel")}</h2><div className="calm-settings-panel">
       <CalmSwitch label="App vibration" on={p.gyroHaptic} onChange={p.setGyroHaptic}/>
+      <AnimatePresence initial={false}>{p.gyroHaptic && <motion.div key="haptic-level" className="calm-setting-options" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} transition={{ duration: .26, ease: [.16, 1, .3, 1] }} style={{ overflow: 'hidden' }}>
+        <LevelSlider label="Vibration strength" value={p.hapticLevel} onChange={p.setHapticLevel} onPreview={(v) => { pushHapticLevel(v); previewHaptic(); }} />
+      </motion.div>}</AnimatePresence>
       <CalmSwitch label="Game rumble" on={p.rumbleOn} onChange={p.setRumbleOn}/>
+      <AnimatePresence initial={false}>{p.rumbleOn && <motion.div key="rumble-level" className="calm-setting-options" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} transition={{ duration: .26, ease: [.16, 1, .3, 1] }} style={{ overflow: 'hidden' }}>
+        <LevelSlider label="Rumble strength" value={p.rumbleLevel} onChange={p.setRumbleLevel} onPreview={(v) => previewRumble(vibeFactor(v))} />
+      </motion.div>}</AnimatePresence>
     </div></section>
     <section className="calm-settings-section calm-lang-section"><div className="calm-settings-panel">
       <LanguageRow />

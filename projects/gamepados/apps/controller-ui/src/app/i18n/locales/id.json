@@ -420,5 +420,7 @@
  "Buy for {price}": "Beli seharga {price}",
  "Your play time is used up. Watch an ad for {n} minutes more, or get Lifetime.": "Waktu main kamu habis. Tonton iklan untuk tambahan {n} menit, atau dapatkan Selamanya.",
  "Optional. Each ad adds {n} minutes that never expire.": "Opsional. Tiap iklan menambah {n} menit yang tidak pernah kedaluwarsa.",
- "New password (8+ characters)": "Kata sandi baru (8+ karakter)"
+ "New password (8+ characters)": "Kata sandi baru (8+ karakter)",
+ "Vibration strength": "Kekuatan getaran",
+ "Rumble strength": "Kekuatan getaran game"
 }

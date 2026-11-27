@@ -531,3 +531,27 @@
 .gp-shell .calm-more { margin-top: 24px; }
 .gp-shell .calm-more > .calm-collapse .calm-settings-section:first-child { margin-top: 4px; }
 .gp-shell .calm-lang-icon { flex: 0 0 auto; color: var(--calm-accent); }
+
+/* ── Vibration strength sliders (2.1.2, owner 2026-11-27) ──────────────────────────────────────────────────────
+   10 points under App vibration / Game rumble (CalmSettings LevelSlider). The knob GLIDES to a tapped point by moving
+   ONE element with transform (no layout), and follows the finger exactly while dragging (.is-dragging = no transition).
+   The real range input lies on top, invisible; its 6 px thumb matches the rail's 3 px insets, so a tap lands on the
+   point under the finger. */
+.gp-shell .calm-level-of { font-size: 12px; color: var(--calm-muted); margin-left: 1px; }
+.gp-shell .calm-level-track { position: relative; height: 34px; }
+.gp-shell .calm-level-rail { position: absolute; left: 3px; right: 3px; top: 50%; height: 12px; margin-top: -6px; border-radius: 6px; background: var(--calm-soft); }
+.gp-shell .calm-level-fill { position: absolute; inset: 0; border-radius: 6px; background: var(--calm-accent); transform-origin: left center; transform: scaleX(var(--f, 0)); transition: transform .24s cubic-bezier(.16, 1, .3, 1); }
+.gp-shell .calm-level-dot { position: absolute; top: 50%; width: 4px; height: 4px; margin: -2px 0 0 -2px; border-radius: 50%; background: var(--calm-muted); opacity: .55; transition: background-color .2s ease, opacity .2s ease; }
+.gp-shell .calm-level-dot.is-on { background: #000; opacity: .22; }
+.gp-shell .calm-level-dot.is-default::after { content: ""; position: absolute; left: 50%; top: 13px; width: 4px; height: 4px; margin-left: -2px; border-radius: 50%; background: var(--calm-accent); opacity: .9; }
+.gp-shell .calm-level-knob-path { position: absolute; inset: 0; pointer-events: none; transform: translateX(calc(var(--f, 0) * 100%)); transition: transform .24s cubic-bezier(.16, 1, .3, 1); }
+.gp-shell .calm-level-knob { position: absolute; left: 0; top: 50%; width: 6px; height: 28px; margin: -14px 0 0 -3px; border-radius: 3px; background: var(--calm-accent); box-shadow: 0 0 0 3px var(--calm-paper); }
+.gp-shell .calm-level-track.is-dragging .calm-level-fill,
+.gp-shell .calm-level-track.is-dragging .calm-level-knob-path { transition: none; }
+.gp-shell .calm-level .calm-level-track input[type='range'] { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; -webkit-appearance: none; appearance: none; background: transparent; }
+.gp-shell .calm-level .calm-level-track input[type='range']::-webkit-slider-runnable-track { height: 100%; background: transparent; border: 0; }
+.gp-shell .calm-level .calm-level-track input[type='range']::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 6px; height: 34px; margin-top: 0; border: 0; background: transparent; box-shadow: none; }
+.gp-shell .calm-level-track:has(input:focus-visible) .calm-level-knob { outline: 2px solid var(--calm-accent); outline-offset: 3px; }
+@media (prefers-reduced-motion: reduce) {
+  .gp-shell .calm-level-fill, .gp-shell .calm-level-knob-path, .gp-shell .calm-level-dot { transition: none; }
+}

@@ -420,5 +420,7 @@
  "Buy for {price}": "Für {price} kaufen",
  "Your play time is used up. Watch an ad for {n} minutes more, or get Lifetime.": "Deine Spielzeit ist aufgebraucht. Sieh dir Werbung für {n} Minuten mehr an oder hol dir Lifetime.",
  "Optional. Each ad adds {n} minutes that never expire.": "Freiwillig. Jede Werbung bringt {n} Minuten, die nie ablaufen.",
- "New password (8+ characters)": "Neues Passwort (mind. 8 Zeichen)"
+ "New password (8+ characters)": "Neues Passwort (mind. 8 Zeichen)",
+ "Vibration strength": "Vibrationsstärke",
+ "Rumble strength": "Stärke der Spielvibration"
 }

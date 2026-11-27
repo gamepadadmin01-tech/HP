@@ -420,5 +420,7 @@
  "Buy for {price}": "{price} 购买",
  "Your play time is used up. Watch an ad for {n} minutes more, or get Lifetime.": "你的游戏时长已用完。看广告多玩 {n} 分钟,或购买永久版。",
  "Optional. Each ad adds {n} minutes that never expire.": "可选。每看一次广告增加 {n} 分钟,永不过期。",
- "New password (8+ characters)": "新密码(至少 8 个字符)"
+ "New password (8+ characters)": "新密码(至少 8 个字符)",
+ "Vibration strength": "振动强度",
+ "Rumble strength": "游戏震动强度"
 }

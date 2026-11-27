@@ -44,6 +44,8 @@ export const KEYS = {
   gyroWheel: "gyro_wheel",
   gyroWheelRange: "gyro_wheel_range",
   rumbleOn: "gp_rumble_on",           // Game rumble (2.1: was never saved, reset to ON every launch)
+  hapticLevel: "gp_haptic_level",     // App vibration strength, 1..10 (2.1.2; 7 = default = 20% above 2.1.1)
+  rumbleLevel: "gp_rumble_level",     // Game rumble strength, 1..10 (2.1.2; 7 = default = 20% above 2.1.1)
   rightGain: "gp_right_gain",         // right stick sensitivity; written by stickFeel.ts under this same name
 
   // Settings backup (2.1, settingsSync.ts)

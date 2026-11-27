@@ -63,6 +63,8 @@ export interface AndroidBridge {
   triggerRumble(left: number, right: number, durationMs: number): void;
   getHapticCapabilities(): string;
   playHaptic(event: string): void;
+  /** App vibration strength, 1..10 (2.1.2). Older apps do not have it. */
+  setHapticStrength?(level: number): void;
   playHapticWaveform(timingsCsv: string, ampsCsv: string): void;
 
   // Billing. Only the website and Uptodown builds ship it (Razorpay); every
@@ -222,6 +224,28 @@ export function testRumble(): boolean {
   } catch {
     return false;
   }
+}
+
+/** Tell the phone how strong button vibration should be (1..10). The native side keeps it, because buttons can buzz
+ *  from the native touch engine without asking the page. */
+export function pushHapticLevel(level: number): void {
+  const b = bridge();
+  try { b?.setHapticStrength?.(level); } catch { /* an older app without the setting: keeps its fixed strength */ }
+}
+
+/** One button buzz at the current strength, so the player feels the point they just picked on the slider. */
+export function previewHaptic(): void {
+  const b = bridge();
+  try { b?.playHaptic?.("buttonPress"); } catch { /* no vibration available */ }
+}
+
+/** A short rumble at the given strength factor (the rumble slider's preview). */
+export function previewRumble(factor: number): void {
+  const b = bridge();
+  if (!b || typeof b.triggerRumble !== "function") return;
+  const want = 255 * factor;
+  const s = Math.max(1, Math.min(255, Math.round(want)));
+  try { b.triggerRumble(s, s, Math.round(160 * (want > 255 ? Math.min(1.4, want / 255) : 1))); } catch { /* ignore */ }
 }
 
 // ─── Misc ─────────────────────────────────────────────────────────────────────

@@ -420,5 +420,7 @@
  "Buy for {price}": "{price} karşılığında satın al",
  "Your play time is used up. Watch an ad for {n} minutes more, or get Lifetime.": "Oyun süren bitti. {n} dakika daha için reklam izle ya da Ömür Boyu al.",
  "Optional. Each ad adds {n} minutes that never expire.": "İsteğe bağlı. Her reklam süresi dolmayan {n} dakika ekler.",
- "New password (8+ characters)": "Yeni şifre (en az 8 karakter)"
+ "New password (8+ characters)": "Yeni şifre (en az 8 karakter)",
+ "Vibration strength": "Titreşim gücü",
+ "Rumble strength": "Oyun titreşimi gücü"
 }

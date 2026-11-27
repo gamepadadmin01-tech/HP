@@ -420,5 +420,7 @@
  "Buy for {price}": "Купить за {price}",
  "Your play time is used up. Watch an ad for {n} minutes more, or get Lifetime.": "Ваше время игры закончилось. Посмотрите рекламу и получите ещё {n} мин или купите «Навсегда».",
  "Optional. Each ad adds {n} minutes that never expire.": "По желанию. Каждая реклама добавляет {n} мин, которые не сгорают.",
- "New password (8+ characters)": "Новый пароль (от 8 символов)"
+ "New password (8+ characters)": "Новый пароль (от 8 символов)",
+ "Vibration strength": "Сила вибрации",
+ "Rumble strength": "Сила вибрации в игре"
 }

@@ -3,7 +3,12 @@ import http from 'node:http';
 import assert from 'node:assert/strict';
 import puppeteer from 'puppeteer';
 const html=fs.readFileSync(new URL('./dist/index.html',import.meta.url));
-const artifacts=new URL('../../docs/ui-redesign-research-2026-09-16/implementation/',import.meta.url);
+// Screenshots go to SMOKE_ARTIFACTS when set (a scratch folder), else the old research folder; created if missing
+// (2026-11-27: that folder no longer exists, so the test crashed while saving its first picture).
+const artifacts=process.env.SMOKE_ARTIFACTS
+  ? new URL('file:///'+process.env.SMOKE_ARTIFACTS.replace(/\\/g,'/').replace(/\/?$/,'/'))
+  : new URL('../../docs/ui-redesign-research-2026-09-16/implementation/',import.meta.url);
+fs.mkdirSync(artifacts,{recursive:true});
 const server=http.createServer((q,r)=>{r.setHeader('Content-Type','text/html');r.end(html)});
 await new Promise(r=>server.listen(0,'127.0.0.1',r));
 const origin=`http://127.0.0.1:${server.address().port}`;

@@ -15,7 +15,8 @@
 // app writing its defaults at start-up is not mistaken for the player changing something.
 
 import { KEYS, readString, writeString } from "./storage";
-import { loadGyroPrefs, saveGyroPrefs, loadRumbleOn, saveRumbleOn, autoSyncEnabled, GYRO_DEFAULTS } from "./prefs";
+import { loadGyroPrefs, saveGyroPrefs, loadRumbleOn, saveRumbleOn, autoSyncEnabled, GYRO_DEFAULTS,
+  loadHapticLevel, saveHapticLevel, loadRumbleLevel, saveRumbleLevel, VIBE_LEVEL_DEFAULT } from "./prefs";
 import { getSession } from "./account";
 import { apiFetch, API_ORIGIN } from "../api/account";
 import { stickFeel, setRightGain, RIGHT_GAIN_DEFAULT } from "../stickFeel";
@@ -30,6 +31,7 @@ export function currentSettings(): Settings {
     [KEYS.gyroOn]: g.on, [KEYS.gyroMaxAngle]: g.maxAngle, [KEYS.gyroMode]: g.mode, [KEYS.gyroDeadzone]: g.deadzone,
     [KEYS.gyroHaptic]: g.haptic, [KEYS.gyroIdleDetect]: g.idleDetect, [KEYS.gyroWheel]: g.wheel,
     [KEYS.gyroWheelRange]: g.wheelRange, [KEYS.rumbleOn]: loadRumbleOn(),
+    [KEYS.hapticLevel]: loadHapticLevel(), [KEYS.rumbleLevel]: loadRumbleLevel(),
     [KEYS.rightGain]: Math.round(stickFeel.rightGain * 100) / 100, [KEYS.language]: langChoice(),
   };
 }
@@ -40,6 +42,7 @@ function defaults(): Settings {
     [KEYS.gyroOn]: g.on, [KEYS.gyroMaxAngle]: g.maxAngle, [KEYS.gyroMode]: g.mode, [KEYS.gyroDeadzone]: g.deadzone,
     [KEYS.gyroHaptic]: g.haptic, [KEYS.gyroIdleDetect]: g.idleDetect, [KEYS.gyroWheel]: g.wheel,
     [KEYS.gyroWheelRange]: g.wheelRange, [KEYS.rumbleOn]: true, [KEYS.rightGain]: RIGHT_GAIN_DEFAULT, [KEYS.language]: "auto",
+    [KEYS.hapticLevel]: VIBE_LEVEL_DEFAULT, [KEYS.rumbleLevel]: VIBE_LEVEL_DEFAULT,
   };
 }
 
@@ -90,6 +93,8 @@ function apply(s: Settings) {
     wheelRange: num(KEYS.gyroWheelRange, g.wheelRange), throttle: false,
   });
   saveRumbleOn(bool(KEYS.rumbleOn, loadRumbleOn()));
+  saveHapticLevel(num(KEYS.hapticLevel, loadHapticLevel()));
+  saveRumbleLevel(num(KEYS.rumbleLevel, loadRumbleLevel()));
   if (typeof s[KEYS.rightGain] === "number") setRightGain(s[KEYS.rightGain] as number);
   const lang = s[KEYS.language];
   if (typeof lang === "string" && (lang === "auto" || LANGS.some((l) => l.code === lang)) && lang !== langChoice()) setLangChoice(lang as LangChoice);

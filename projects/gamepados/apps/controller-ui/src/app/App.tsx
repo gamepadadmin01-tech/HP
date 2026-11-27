@@ -21,7 +21,7 @@ import { ShellMotion } from "./components/ShellMotion";
 import { ShellScreenTransition } from "./components/ShellScreenTransition";
 import { SignInScreen } from "./components/SignInScreen";
 import { Ticket } from "lucide-react";
-import { playSellsNothing, sendPlayerName } from "./platform/native";
+import { playSellsNothing, sendPlayerName, pushHapticLevel } from "./platform/native";
 import { motion, AnimatePresence, useIsPresent, useReducedMotion } from "framer-motion";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -41,6 +41,7 @@ import { scheduleSync, onSignedInSync } from "./store/sync";
 import { noteSettingsChanged, onSettingsRestored } from "./store/settingsSync";
 import {
   loadGyroPrefs, saveGyroPrefs, getWiredPref, loadRumbleOn, saveRumbleOn,
+  loadHapticLevel, saveHapticLevel, loadRumbleLevel, saveRumbleLevel, scaleRumble,
   nativeInputEnabled, setNativeInputEnabled, clampWheelRange,
 } from "./store/prefs";
 import { TabAccount, AppSupport } from "./components/TabAccount";
@@ -1063,14 +1064,17 @@ function ControllerScreen({ onBack, isActive: screenActive, activeMapping, custo
         // user intensity multiplier — a slider that scaled the game's own signal
         // only made strong effects weaker, and phones without variable-amplitude
         // motors ignored it anyway.
-        const strength = Math.max(leftMotor, rightMotor); // 0..255 from the game
-        if (strength >= 1) {
+        const raw = Math.max(leftMotor, rightMotor); // 0..255 from the game
+        if (raw >= 1) {
+          // The player's Rumble strength (2.1.2, 10 points; point 7 = 20% above 2.1.1). Past the motor's maximum the
+          // extra becomes a longer pulse.
+          const [strength, longer] = scaleRumble(raw);
           // Pulse length still tracks strength, so a light bump and a crash feel
           // different even on a motor with no amplitude control.
-          const dur = Math.round(20 + (strength / 255) * 80); // 20..100ms
+          const dur = Math.round((20 + (strength / 255) * 80) * longer); // 20..100ms (up to 140 at the top points)
           const bridge = (window as any).AndroidBridge;
           if (bridge && bridge.triggerRumble) {
-            bridge.triggerRumble(leftMotor, rightMotor, dur);
+            bridge.triggerRumble(strength, strength, dur);
           } else if (navigator.vibrate) {
             navigator.vibrate(dur);
           }
@@ -3137,6 +3141,15 @@ export default function App() {
   // Game rumble is saved since 2.1 (it reset to ON at every launch before) and backed up with the other settings.
   const [rumbleOn, setRumbleOn] = useState(() => loadRumbleOn());
   useEffect(() => { saveRumbleOn(rumbleOn); noteSettingsChanged(); }, [rumbleOn]);
+  // Vibration strength, 1..10 (2.1.2): saved, backed up, and the button strength handed to the phone, which keeps it.
+  const [hapticLevel, setHapticLevel] = useState(() => loadHapticLevel());
+  const [rumbleLevel, setRumbleLevel] = useState(() => loadRumbleLevel());
+  const vibeLevelsFirst = useRef(true);
+  useEffect(() => {
+    saveHapticLevel(hapticLevel); saveRumbleLevel(rumbleLevel); pushHapticLevel(hapticLevel);
+    if (vibeLevelsFirst.current) { vibeLevelsFirst.current = false; return; }   // start-up is not a change
+    noteSettingsChanged();
+  }, [hapticLevel, rumbleLevel]);
   // Paused while the controller is open (2026-10-01): each 500 ms poll set new
   // state here, re-rendering the whole app -- the pad included -- twice a second
   // during play. Only the dashboard shows these numbers.
@@ -3416,7 +3429,7 @@ export default function App() {
     const g = loadGyroPrefs();
     setGyroOn(g.on); setGyroMaxAngle(g.maxAngle); setGyroWheel(g.wheel); setGyroWheelRange(g.wheelRange);
     setGyroMode(g.mode); setGyroDeadzone(g.deadzone); setGyroHaptic(g.haptic); setGyroIdleDetect(g.idleDetect);
-    setRumbleOn(loadRumbleOn());
+    setRumbleOn(loadRumbleOn()); setHapticLevel(loadHapticLevel()); setRumbleLevel(loadRumbleLevel());
   }), []);
 
   // Tell the native layer whether wheel mode is on. This pushes a FLAG ONLY — it must
@@ -3598,6 +3611,8 @@ export default function App() {
               gyroThrottle={gyroThrottle} setGyroThrottle={setGyroThrottle}
               gyroIdleDetect={gyroIdleDetect} setGyroIdleDetect={setGyroIdleDetect}
               rumbleOn={rumbleOn} setRumbleOn={setRumbleOn}
+              hapticLevel={hapticLevel} setHapticLevel={setHapticLevel}
+              rumbleLevel={rumbleLevel} setRumbleLevel={setRumbleLevel}
             />
           </ShellScreenTransition>
         )}
